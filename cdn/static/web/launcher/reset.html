@@ -10,6 +10,9 @@
   <div class="row">
     <div class="col-sm-6 col-md-5 top-buffer">
       <form id="reset" action="{{ url_for('reset', username=username) }}" method="post">
+        {% if family_mode %}
+          <input type="hidden" name="csrf_token" value="{{ family_csrf_token() }}">
+        {% endif %}
         <div class="row">
           <div class="col-md-12">
             <label class="col-form-label col-form-label-sm text-shadow">New password</label>

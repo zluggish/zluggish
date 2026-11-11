@@ -1,0 +1,18 @@
+{% extends "./layout.html" %}
+{% block content %}
+  <h1><div class="text-shadow">Add family member</div></h1>
+  <div class="family-page">
+    <form action="{{ url_for('family_signup') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ family_csrf_token() }}">
+      <label for="display_name" class="text-shadow">Name</label>
+      <input type="text" id="display_name" name="display_name" class="form-control form-control-sm" maxlength="100" required autofocus autocomplete="name">
+      <div class="top-buffer">
+        <button type="submit" class="btn btn-sm btn-light">Add family member</button>
+        <a href="{{ url_for('login') }}" class="btn btn-sm btn-secondary">Back</a>
+      </div>
+    </form>
+    {% for message in get_flashed_messages() %}
+      <p class="alert alert-info top-buffer" role="status">{{ message }}</p>
+    {% endfor %}
+  </div>
+{% endblock %}
