@@ -17,6 +17,7 @@ import requests
 import json
 import base64
 import uuid
+import secrets
 import jwt
 import sqlalchemy
 import fitdecode
@@ -25,7 +26,7 @@ from copy import deepcopy
 from functools import wraps
 from io import BytesIO
 from shutil import copyfile
-from flask import Flask, request, jsonify, redirect, render_template, url_for, flash, session, make_response, send_file, send_from_directory
+from flask import Flask, request, jsonify, redirect, render_template, url_for, flash, session, make_response, send_file, send_from_directory, abort
 from flask_login import UserMixin, AnonymousUserMixin, LoginManager, login_user, current_user, login_required, logout_user
 from gevent.pywsgi import WSGIServer
 from gevent import ssl
@@ -121,6 +122,10 @@ if os.path.exists(GHOST_PROFILE_FILE):
         GHOST_PROFILE = json.load(f)
 ALL_TIME_LEADERBOARDS = os.path.exists("%s/all_time_leaderboards.txt" % STORAGE_DIR)
 MULTIPLAYER = os.path.exists("%s/multiplayer.txt" % STORAGE_DIR)
+FAMILY_MODE = os.path.exists("%s/family_mode.txt" % STORAGE_DIR)
+if FAMILY_MODE and not MULTIPLAYER:
+    logger.error("Family mode requires storage/multiplayer.txt. Enable multiplayer and restart.")
+    sys.exit(1)
 if MULTIPLAYER:
     if not make_dir(LOGS_DIR):
         sys.exit(1)
@@ -603,6 +608,8 @@ def jwt_to_session_cookie(f):
 
 @app.route("/signup/", methods=["GET", "POST"])
 def signup():
+    if FAMILY_MODE:
+        return redirect(url_for('family_signup'))
     if request.method == "POST":
         username = request.form['username']
         password = request.form['password']
@@ -648,8 +655,92 @@ def check_sha256_hash(pwhash, password):
 def make_profile_dir(player_id):
     return make_dir(os.path.join(STORAGE_DIR, str(player_id)))
 
+def family_csrf_token():
+    if 'family_csrf_token' not in session:
+        session['family_csrf_token'] = secrets.token_urlsafe(32)
+    return session['family_csrf_token']
+
+def validate_family_csrf():
+    expected = session.get('family_csrf_token')
+    supplied = request.form.get('csrf_token', '')
+    if not expected or not secrets.compare_digest(expected.encode('utf-8'), supplied.encode('utf-8')):
+        abort(400, description="The form expired. Go back, reload the page, and try again.")
+
+@app.context_processor
+def family_template_context():
+    return dict(family_mode=FAMILY_MODE, family_csrf_token=family_csrf_token)
+
+def establish_user_session(user, remember=False):
+    if not make_profile_dir(user.player_id):
+        return '', 500
+    if FAMILY_MODE:
+        logout_user()
+        session.clear()
+    # The desktop token handoff needs a remember cookie even without remembered login.
+    login_user(user, remember=True)
+    if FAMILY_MODE:
+        session['family_player_id'] = user.player_id
+    else:
+        user.remember = remember
+        db.session.commit()
+    return redirect(url_for('user_home', username=user.username))
+
+@app.route('/family/add/', methods=['GET', 'POST'])
+def family_signup():
+    if not FAMILY_MODE:
+        abort(404)
+    if request.method == 'POST':
+        validate_family_csrf()
+        display_name = request.form.get('display_name', '').strip()
+        if not display_name or len(display_name) > 100:
+            flash("Enter a name between 1 and 100 characters.")
+        else:
+            names = display_name.split(maxsplit=1)
+            user = User(username='family-%s@local.invalid' % uuid.uuid4().hex,
+                        first_name=names[0], last_name=names[1] if len(names) > 1 else '',
+                        pass_hash=generate_password_hash(secrets.token_urlsafe(32), 'scrypt'),
+                        is_admin=False, remember=False)
+            # Player 1 has legacy administrator privileges. Reserve that ID
+            # when a family server starts with no accounts.
+            if not User.query.first():
+                user.player_id = 2
+            db.session.add(user)
+            try:
+                db.session.commit()
+            except sqlalchemy.exc.IntegrityError:
+                db.session.rollback()
+                flash("Another family member was just added. Please try again.")
+                return redirect(url_for('family_signup'))
+            flash("Family member added. Choose a rider to continue.")
+            return redirect(url_for('login'))
+    return render_template('family_signup.html')
+
+@app.route('/family/switch/', methods=['POST'])
+def family_switch():
+    if not FAMILY_MODE:
+        abort(404)
+    validate_family_csrf()
+    session.clear()
+    logout_user()  # Also expire the remember cookie in the response.
+    return redirect(url_for('login'))
+
 @app.route("/login/", methods=["GET", "POST"])
 def login():
+    if FAMILY_MODE:
+        if request.method == 'POST':
+            validate_family_csrf()
+            raw_id = request.form.get('player_id', '')
+            user = None
+            if raw_id.isascii() and raw_id.isdecimal() and len(raw_id) <= 10:
+                user = db.session.get(User, int(raw_id))
+            if user:
+                return establish_user_session(user)
+            flash("That rider is no longer available. Choose a rider from the list.")
+        session.pop('family_player_id', None)
+        users = User.query.order_by(sqlalchemy.func.lower(User.first_name),
+                                    sqlalchemy.func.lower(User.last_name), User.player_id).all()
+        return render_template('family_login.html', users=users, image_src=imageSrc)
+
     if request.method == "POST":
         username = request.form['username']
         password = request.form['password']
@@ -670,12 +761,7 @@ def login():
                 return redirect(url_for('login'))
 
         if user and check_password_hash(user.pass_hash, password):
-            login_user(user, remember=True)
-            user.remember = remember
-            db.session.commit()
-            if not make_profile_dir(user.player_id):
-                return '', 500
-            return redirect(url_for("user_home", username=username))
+            return establish_user_session(user, remember)
         else:
             flash("Invalid username or password.")
 
@@ -787,6 +873,8 @@ def api_users_password_reset():
 @login_required
 def reset(username):
     if request.method == "POST":
+        if FAMILY_MODE:
+            validate_family_csrf()
         password = request.form['password']
         confirm_password = request.form['confirm_password']
 
@@ -1482,6 +1570,8 @@ def power_curves(username):
 @app.route("/logout/<username>")
 @login_required
 def logout(username):
+    if FAMILY_MODE:
+        return redirect(url_for('login'))
     session.clear()
     logout_user()
     flash("Successfully logged out.")
@@ -4925,6 +5015,7 @@ def auth_rb():
 
 
 @app.route('/launcher', methods=['GET'])
+@app.route('/launcher/ride', methods=['GET'])
 @app.route('/launcher/realms/zwift/protocol/openid-connect/auth', methods=['GET'])
 @app.route('/launcher/realms/zwift/protocol/openid-connect/registrations', methods=['GET'])
 @app.route('/auth/realms/zwift/protocol/openid-connect/auth', methods=['GET'])
@@ -4935,6 +5026,17 @@ def auth_rb():
 @app.route('/auth/realms/zwift/tokens/registrations', methods=['GET'])  # Called by Mac, but not Windows
 @app.route('/ride', methods=['GET'])
 def launch_zwift():
+    if FAMILY_MODE:
+        if request.path != '/ride':
+            session.pop('family_player_id', None)
+            return redirect(url_for('login'))
+        if not current_user.is_authenticated or session.get('family_player_id') != current_user.player_id:
+            return redirect(url_for('login'))
+        from flask_login import encode_cookie
+        # Encode the selected session identity so a stale incoming cookie cannot
+        # launch the previous rider after switching accounts.
+        cookie = encode_cookie(str(current_user.player_id))
+        return redirect("http://zwift/?code=zwift_refresh_token%s" % fake_refresh_token_with_session_cookie(cookie), 302)
     # Zwift client has switched to calling https://launcher.zwift.com/launcher/ride
     if request.path != "/ride" and not os.path.exists(AUTOLAUNCH_FILE):
         if MULTIPLAYER:
@@ -5027,6 +5129,10 @@ def save_option(option, file):
 @app.route("/start-zwift" , methods=['POST'])
 @login_required
 def start_zwift():
+    if FAMILY_MODE:
+        if session.get('family_player_id') != current_user.player_id:
+            return redirect(url_for('login'))
+        validate_family_csrf()
     if MULTIPLAYER:
         current_user.enable_ghosts = 'enableghosts' in request.form.keys()
         db.session.commit()

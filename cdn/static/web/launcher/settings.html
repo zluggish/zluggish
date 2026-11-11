@@ -8,7 +8,7 @@
     <div class="col-md-12">
       <a href="{{ url_for('user_home', username=username) }}" class="btn btn-sm btn-secondary">Back</a>
       {% if username != "zoffline" %}
-        <a href="{{ url_for('reset', username=username) }}" class="btn btn-sm btn-secondary">Change password</a>
+        <a href="{{ url_for('reset', username=username) }}" class="btn btn-sm btn-secondary">{{ 'Set login password' if family_mode else 'Change password' }}</a>
       {% endif %}
       <a href="{{ url_for('power_curves', username=username) }}" class="btn btn-sm btn-secondary">Power curves</a>
       <a href="{{ url_for('profile', username=username) }}" class="btn btn-sm btn-secondary">Zwift</a>

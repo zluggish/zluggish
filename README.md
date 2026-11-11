@@ -289,6 +289,26 @@ To enable support for multiple users perform the steps below:
 
 </details>
 
+### Family mode: choose a rider without a password
+
+Family mode is an optional login screen for a trusted household using multiplayer. Every desktop launcher startup shows **Who’s riding?** with all local accounts, including administrators. Choose a name to open that rider’s existing map, climb, and ghost settings, then click **Start Zwift**. Progress, activities, workouts, and service connections remain separate for each rider.
+
+To enable it:
+
+1. Back up your `storage` directory, including `zwift-offline.db`.
+2. Keep `storage/multiplayer.txt` and create an empty `storage/family_mode.txt`.
+3. Restart zoffline. Family mode requires multiplayer; the server will report an error and exit if its multiplayer flag is missing.
+
+The option applies to the whole server. In family mode, remembered logins and `storage/auto_launch.txt` do not skip the rider picker, even if only one account exists. **Switch rider** returns to the list. Different devices can select different riders and ride concurrently.
+
+Use **Add family member** to create a rider with only a name. Duplicate names are allowed; each card shows its unique rider number. New family accounts have no administrator privileges. Existing accounts, passwords, player IDs, and privileges are preserved.
+
+Anyone who can reach this server can select any listed account, access its settings and configured integrations, and use its administrative privileges. Family mode is intended for a household where that access is acceptable.
+
+**Returning to password login or using Android:** Existing accounts keep their passwords. New family accounts receive a unique internal username and an unguessable password that is not displayed. While family mode is enabled, the server owner can select the rider, open **Settings**, note the username shown there (`family-…@local.invalid`), and use **Set login password** to assign a known password. No email reset setup is needed for this procedure. Do this for each new account that needs password login, then remove `storage/family_mode.txt` and restart to restore the normal launcher. If you already disabled family mode, temporarily enable it again to set those passwords.
+
+Android uses a native login screen rather than the desktop picker. Existing Android credentials continue to work; a new family account needs the username and password set through the procedure above before it can log in on Android. Real Zwift credentials for imports/uploads and credentials or tokens for connected services are still required separately. Family mode does not share ghost recordings.
+
 ### Step 7 [OPTIONAL]: Enable IPv6
 
 To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST`` or use the script ``run_ipv6.bat``.

@@ -62,3 +62,51 @@ div#working {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+.family-page {
+    max-width: 640px;
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+    padding: 8px 8px 24px;
+}
+.family-rider-form {
+    margin-bottom: 10px;
+}
+.family-rider {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px;
+    border: 2px solid transparent;
+    border-radius: 5px;
+    background: white;
+    color: #212529;
+    text-align: left;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+.family-rider:hover, .family-rider:focus {
+    border-color: #212529;
+}
+.family-rider small {
+    display: block;
+}
+.family-avatar {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    margin-right: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.family-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e9ecef;
+    font-size: 24px;
+}
+.family-switch-form {
+    display: inline-block;
+    background: transparent;
+    padding: 0;
+}
