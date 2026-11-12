@@ -52,6 +52,9 @@ class FamilyModeTests(unittest.TestCase):
             cls.zo.db.session.remove()
             cls.zo.db.engine.dispose()
         cls.zo.SERVER_LOCK.release()
+        # Windows cannot delete the temporary log while its handler is open.
+        cls.zo.logger.removeHandler(cls.zo.logHandler)
+        cls.zo.logHandler.close()
         cls.temp.cleanup()
 
     def setUp(self):
