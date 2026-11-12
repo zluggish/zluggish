@@ -52,7 +52,7 @@ class ConfigurationTests(unittest.TestCase):
         for name in ('multiplayer.txt', 'family_mode.txt', 'enable_ghosts.txt', 'disable_proxy.txt'):
             (self.storage / name).touch()
         settings = load_server(self.location, {})
-        self.assertFalse(settings['server']['multiplayer'])
+        self.assertNotIn('multiplayer', settings['server'])
         self.assertFalse(load_user(self.location, settings, 1)['ghosts']['enabled'])
         self.config.unlink()
         before = set(self.storage.rglob('*'))
@@ -99,18 +99,18 @@ class ConfigurationTests(unittest.TestCase):
                 load_user(self.location, settings, player)
 
     def test_targeted_edit_preserves_comments_format_and_permissions(self):
-        source = '{\n  // my switch\n  "config_version": 1,\n  "server": { "multiplayer": false, /* keep */ },\n  "logging": {"level": "INFO"}, // unchanged\n}\n'
+        source = '{\n  // my switch\n  "config_version": 1,\n  "accounts": { "allow_self_registration": false, /* keep */ },\n  "logging": {"level": "INFO"}, // unchanged\n}\n'
         self.config.write_text(source)
         self.config.chmod(0o640)
-        edit_setting(self.config, SERVER, 'server.multiplayer', True)
-        self.assertEqual(self.config.read_text(), source.replace('"multiplayer": false', '"multiplayer": true'))
+        edit_setting(self.config, SERVER, 'accounts.allow_self_registration', True)
+        self.assertEqual(self.config.read_text(), source.replace('"allow_self_registration": false', '"allow_self_registration": true'))
         if os.name != 'nt':
             self.assertEqual(self.config.stat().st_mode & 0o777, 0o640)
-        edit_setting(self.config, SERVER, 'server.family_mode', True)
+        edit_setting(self.config, SERVER, 'bots.enabled', True)
         self.assertIn('/* keep */', self.config.read_text())
-        edit_setting(self.config, SERVER, 'server.family_mode', reset=True)
+        edit_setting(self.config, SERVER, 'bots.enabled', reset=True)
         self.assertIn('// unchanged', self.config.read_text())
-        self.assertNotIn('family_mode', read_document(self.config, SERVER)['server'])
+        self.assertNotIn('enabled', read_document(self.config, SERVER).get('bots', {}))
 
     def test_array_edit_retains_unrelated_entries_and_comments(self):
         text = '{"pelotons": [\n /* a */ {"pacer": "a", "bots": 1},\n /* b */ {"pacer": "b", "bots": 2},\n]}'
@@ -144,7 +144,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_cli_inspection_and_validation_do_not_write(self):
         before = {p: p.read_bytes() for p in self.storage.rglob('*') if p.is_file()}
         for args in (('config', 'show', '--sources'), ('config', 'validate'),
-                     ('settings', 'show', '--anonymous'), ('settings', 'show', '--peloton')):
+                     ('settings', 'show', '--user', '1'), ('settings', 'show', '--peloton')):
             with self.subTest(args=args):
                 code, output, _ = self.invoke(*args)
                 self.assertEqual(code, 0, output)
@@ -214,7 +214,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(original, {p: p.read_bytes() for p in self.storage.rglob('*') if p.is_file()})
             migrate(self.location, output=self.location.config)
         server = load_server(self.location, {})
-        self.assertTrue(server['server']['family_mode'])
+        self.assertNotIn('family_mode', server['server'])
         self.assertEqual(server['bots'], {'enabled': True, 'multiplier': 1, 'riders_file': ''})
         self.assertEqual(server['proxy']['mode'], 'enabled')
         self.assertEqual(server['network']['api']['port'], 443)
@@ -269,7 +269,7 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn('very-secret', content)
         self.assertNotIn('also-secret', content)
         settings = load_server(paths(self.storage, output), {})
-        self.assertEqual(Path(settings['mail']['credentials_file']).as_posix(), '../gmail_credentials.txt')
+        self.assertNotIn('mail', settings)
         self.assertEqual(settings['integrations']['discord']['channel'], 12)
         self.assertTrue((output.parent / 'config.schema.json').exists())
 

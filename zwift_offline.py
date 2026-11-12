@@ -12,7 +12,6 @@ import time
 import math
 import threading
 import re
-import smtplib
 import requests
 import json
 import base64
@@ -27,15 +26,13 @@ from functools import wraps
 from io import BytesIO
 from shutil import copyfile
 from flask import Flask, request, jsonify, redirect, render_template, url_for, flash, session, make_response, send_file, send_from_directory, abort
-from flask_login import UserMixin, AnonymousUserMixin, LoginManager, login_user, current_user, login_required, logout_user
+from flask_login import UserMixin, LoginManager, login_user, current_user, login_required, logout_user
 from gevent.pywsgi import WSGIServer
 from gevent import ssl
 from google.protobuf.json_format import MessageToDict, Parse
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from collections import deque
@@ -64,6 +61,10 @@ import fitness_pb2
 import structured_events_pb2
 import route_completion_achievement_pb2
 
+from pathlib import Path
+import shutil
+
+import rider_imports
 import online_sync
 import intervals_workouts
 import trainingpeaks_workouts
@@ -101,10 +102,15 @@ def make_dir(name):
     return True
 
 # Validate settings before creating storage, keys, a database, or listeners.
-CONFIG_PATHS = config_paths(source=__file__)
+MIGRATE_ACCOUNTS = globals().get('_MIGRATE_ACCOUNTS', False)
+CONFIG_PATHS = globals().get('_CONFIG_PATHS') or config_paths(source=__file__)
+LOGS_DIR = globals().get('_LOGS_DIR', LOGS_DIR)
 STORAGE_DIR = str(CONFIG_PATHS.storage)
 try:
     SETTINGS = load_server(CONFIG_PATHS)
+    if not MIGRATE_ACCOUNTS:
+        from zluggish_config.accounts import require_current_schema
+        require_current_schema(CONFIG_PATHS.storage)
 except ConfigError as exc:
     logger.error("%s", exc)
     sys.exit(2)
@@ -114,16 +120,18 @@ logger.setLevel(SETTINGS['logging']['level'])
 # Ensure storage dir exists
 if not make_dir(STORAGE_DIR):
     sys.exit(1)
-SERVER_LOCK = FileLock(str(CONFIG_PATHS.storage / '.server.lock'), timeout=0)
+SERVER_LOCK = globals().get('_SERVER_LOCK') or FileLock(str(CONFIG_PATHS.storage / '.server.lock'), timeout=0)
 try:
-    SERVER_LOCK.acquire()
+    if not SERVER_LOCK.is_locked:
+        SERVER_LOCK.acquire()
 except Timeout:
     logger.error("Storage is in use by another server or a configuration migration")
     sys.exit(1)
 
 SSL_DIR = "%s/ssl" % SCRIPT_DIR
 DATABASE_PATH = "%s/zwift-offline.db" % STORAGE_DIR
-DATABASE_CUR_VER = 3
+DATABASE_CUR_VER = 4
+FRESH_DATABASE = not Path(DATABASE_PATH).exists()
 ZWIFT_VER_CUR = ET.parse('%s/cdn/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml' % SCRIPT_DIR).getroot().get('sversion')
 
 # For auth server
@@ -135,14 +143,11 @@ if GHOST_PROFILE_FILE:
     with open(GHOST_PROFILE_FILE) as f:
         GHOST_PROFILE = json.load(f)
 ALL_TIME_LEADERBOARDS = SETTINGS['leaderboards']['all_time']
-MULTIPLAYER = SETTINGS['server']['multiplayer']
-FAMILY_MODE = SETTINGS['server']['family_mode']
-if MULTIPLAYER:
-    if not make_dir(LOGS_DIR):
-        sys.exit(1)
-    from logging.handlers import RotatingFileHandler
-    logHandler = RotatingFileHandler('%s/zoffline.log' % LOGS_DIR, maxBytes=1000000, backupCount=10)
-    logger.addHandler(logHandler)
+if not make_dir(LOGS_DIR):
+    sys.exit(1)
+from logging.handlers import RotatingFileHandler
+logHandler = RotatingFileHandler('%s/zoffline.log' % LOGS_DIR, maxBytes=1000000, backupCount=10)
+logger.addHandler(logHandler)
 
 CREDENTIALS_KEY_FILE = "%s/credentials-key.bin" % STORAGE_DIR
 if not os.path.exists(CREDENTIALS_KEY_FILE):
@@ -199,7 +204,9 @@ class User(UserMixin, db.Model):
     username = db.Column(db.Text, unique=True, nullable=False)
     first_name = db.Column(db.Text, nullable=False)
     last_name = db.Column(db.Text, nullable=False)
-    pass_hash = db.Column(db.Text, nullable=False)
+    pass_hash = db.Column(db.Text, nullable=True)
+    auth_version = db.Column(db.Integer, nullable=False, default=1)
+    official_player_id = db.Column(db.Integer)
     # Retained only so old database schemas/rollback remain compatible. Never read or updated.
     enable_ghosts = db.Column(db.Integer, nullable=False, default=1)
     is_admin = db.Column(db.Integer, nullable=False, default=0)
@@ -209,37 +216,51 @@ class User(UserMixin, db.Model):
         return self.username
 
     def get_id(self):
-        return self.player_id
+        return '%s:%s' % (self.player_id, self.auth_version)
 
-    def get_token(self):
-        dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=30)
-        return jwt.encode({'user': self.player_id, 'exp': dt}, app.config['SECRET_KEY'], algorithm='HS256')
 
-    @staticmethod
-    def verify_token(token):
-        try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms='HS256')
-        except:
-            return None
-        id = data.get('user')
-        if id:
-            return db.session.get(User, id)
+class AccountState(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    setup_complete = db.Column(db.Boolean, nullable=False, default=False)
+
+
+def load_account_identity(identity):
+    try:
+        player, version = map(int, str(identity).split(':'))
+        user = db.session.get(User, player)
+        return user if user and user.auth_version == version else None
+    except (TypeError, ValueError):
         return None
 
-class AnonUser(User, AnonymousUserMixin, db.Model):
-    username = "zoffline"
-    first_name = "z"
-    last_name = "offline"
-    is_admin = False
 
-    def is_authenticated(self):
+def change_local_password(user, password):
+    # Increment in SQL so concurrent changes cannot reuse a generation.
+    db.session.execute(sqlalchemy.update(User).where(User.player_id == user.player_id).values(
+        pass_hash=generate_password_hash(password, 'scrypt') if password else None,
+        auth_version=User.auth_version + 1))
+    db.session.commit()
+
+
+def verify_password(user, password):
+    if not user or not user.pass_hash or not password:
+        return False
+    if user.pass_hash.startswith('sha256'):
+        if not check_sha256_hash(user.pass_hash, password):
+            return False
+        user.pass_hash = generate_password_hash(password, 'scrypt')
+        db.session.commit()
         return True
+    try:
+        return check_password_hash(user.pass_hash, password)
+    except ValueError:
+        return False
 
-def rider_settings(player_id=None):
-    return load_user(CONFIG_PATHS, SETTINGS, player_id if MULTIPLAYER else None)
+
+def rider_settings(player_id):
+    return load_user(CONFIG_PATHS, SETTINGS, player_id)
 
 
-def rider_ghosts(player_id=None):
+def rider_ghosts(player_id):
     return rider_settings(player_id)['ghosts']['enabled']
 
 
@@ -614,55 +635,25 @@ def is_nearby(s1, s2):
 def jwt_to_session_cookie(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not MULTIPLAYER:
-            return f(*args, **kwargs)
         token = request.headers.get('Authorization')
-        if token and not session.get('_user_id'):
-            token = jwt.decode(token.split()[1], options=({'verify_signature': False, 'verify_aud': False}))
-            request.cookies = request.cookies.copy()  # request.cookies is an immutable dict
-            request.cookies['remember_token'] = token['session_cookie']
-            login_manager._load_user()
+        if token:
+            try:
+                payload = jwt.decode(token.split()[1], options={'verify_signature': False, 'verify_aud': False})
+                from flask_login import decode_cookie
+                user = load_account_identity(decode_cookie(payload['session_cookie']))
+                if not user:
+                    abort(401)
+                login_user(user, remember=False)
+            except (ValueError, TypeError, KeyError, IndexError, jwt.PyJWTError):
+                abort(401)
 
         return f(*args, **kwargs)
     return wrapper
 
 
-@app.route("/signup/", methods=["GET", "POST"])
+@app.route('/signup/', methods=['GET', 'POST'])
 def signup():
-    if FAMILY_MODE:
-        return redirect(url_for('family_signup'))
-    if request.method == "POST":
-        username = request.form['username']
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
-        first_name = request.form['first_name']
-        last_name = request.form['last_name']
-
-        if not (username and password and confirm_password and first_name and last_name):
-            flash("All fields are required.")
-            return redirect(url_for('signup'))
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", username):
-            flash("Username is not a valid e-mail address.")
-            return redirect(url_for('signup'))
-        if password != confirm_password:
-            flash("Passwords did not match.")
-            return redirect(url_for('signup'))
-
-        hashed_pwd = generate_password_hash(password, 'scrypt')
-
-        new_user = User(username=username, pass_hash=hashed_pwd, first_name=first_name, last_name=last_name)
-        db.session.add(new_user)
-
-        try:
-            db.session.commit()
-        except sqlalchemy.exc.IntegrityError:
-            flash("Username {u} is not available.".format(u=username))
-            return redirect(url_for('signup'))
-
-        flash("User account has been created.")
-        return redirect(url_for("login"))
-
-    return render_template("signup.html")
+    return redirect(url_for('add_rider'))
 
 
 def check_sha256_hash(pwhash, password):
@@ -676,169 +667,148 @@ def check_sha256_hash(pwhash, password):
 def make_profile_dir(player_id):
     return make_dir(os.path.join(STORAGE_DIR, str(player_id)))
 
-def family_csrf_token():
-    if 'family_csrf_token' not in session:
-        session['family_csrf_token'] = secrets.token_urlsafe(32)
-    return session['family_csrf_token']
+def csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_urlsafe(32)
+    return session['csrf_token']
 
-def validate_family_csrf():
-    expected = session.get('family_csrf_token')
+
+def validate_csrf():
+    expected = session.get('csrf_token', '')
     supplied = request.form.get('csrf_token', '')
-    if not expected or not secrets.compare_digest(expected.encode('utf-8'), supplied.encode('utf-8')):
-        abort(400, description="The form expired. Go back, reload the page, and try again.")
+    if not expected or not secrets.compare_digest(expected.encode(), supplied.encode()):
+        abort(400, description='The form expired. Reload the page and try again.')
+
 
 @app.context_processor
-def family_template_context():
-    return dict(family_mode=FAMILY_MODE, family_csrf_token=family_csrf_token)
+def account_template_context():
+    return dict(csrf_token=csrf_token, can_add_rider=SETTINGS['accounts']['allow_self_registration'] or
+                (current_user.is_authenticated and is_admin(current_user)))
 
-def establish_user_session(user, remember=False):
+
+def establish_user_session(user):
     if not make_profile_dir(user.player_id):
         return '', 500
-    if FAMILY_MODE:
-        logout_user()
-        session.clear()
-    # The desktop token handoff needs a remember cookie even without remembered login.
-    login_user(user, remember=True)
-    if FAMILY_MODE:
-        session['family_player_id'] = user.player_id
-    else:
-        user.remember = remember
-        db.session.commit()
+    logout_user()
+    session.clear()
+    login_user(user, remember=True)  # Required by the desktop token handoff.
+    session['selected_rider'] = user.get_id()
+    csrf_token()
     return redirect(url_for('user_home', username=user.username))
 
-@app.route('/family/add/', methods=['GET', 'POST'])
-def family_signup():
-    if not FAMILY_MODE:
-        abort(404)
-    if request.method == 'POST':
-        validate_family_csrf()
-        display_name = request.form.get('display_name', '').strip()
-        if not display_name or len(display_name) > 100:
-            flash("Enter a name between 1 and 100 characters.")
-        else:
-            names = display_name.split(maxsplit=1)
-            user = User(username='family-%s@local.invalid' % uuid.uuid4().hex,
-                        first_name=names[0], last_name=names[1] if len(names) > 1 else '',
-                        pass_hash=generate_password_hash(secrets.token_urlsafe(32), 'scrypt'),
-                        is_admin=False, remember=False)
-            # Player 1 has legacy administrator privileges. Reserve that ID
-            # when a family server starts with no accounts.
-            if not User.query.first():
-                user.player_id = 2
-            db.session.add(user)
-            try:
-                db.session.commit()
-            except sqlalchemy.exc.IntegrityError:
-                db.session.rollback()
-                flash("Another family member was just added. Please try again.")
-                return redirect(url_for('family_signup'))
-            flash("Family member added. Choose a rider to continue.")
-            return redirect(url_for('login'))
-    return render_template('family_signup.html')
 
-@app.route('/family/switch/', methods=['POST'])
-def family_switch():
-    if not FAMILY_MODE:
-        abort(404)
-    validate_family_csrf()
+def create_rider(name, password, owner=False, username=None):
+    if not name.strip() or len(name) > 100:
+        raise ValueError('Enter a name between 1 and 100 characters.')
+    # Serialize bootstrap/ID allocation across requests. The server holds the storage lock.
+    db.session.rollback()
+    db.session.execute(sqlalchemy.text('BEGIN IMMEDIATE'))
+    state = db.session.get(AccountState, 1)
+    if owner and state.setup_complete:
+        db.session.rollback()
+        raise ValueError('Setup has already been completed.')
+    occupied = {u.player_id for u in User.query.all()}
+    occupied.update(int(n) for n in os.listdir(STORAGE_DIR) if n.isascii() and n.isdecimal())
+    player_id = max(occupied, default=0) + 1
+    # Adopt only the empty default folder left by an unused solo installation.
+    if owner and not User.query.first() and occupied == {1} and set(os.listdir(os.path.join(STORAGE_DIR, '1'))) <= {'settings.jsonc'}:
+        player_id = 1
+    folder = os.path.join(STORAGE_DIR, str(player_id))
+    existed = os.path.isdir(folder)
+    first, *last = name.split(maxsplit=1)
+    user = User(player_id=player_id, username=username or 'rider-%s@local.invalid' % secrets.token_hex(12),
+                first_name=first, last_name=last[0] if last else '',
+                pass_hash=generate_password_hash(password, 'scrypt') if password else None,
+                is_admin=owner)
+    try:
+        if not make_profile_dir(player_id):
+            raise OSError('Unable to create rider folder.')
+        from zluggish_config.store import atomic_write
+        preferences = Path(folder, 'settings.jsonc')
+        anonymous = Path(STORAGE_DIR, 'anonymous/settings.jsonc')
+        if owner and anonymous.exists() and not preferences.exists():
+            from zluggish_config.store import read_document
+            from zluggish_config.schema import USER
+            initial = read_document(anonymous, USER)
+            atomic_write(preferences, json.dumps(initial) + '\n')
+        elif not preferences.exists():
+            atomic_write(preferences, '{"settings_version": 1}\n')
+        db.session.add(user)
+        if owner:
+            state.setup_complete = True
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        if not existed:
+            shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return user
+
+
+@app.route('/riders/add/', methods=['GET', 'POST'])
+def add_rider():
+    state = db.session.get(AccountState, 1)
+    first_rider = not state.setup_complete
+    if not first_rider and not (SETTINGS['accounts']['allow_self_registration'] or
+                               (current_user.is_authenticated and is_admin(current_user))):
+        abort(403)
+    if request.method == 'POST':
+        validate_csrf()
+        name = request.form.get('display_name', '').strip()
+        password = request.form.get('password', '')
+        if first_rider:
+            from zluggish_config.accounts import setup_secret
+            if not secrets.compare_digest(request.form.get('setup_token', ''), setup_secret(STORAGE_DIR)):
+                abort(403, description='Use the setup link printed by the server.')
+        if not name or len(name) > 100:
+            flash('Enter a name between 1 and 100 characters.')
+        elif password != request.form.get('confirm_password', ''):
+            flash('Passwords did not match.')
+        else:
+            try:
+                create_rider(name, password, owner=first_rider)
+            except (OSError, ValueError, sqlalchemy.exc.IntegrityError) as exc:
+                db.session.rollback()
+                logger.warning('Rider creation failed: %s', type(exc).__name__)
+                flash('Could not create rider. Reload and try again.')
+            else:
+                if first_rider:
+                    Path(STORAGE_DIR, 'setup-token.txt').unlink(missing_ok=True)
+                return redirect(url_for('login'))
+    return render_template('add_rider.html', first_rider=first_rider,
+                           setup_token=request.values.get('setup_token', ''))
+
+
+@app.route('/riders/switch/', methods=['POST'])
+def switch_rider():
+    validate_csrf()
     session.clear()
-    logout_user()  # Also expire the remember cookie in the response.
+    logout_user()
     return redirect(url_for('login'))
 
-@app.route("/login/", methods=["GET", "POST"])
+
+@app.route('/login/', methods=['GET', 'POST'])
 def login():
-    if FAMILY_MODE:
-        if request.method == 'POST':
-            validate_family_csrf()
-            raw_id = request.form.get('player_id', '')
-            user = None
-            if raw_id.isascii() and raw_id.isdecimal() and len(raw_id) <= 10:
-                user = db.session.get(User, int(raw_id))
-            if user:
-                return establish_user_session(user)
-            flash("That rider is no longer available. Choose a rider from the list.")
-        session.pop('family_player_id', None)
-        users = User.query.order_by(sqlalchemy.func.lower(User.first_name),
-                                    sqlalchemy.func.lower(User.last_name), User.player_id).all()
-        return render_template('family_login.html', users=users, image_src=imageSrc)
-
-    if request.method == "POST":
-        username = request.form['username']
-        password = request.form['password']
-        remember = bool(request.form.get('remember'))
-
-        if not (username and password):
-            flash("Username and password cannot be empty.")
-            return redirect(url_for('login'))
-
-        user = User.query.filter_by(username=username).first()
-
-        if user and user.pass_hash.startswith('sha256'): # sha256 is deprecated in werkzeug 3
-            if check_sha256_hash(user.pass_hash, password):
-                user.pass_hash = generate_password_hash(password, 'scrypt')
-                db.session.commit()
-            else:
-                flash("Invalid username or password.")
-                return redirect(url_for('login'))
-
-        if user and check_password_hash(user.pass_hash, password):
-            return establish_user_session(user, remember)
-        else:
-            flash("Invalid username or password.")
-
-    if current_user.is_authenticated and current_user.remember:
-        return redirect(url_for("user_home", username=current_user.username))
-
-    user = User.verify_token(request.args.get('token'))
-    if user:
-        login_user(user, remember=False)
-        return redirect(url_for("reset", username=user.username))
-
-    return render_template("login_form.html")
-
-
-def send_mail(username, token):
-    try:
-        with open(asset_path(CONFIG_PATHS, SETTINGS['mail']['credentials_file'])) as f:
-            sender_email = f.readline().rstrip('\r\n')
-            password = f.readline().rstrip('\r\n')
-            host = f.readline().rstrip('\r\n')
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as server:
-            server.login(sender_email, password)
-            message = MIMEMultipart()
-            message['From'] = sender_email
-            message['To'] = username
-            message['Subject'] = "Password reset"
-            content = "https://%s/login/?token=%s" % (host if host else server_ip, token)
-            message.attach(MIMEText(content, 'plain'))
-            server.sendmail(sender_email, username, message.as_string())
-            server.close()
-    except Exception as exc:
-        logger.warning('send e-mail: %s' % repr(exc))
-        return False
-    return True
-
-@app.route("/forgot/", methods=["GET", "POST"])
-def forgot():
-    if request.method == "POST":
-        username = request.form['username']
-        if not username:
-            flash("Username cannot be empty.")
-            return redirect(url_for('forgot'))
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", username):
-            flash("Username is not a valid e-mail address.")
-            return redirect(url_for('forgot'))
-
-        user = User.query.filter_by(username=username).first()
+    if not db.session.get(AccountState, 1).setup_complete:
+        return redirect(url_for('add_rider', setup_token=request.args.get('setup_token', '')))
+    session.pop('selected_rider', None)
+    selected = None
+    if request.method == 'POST':
+        validate_csrf()
+        raw = request.form.get('player_id', '')
+        user = db.session.get(User, int(raw)) if raw.isascii() and raw.isdecimal() and len(raw) <= 10 else None
         if user:
-            if send_mail(username, user.get_token()):
-                flash("E-mail sent.")
-            else:
-                flash("Could not send e-mail.")
+            if not user.pass_hash or verify_password(user, request.form.get('password')):
+                return establish_user_session(user)
+            selected = user
+            if 'password' in request.form:
+                flash('Invalid password.')
         else:
-            flash("Invalid username.")
+            flash('That rider is no longer available. Choose a rider from the list.')
+    users = User.query.order_by(sqlalchemy.func.lower(User.first_name),
+                               sqlalchemy.func.lower(User.last_name), User.player_id).all()
+    return render_template('rider_login.html', users=users, selected=selected, image_src=imageSrc)
 
-    return render_template("forgot.html")
 
 @app.route("/api/push/fcm/<type>/<token>", methods=["POST", "DELETE"])
 @app.route("/api/push/fcm/<type>/<token>/enables", methods=["PUT"])
@@ -849,69 +819,54 @@ def api_push_fcm_production(type, token):
 def api_users():
     first_name = request.json['profile']['firstName']
     last_name = request.json['profile']['lastName']
-    if MULTIPLAYER:
-        username = request.json['email']
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", username):
-            return '', 400
-        pass_hash = generate_password_hash(request.json['password'], 'scrypt')
-        user = User(username=username, pass_hash=pass_hash, first_name=first_name, last_name=last_name)
-        db.session.add(user)
-        try:
-            db.session.commit()
-        except sqlalchemy.exc.IntegrityError:
-            return '', 400
-        login_user(user, remember=True)
-        if not make_profile_dir(user.player_id):
-            return '', 500
-    else:
-        AnonUser.first_name = first_name
-        AnonUser.last_name = last_name
-    return '', 200
-
-@app.route("/api/users/reset-password-email", methods=["PUT"])  # Android password reset
-def api_users_reset_password_email():
-    username = request.form['username']
-    if re.match(r"[^@]+@[^@]+\.[^@]+", username):
-        user = User.query.filter_by(username=username).first()
-        if user:
-            send_mail(username, user.get_token())
+    if not db.session.get(AccountState, 1).setup_complete or not SETTINGS['accounts']['allow_self_registration']:
+        abort(403)
+    username = request.json.get('email', '')
+    password = request.json.get('password', '')
+    if not re.fullmatch(r'[^@]+@[^@]+\.[^@]+', username) or not password:
+        abort(400)
+    try:
+        user = create_rider((first_name + ' ' + last_name).strip(), password, username=username)
+    except (ValueError, OSError, sqlalchemy.exc.IntegrityError):
+        db.session.rollback()
+        abort(400)
+    login_user(user, remember=True)
     return '', 200
 
 @app.route("/api/users/password-reset/", methods=["POST"])
 @jwt_to_session_cookie
 @login_required
 def api_users_password_reset():
-    password = request.form.get("password-new")
-    confirm_password = request.form.get("password-confirm")
-    if password != confirm_password:
-        return 'passwords not match', 500
-    hashed_pwd = generate_password_hash(password, 'scrypt')
-    current_user.pass_hash = hashed_pwd
-    db.session.commit()
-    return '', 200
+    if not request.headers.get('Authorization'):
+        validate_csrf()
+    if current_user.pass_hash and not verify_password(current_user, request.form.get('current_password')):
+        abort(403)
+    password = request.form.get('password-new', '')
+    if not password or password != request.form.get('password-confirm'):
+        abort(400)
+    change_local_password(current_user, password)
+    logout_user()
+    return '', 204
 
-@app.route("/reset/<username>/", methods=["GET", "POST"])
+
+@app.route('/reset/<username>/', methods=['GET', 'POST'])
 @login_required
 def reset(username):
-    if request.method == "POST":
-        if FAMILY_MODE:
-            validate_family_csrf()
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
-
-        if not (password and confirm_password):
-            flash("All fields are required.")
-            return redirect(url_for('reset', username=current_user.username))
-        if password != confirm_password:
-            flash("Passwords did not match.")
-            return redirect(url_for('reset', username=current_user.username))
-
-        hashed_pwd = generate_password_hash(password, 'scrypt')
-        current_user.pass_hash = hashed_pwd
-        db.session.commit()
-        flash("Password changed.")
-        return redirect(url_for('settings', username=current_user.username))
-    return render_template("reset.html", username=current_user.username)
+    user = current_user
+    if request.method == 'POST':
+        validate_csrf()
+        password = request.form.get('password', '')
+        removing = request.form.get('remove_password') == 'on'
+        if user.pass_hash and not verify_password(user, request.form.get('current_password')):
+            flash('Current password is incorrect.')
+        elif not removing and (not password or password != request.form.get('confirm_password')):
+            flash('Enter matching passwords.')
+        else:
+            change_local_password(user, None if removing else password)
+            session.clear()
+            logout_user()
+            return redirect(url_for('login'))
+    return render_template('reset.html', username=user.username, protected=bool(user.pass_hash))
 
 
 def strava_upload_method(player_id):
@@ -943,7 +898,7 @@ def strava(username):
             if request.form['method'] in ('paid', 'free'):
                 method = request.form['method']
                 save_user(CONFIG_PATHS, 'uploads.strava.method', method,
-                          current_user.player_id if MULTIPLAYER else None)
+                          current_user.player_id)
                 flash("Strava upload method saved.")
         elif request.form['client_id'] == "" or request.form['client_secret'] == "":
             flash("Client ID and secret can't be empty.")
@@ -1241,7 +1196,7 @@ def load_trainingpeaks_bridge_folder(player_id):
 
 def save_trainingpeaks_bridge_folder(player_id, folder):
     save_user(CONFIG_PATHS, 'workouts.trainingpeaks.bridge_folder', folder.strip(),
-              player_id if MULTIPLAYER else None)
+              player_id)
 
 
 def sync_trainingpeaks_workout_for_player(player_id):
@@ -1272,64 +1227,191 @@ def sync_trainingpeaks_workout_for_player(player_id):
         logger.warning('sync_trainingpeaks_workout_for_player: %s' % repr(exc))
         return {'status': 'error', 'message': 'TrainingPeaks bridge sync failed.'}
 
-@app.route("/profile/<username>/", methods=["GET", "POST"])
+def rider_is_active(player_id):
+    state = online.get(player_id)
+    return state is not None and world_time() < state.worldTime + 10000
+
+
+def import_metadata(stage):
+    metadata = json.loads((stage / 'manifest.json').read_text())
+    if metadata['player_id'] != current_user.player_id or metadata['auth_version'] != current_user.auth_version:
+        abort(403)
+    return metadata
+
+
+@app.route('/profile/<username>/', methods=['GET', 'POST'])
 @login_required
 def profile(username):
-    profile_dir = os.path.join(STORAGE_DIR, str(current_user.player_id))
-    file = os.path.join(profile_dir, 'zwift_credentials.bin')
-    cred = decrypt_credentials(file)
-    if request.method == "POST":
-        if request.form['username'] == "" or request.form['password'] == "":
-            flash("Zwift credentials can't be empty.")
-            return render_template("profile.html", username=current_user.username)
-        if not any ([request.form.get("zwift_profile"), request.form.get("achievements"), request.form.get("zwift_upload"), request.form.get("zwift_click")]):
-            flash("Select at least one option.")
-            return render_template("profile.html", username=current_user.username, uname=cred[0], passw=cred[1])
-        username = request.form['username']
-        password = request.form['password']
-        with requests.session() as session:
+    """Prepare profile data for review, independently of local authentication."""
+    folder = Path(STORAGE_DIR, str(current_user.player_id))
+    if request.method == 'POST':
+        validate_csrf()
+        if rider_is_active(current_user.player_id):
+            abort(409, description='Finish this rider’s active ride before importing.')
+        if request.form.get('action') == 'connections':
+            upload = request.form.get('zwift_upload') == 'on'
+            click = request.form.get('zwift_click') == 'on'
+            credentials = folder / 'zwift_credentials.bin'
+            if upload or click:
+                email, password = request.form.get('username', ''), request.form.get('password', '')
+                if not credentials.exists() or email or password:
+                    if not email or not password:
+                        abort(400, description='Enter both official Zwift credentials.')
+                    try:
+                        with requests.session() as remote:
+                            access, refresh = online_sync.login(remote, email, password)
+                            online_sync.logout(remote, refresh)
+                    except Exception as exc:
+                        logger.warning('Zwift connection failed: %s', type(exc).__name__)
+                        flash('Could not verify official Zwift credentials. Connection settings were not changed.')
+                        return redirect(url_for('profile', username=current_user.username))
+                    encrypt_credentials(str(credentials), (email, password))
+            else:
+                credentials.unlink(missing_ok=True)
+            zwift_online_tokens.pop(current_user.player_id, None)
+            save_user(CONFIG_PATHS, 'uploads.zwift.enabled', upload, current_user.player_id)
+            save_user(CONFIG_PATHS, 'devices.zwift_click.enabled', click, current_user.player_id)
+            flash('Zwift connection preferences saved.')
+            return redirect(url_for('profile', username=current_user.username))
+        files = {}
+        source = None
+        try:
+            if request.form.get('source') == 'files':
+                for name in ('profile.bin', 'achievements.bin', 'economy_config.txt'):
+                    upload = request.files.get(name)
+                    if upload and upload.filename:
+                        files[name] = upload.read()
+            else:
+                email, password = request.form.get('username', ''), request.form.get('password', '')
+                if not email or not password:
+                    raise ValueError('Enter your official Zwift credentials, or choose files.')
+                with requests.session() as remote:
+                    access, refresh = online_sync.login(remote, email, password)
+                    try:
+                        # Always identify the source, even for achievements-only imports.
+                        raw = online_sync.query(remote, access, 'api/profiles/me')
+                        source = profile_pb2.PlayerProfile()
+                        source.ParseFromString(raw)
+                        if not source.id or not source.first_name:
+                            raise ValueError('Zwift returned an invalid profile.')
+                        if request.form.get('zwift_profile'):
+                            files['profile.bin'] = raw
+                        if request.form.get('achievements'):
+                            files['achievements.bin'] = online_sync.query(remote, access, 'achievement/loadPlayerAchievements')
+                        if request.form.get('economy'):
+                            login_request = login_pb2.LoginRequest(key=random.randbytes(16))
+                            response = login_pb2.LoginResponse()
+                            response.ParseFromString(online_sync.api_login(remote, access, login_request))
+                            values = MessageToDict(response, preserving_proto_field_name=True)
+                            if 'economy_config' not in values:
+                                raise ValueError('Zwift did not return economy configuration.')
+                            files['economy_config.txt'] = json.dumps(values['economy_config']).encode()
+                    finally:
+                        online_sync.logout(remote, refresh)
+            if not files:
+                raise ValueError('Select at least one profile, achievement or economy file.')
+            if 'profile.bin' in files:
+                source = profile_pb2.PlayerProfile()
+                source.ParseFromString(files['profile.bin'])
+                if not source.id or not source.first_name.strip():
+                    raise ValueError('Profile is missing its ID or rider name.')
+            if 'achievements.bin' in files:
+                achievements = profile_pb2.Achievements()
+                achievements.ParseFromString(files['achievements.bin'])
+                if not files['achievements.bin'] or not achievements.achievements:
+                    raise ValueError('Achievement file is empty or invalid.')
+            if 'economy_config.txt' in files:
+                economy = json.loads(files['economy_config.txt'])
+                if not isinstance(economy, dict) or not economy:
+                    raise ValueError('Economy configuration must be a nonempty JSON object.')
+            metadata = dict(player_id=current_user.player_id, auth_version=current_user.auth_version,
+                            source_id=source.id if source else None,
+                            source_name=((source.first_name + ' ' + source.last_name).strip() if source else 'Unknown (file import)'),
+                            first_name=source.first_name if source else '', last_name=source.last_name if source else '',
+                            before=dict(first_name=current_user.first_name, last_name=current_user.last_name,
+                                        official_player_id=current_user.official_player_id))
+            if source:
+                metadata['progression'] = dict(distance=source.total_distance_in_meters, xp=source.total_xp)
+            stage = rider_imports.stage_import(folder, files, metadata)
+            old = session.pop('pending_import', None)
+            if old and re.fullmatch(r'\.import-[0-9a-f]{32}', old):
+                shutil.rmtree(folder / old, ignore_errors=True)
+            session['pending_import'] = stage.name
+            return redirect(url_for('confirm_profile_import', username=current_user.username))
+        except Exception as exc:
+            logger.warning('Profile import preparation failed: %s', type(exc).__name__)
+            flash(str(exc) if isinstance(exc, ValueError) else 'Could not prepare import. Check credentials/files and try again.')
+    return render_template('profile.html', username=current_user.username,
+                           upload=rider_settings(current_user.player_id)['uploads']['zwift']['enabled'],
+                           click=rider_settings(current_user.player_id)['devices']['zwift_click']['enabled'])
+
+
+@app.route('/profile/<username>/confirm/', methods=['GET', 'POST'])
+@login_required
+def confirm_profile_import(username):
+    pending = session.get('pending_import', '')
+    if not re.fullmatch(r'\.import-[0-9a-f]{32}', pending):
+        return redirect(url_for('profile', username=current_user.username))
+    stage = Path(STORAGE_DIR, str(current_user.player_id), pending)
+    if not stage.is_dir():
+        session.pop('pending_import', None)
+        return redirect(url_for('profile', username=current_user.username))
+    metadata = import_metadata(stage)
+    duplicate = User.query.filter(User.official_player_id == metadata['source_id'],
+                                  User.player_id != current_user.player_id).first() if metadata['source_id'] else None
+    mixed = not metadata['source_id'] or (current_user.official_player_id and
+             current_user.official_player_id != metadata['source_id'])
+    if request.method == 'POST':
+        validate_csrf()
+        if rider_is_active(current_user.player_id):
+            abort(409, description='Finish this rider’s active ride before importing.')
+        if request.form.get('cancel'):
+            shutil.rmtree(stage)
+            session.pop('pending_import', None)
+            return redirect(url_for('profile', username=current_user.username))
+        if not request.form.get('confirm') or ((duplicate or mixed) and not request.form.get('confirm_source')):
+            abort(400, description='Confirm replacement and any source warnings.')
+        # Serializes two tabs attempting to publish the same rider's staged data.
+        with FileLock(str(stage.parent / '.import.lock')):
+            if not stage.exists():
+                abort(409)
+            keep_name = request.form.get('keep_name') == 'on'
+            if 'profile.bin' in metadata['files']:
+                imported = profile_pb2.PlayerProfile()
+                imported.ParseFromString((stage / 'profile.bin').read_bytes())
+                imported.id = current_user.player_id
+                if imported.HasField('social_facts'):
+                    imported.social_facts.profile_id = current_user.player_id
+                imported.ClearField('public_id')
+                imported.mix_panel_distinct_id = str(uuid.uuid4())
+                if keep_name:
+                    imported.first_name, imported.last_name = current_user.first_name, current_user.last_name
+                rider_imports.write_bytes(stage / 'profile.bin', imported.SerializeToString())
+            user = db.session.get(User, current_user.player_id)
+            # Record the immediately preceding metadata, not an out-of-date preview.
+            metadata['before'] = dict(first_name=user.first_name, last_name=user.last_name,
+                                      official_player_id=user.official_player_id)
+            def commit():
+                if 'profile.bin' in metadata['files'] and not keep_name:
+                    user.first_name, user.last_name = metadata['first_name'], metadata['last_name']
+                if metadata['source_id']:
+                    user.official_player_id = metadata['source_id']
+                db.session.commit()
             try:
-                access_token, refresh_token = online_sync.login(session, username, password)
-                try:
-                    if request.form.get("zwift_profile"):
-                        profile = online_sync.query(session, access_token, "api/profiles/me")
-                        profile_file = '%s/profile.bin' % profile_dir
-                        backup_file(profile_file)
-                        with open(profile_file, 'wb') as f:
-                            f.write(profile)
-                        login_request = login_pb2.LoginRequest()
-                        login_request.key = random.randbytes(16)
-                        login_response = login_pb2.LoginResponse()
-                        login_response.ParseFromString(online_sync.api_login(session, access_token, login_request))
-                        login_response_dict = MessageToDict(login_response, preserving_proto_field_name=True)
-                        if 'economy_config' in login_response_dict:
-                            economy_config_file = '%s/economy_config.txt' % profile_dir
-                            backup_file(economy_config_file)
-                            with open(economy_config_file, 'w') as f:
-                                json.dump(login_response_dict['economy_config'], f, indent=2)
-                    if request.form.get("achievements"):
-                        achievements = online_sync.query(session, access_token, "achievement/loadPlayerAchievements")
-                        achievements_file = '%s/achievements.bin' % profile_dir
-                        backup_file(achievements_file)
-                        with open(achievements_file, 'wb') as f:
-                            f.write(achievements)
-                    online_sync.logout(session, refresh_token)
-                    if request.form.get("zwift_upload") or request.form.get("zwift_click"):
-                        encrypt_credentials(file, (username, password))
-                    save_user(CONFIG_PATHS, 'uploads.zwift.enabled', bool(request.form.get("zwift_upload")),
-                              current_user.player_id if MULTIPLAYER else None)
-                    save_user(CONFIG_PATHS, 'devices.zwift_click.enabled', bool(request.form.get('zwift_click')),
-                              current_user.player_id if MULTIPLAYER else None)
-                except Exception as exc:
-                    logger.warning('Zwift profile: %s' % repr(exc))
-                    flash("Error downloading profile.")
-                    return render_template("profile.html", username=current_user.username, uname=cred[0], passw=cred[1])
-            except Exception as exc:
-                logger.warning('online_sync.login: %s' % repr(exc))
-                flash("Invalid username or password.")
-                return render_template("profile.html", username=current_user.username)
-        return redirect(url_for('settings', username=current_user.username))
-    return render_template("profile.html", username=current_user.username, uname=cred[0], passw=cred[1], upload=rider_settings(current_user.player_id)['uploads']['zwift']['enabled'], click=rider_settings(current_user.player_id)['devices']['zwift_click']['enabled'])
+                rider_imports.publish(stage, metadata, commit)
+            except Exception:
+                db.session.rollback()
+                for key, value in metadata['before'].items():
+                    setattr(user, key, value)
+                db.session.commit()
+                logger.exception('Profile import rolled back')
+                abort(500, description='Import failed; previous data was restored.')
+        player_partial_profiles.pop(user.player_id, None)
+        session.pop('pending_import', None)
+        flash('Profile data imported. Local login and rider ID are unchanged.')
+        return redirect(url_for('user_home', username=user.username))
+    return render_template('profile_confirm.html', username=current_user.username, metadata=metadata,
+                           duplicate=duplicate, mixed=mixed)
 
 
 @app.route("/garmin/<username>/", methods=["GET", "POST"])
@@ -1578,8 +1660,6 @@ def power_curves(username):
 @app.route("/logout/<username>")
 @login_required
 def logout(username):
-    if FAMILY_MODE:
-        return redirect(url_for('login'))
     session.clear()
     logout_user()
     flash("Successfully logged out.")
@@ -2613,10 +2693,9 @@ def api_profiles_me_id(player_id):
         profile.large_avatar_url = image
     with open(profile_file, 'wb') as fd:
         fd.write(profile.SerializeToString())
-    if MULTIPLAYER:
-        current_user.first_name = profile.first_name
-        current_user.last_name = profile.last_name
-        db.session.commit()
+    current_user.first_name = profile.first_name
+    current_user.last_name = profile.last_name
+    db.session.commit()
     return api_profiles_me()
 
 @app.route('/api/profiles/<int:player_id>', methods=['PUT'])
@@ -2633,12 +2712,11 @@ def api_profiles_id(player_id):
     stream = request.stream.read()
     with open('%s/%s/profile.bin' % (STORAGE_DIR, player_id), 'wb') as f:
         f.write(stream)
-    if MULTIPLAYER:
-        profile = profile_pb2.PlayerProfile()
-        profile.ParseFromString(stream)
-        current_user.first_name = profile.first_name
-        current_user.last_name = profile.last_name
-        db.session.commit()
+    profile = profile_pb2.PlayerProfile()
+    profile.ParseFromString(stream)
+    current_user.first_name = profile.first_name
+    current_user.last_name = profile.last_name
+    db.session.commit()
     return '', 204
 
 @app.route('/api/profiles/<int:player_id>/photo', methods=['POST'])
@@ -4044,7 +4122,7 @@ def auto_group_bots():
         time.sleep(3)
 
 def is_admin(user):
-    return True if not MULTIPLAYER or user.player_id == 1 or user.is_admin else False
+    return bool(user.is_authenticated and user.is_admin)
 
 @app.route('/relay/worlds/attributes', methods=['POST'])
 @jwt_to_session_cookie
@@ -4854,6 +4932,10 @@ def migrate_database():
         db.session.commit()
         return
     version = row.version
+    if version == 3:
+        Version.query.filter_by(version=3).update(dict(version=DATABASE_CUR_VER))
+        db.session.commit()
+        return
     if version != 2:
         return
     # Database needs to be upgraded, try to back it up first
@@ -4995,19 +5077,119 @@ def remove_inactive():
         time.sleep(600)
 
 
-with app.app_context():
-    db.create_all()
+def migrate_anonymous_preferences(player_id, source=None):
+    from zluggish_config.accounts import backup
+    from zluggish_config.store import read_document, atomic_write
+    from zluggish_config.schema import USER
+    anonymous = Path(STORAGE_DIR, 'anonymous/settings.jsonc')
+    target = Path(STORAGE_DIR, str(player_id), 'settings.jsonc')
+    if anonymous.exists():
+        old = read_document(anonymous, USER)
+        if target.exists() and read_document(target, USER) != old and source is None:
+            raise ConfigError('Conflicting rider settings. Run zluggish accounts migrate --solo-player ID --settings-source anonymous|rider (omit --solo-player for an unused installation)')
+        if source != 'rider':
+            backup(target)
+            atomic_write(target, json.dumps(old, indent=2) + '\n', target.read_bytes() if target.exists() else None)
+
+
+def initialize_accounts():
+    """Attach old solo data once, before listeners start. Numeric folders stay put."""
+    from zluggish_config.accounts import backup, setup_secret
+    state = db.session.get(AccountState, 1)
+    if state:
+        if not state.setup_complete:
+            logger.info('Create your first rider: https://%s/login/?setup_token=%s', server_ip, setup_secret(STORAGE_DIR))
+        return
+    users = User.query.all()
+    profiles = sorted(int(n) for n in os.listdir(STORAGE_DIR)
+                      if n.isascii() and n.isdecimal() and int(n) > 0
+                      and Path(STORAGE_DIR, n, 'profile.bin').is_file())
+    options_path = Path(STORAGE_DIR, 'account-migration.json')
+    options = json.loads(options_path.read_text()) if options_path.exists() else {}
+    solo = options.get('solo_player')
+    orphans = set(profiles) - {u.player_id for u in users}
+    if (users and orphans or not users and len(profiles) > 1) and solo is None:
+        raise ConfigError('Ambiguous legacy profiles. Stop the server and run zluggish accounts migrate --solo-player ID; existing accounts are never merged.')
+    if not users and not profiles:
+        for folder in Path(STORAGE_DIR).iterdir():
+            if folder.is_dir() and folder.name.isascii() and folder.name.isdecimal():
+                if folder.name != '1' or set(p.name for p in folder.iterdir()) - {'settings.jsonc'}:
+                    raise ConfigError('Orphan rider data has no profile.bin. Restore its profile before creating accounts; data will not be overwritten.')
+    if solo is None and not users and len(profiles) == 1:
+        solo = profiles[0]
+    anonymous = Path(STORAGE_DIR, 'anonymous/settings.jsonc')
+    if users and anonymous.exists() and solo is None and options.get('settings_source') != 'rider':
+        raise ConfigError('Mixed account/anonymous settings: choose --solo-player ID and --settings-source anonymous|rider using zluggish accounts migrate.')
+    if solo is not None:
+        if solo not in profiles:
+            raise ConfigError('Selected legacy profile is missing')
+        legacy_profile = profile_pb2.PlayerProfile()
+        legacy_profile.ParseFromString(Path(STORAGE_DIR, str(solo), 'profile.bin').read_bytes())
+        if not legacy_profile.first_name.strip():
+            raise ConfigError('Legacy profile has no name. Repair the profile before account conversion.')
+        backup(DATABASE_PATH)
+        migrate_anonymous_preferences(solo, options.get('settings_source'))
+        if not db.session.get(User, solo):
+            profile = legacy_profile
+            db.session.add(User(player_id=solo, username='rider-%s@local.invalid' % secrets.token_hex(12),
+                                first_name=profile.first_name, last_name=profile.last_name,
+                                pass_hash=None, is_admin=not users))
+            users = [True]
+    if not users and not profiles and Path(STORAGE_DIR, '1/settings.jsonc').exists():
+        migrate_anonymous_preferences(1, options.get('settings_source'))
+    state = AccountState(id=1, setup_complete=bool(users))
+    db.session.add(state)
     db.session.commit()
-    check_columns(User, 'user')
-    if db.session.execute(sqlalchemy.text("SELECT COUNT(*) FROM pragma_table_info('user') WHERE name='new_home'")).scalar():
-        db.session.execute(sqlalchemy.text("ALTER TABLE user DROP COLUMN new_home"))
+    if not state.setup_complete:
+        secret = setup_secret(STORAGE_DIR)
+        logger.info('Create your first rider: https://%s/login/?setup_token=%s', server_ip, secret)
+
+
+def recover_profile_imports():
+    for manifest in Path(STORAGE_DIR).glob('[0-9]*/.import-*/manifest.json'):
+        metadata = json.loads(manifest.read_text())
+        if metadata['state'] == 'publishing':
+            rider_imports.rollback(manifest.parent, metadata)
+            user = db.session.get(User, metadata['player_id'])
+            if user:
+                for key, value in metadata['before'].items():
+                    setattr(user, key, value)
+                db.session.commit()
+        # Staged previews survive restarts; finalized/rolled-back imports do not.
+        if metadata['state'] != 'staged':
+            shutil.rmtree(manifest.parent)
+
+
+from zluggish_config.accounts import migrate_schema, setup_secret
+if MIGRATE_ACCOUNTS:
+    migrate_schema(STORAGE_DIR)
+
+with app.app_context():
+    if FRESH_DATABASE or MIGRATE_ACCOUNTS:
+        db.create_all()
+        if FRESH_DATABASE:
+            db.session.add(Version(version=DATABASE_CUR_VER))
         db.session.commit()
-    check_columns(Activity, 'activity')
-    if check_columns(Playback, 'playback'):
-        update_playback()
-    check_columns(RouteResult, 'route_result')
-    check_columns(GoalMetrics, 'goal_metrics')
-    migrate_database()
+    if MIGRATE_ACCOUNTS:
+        check_columns(User, 'user')
+        if db.session.execute(sqlalchemy.text("SELECT COUNT(*) FROM pragma_table_info('user') WHERE name='new_home'")).scalar():
+            db.session.execute(sqlalchemy.text("ALTER TABLE user DROP COLUMN new_home"))
+            db.session.commit()
+        check_columns(Activity, 'activity')
+        if check_columns(Playback, 'playback'):
+            update_playback()
+        check_columns(RouteResult, 'route_result')
+        check_columns(GoalMetrics, 'goal_metrics')
+        migrate_database()
+    try:
+        if FRESH_DATABASE or MIGRATE_ACCOUNTS:
+            initialize_accounts()
+        elif not db.session.get(AccountState, 1).setup_complete:
+            logger.info('Create your first rider: https://%s/login/?setup_token=%s', server_ip, setup_secret(STORAGE_DIR))
+        recover_profile_imports()
+    except (ConfigError, ValueError) as exc:
+        logger.error('Account conversion stopped: %s', exc)
+        sys.exit(2)
     db.session.close()
 
 
@@ -5034,28 +5216,16 @@ def auth_rb():
 @app.route('/auth/realms/zwift/tokens/registrations', methods=['GET'])  # Called by Mac, but not Windows
 @app.route('/ride', methods=['GET'])
 def launch_zwift():
-    if FAMILY_MODE:
-        if request.path != '/ride':
-            session.pop('family_player_id', None)
-            return redirect(url_for('login'))
-        if not current_user.is_authenticated or session.get('family_player_id') != current_user.player_id:
-            return redirect(url_for('login'))
-        from flask_login import encode_cookie
-        # Encode the selected session identity so a stale incoming cookie cannot
-        # launch the previous rider after switching accounts.
-        cookie = encode_cookie(str(current_user.player_id))
-        return redirect("http://zwift/?code=zwift_refresh_token%s" % fake_refresh_token_with_session_cookie(cookie), 302)
-    # Zwift client has switched to calling https://launcher.zwift.com/launcher/ride
-    if request.path != "/ride" and not SETTINGS['launcher']['auto_launch']:
-        if MULTIPLAYER:
-            return redirect(url_for('login'))
-        else:
-            return redirect(url_for('user_home', username=current_user.username))
-    else:
-        if MULTIPLAYER:
-            return redirect("http://zwift/?code=zwift_refresh_token%s" % fake_refresh_token_with_session_cookie(request.cookies.get('remember_token')), 302)
-        else:
-            return redirect("http://zwift/?code=zwift_refresh_token%s" % REFRESH_TOKEN, 302)
+    if request.path != '/ride':
+        session.pop('selected_rider', None)
+        return redirect(url_for('login'))
+    if not current_user.is_authenticated or session.get('selected_rider') != current_user.get_id():
+        return redirect(url_for('login'))
+    if rider_is_active(current_user.player_id):
+        abort(409, description='This rider already has an active ride.')
+    from flask_login import encode_cookie
+    cookie = encode_cookie(current_user.get_id())
+    return redirect('http://zwift/?code=zwift_refresh_token%s' % fake_refresh_token_with_session_cookie(cookie), 302)
 
 
 def fake_refresh_token_with_session_cookie(session_cookie):
@@ -5081,44 +5251,30 @@ def auth_realms_zwift_protocol_openid_connect_token():
     username = request.form.get('username')
     password = request.form.get('password')
 
-    if username and MULTIPLAYER:
+    from flask_login import encode_cookie, decode_cookie
+    if username:
         user = User.query.filter_by(username=username).first()
-
-        if user and user.pass_hash.startswith('sha256'): # sha256 is deprecated in werkzeug 3
-            if check_sha256_hash(user.pass_hash, password):
-                user.pass_hash = generate_password_hash(password, 'scrypt')
-                db.session.commit()
-            else:
-                return '', 401
-
-        if user and check_password_hash(user.pass_hash, password):
-            login_user(user, remember=True)
-            if not make_profile_dir(user.player_id):
-                return '', 500
-        else:
+        if not verify_password(user, password):
             return '', 401
-
-    if MULTIPLAYER:
-        # This is called once with ?code= in URL and once again with the refresh token
-        if "code" in request.form:
-            # Original code argument is replaced with session cookie from launcher
-            refresh_token = jwt.decode(request.form['code'][19:], options=({'verify_signature': False, 'verify_aud': False}))
-            session_cookie = refresh_token['session_cookie']
-            return jsonify(fake_jwt_with_session_cookie(session_cookie)), 200
-        elif "refresh_token" in request.form:
-            token = jwt.decode(request.form['refresh_token'], options=({'verify_signature': False, 'verify_aud': False}))
-            if 'session_cookie' in token:
-                return jsonify(fake_jwt_with_session_cookie(token['session_cookie']))
-            else:
-                return '', 401
-        else:  # android login
-            from flask_login import encode_cookie
-            # cookie is not set in request since we just logged in so create it.
-            return jsonify(fake_jwt_with_session_cookie(encode_cookie(str(session['_user_id'])))), 200
-    else:
-        r = make_response(FAKE_JWT)
-        r.mimetype = 'application/json'
-        return r
+        if not make_profile_dir(user.player_id):
+            return '', 500
+        login_user(user, remember=True)
+        return jsonify(fake_jwt_with_session_cookie(encode_cookie(user.get_id())))
+    try:
+        if 'code' in request.form:
+            code = request.form['code']
+            if not code.startswith('zwift_refresh_token'):
+                abort(401)
+            token = code[19:]
+        else:
+            token = request.form['refresh_token']
+        payload = jwt.decode(token, options={'verify_signature': False, 'verify_aud': False})
+        cookie = payload['session_cookie']
+        if not load_account_identity(decode_cookie(cookie)):
+            abort(401)
+        return jsonify(fake_jwt_with_session_cookie(cookie))
+    except (KeyError, ValueError, TypeError, jwt.PyJWTError):
+        return '', 401
 
 @app.route('/auth/realms/zwift/protocol/openid-connect/logout', methods=['POST'])
 def auth_realms_zwift_protocol_openid_connect_logout():
@@ -5129,12 +5285,13 @@ def auth_realms_zwift_protocol_openid_connect_logout():
 @app.route("/start-zwift" , methods=['POST'])
 @login_required
 def start_zwift():
-    if FAMILY_MODE:
-        if session.get('family_player_id') != current_user.player_id:
-            return redirect(url_for('login'))
-        validate_family_csrf()
+    if session.get('selected_rider') != current_user.get_id():
+        return redirect(url_for('login'))
+    validate_csrf()
+    if rider_is_active(current_user.player_id):
+        abort(409, description='This rider already has an active ride. Finish it before starting another.')
     save_user(CONFIG_PATHS, 'ghosts.enabled', 'enableghosts' in request.form,
-              current_user.player_id if MULTIPLAYER else None)
+              current_user.player_id)
     selected_map = request.form['map']
     if selected_map != 'CALENDAR':
         # We have no identifying information when Zwift makes MapSchedule request except for the client's IP.
@@ -5184,29 +5341,11 @@ def run_standalone(passed_online, passed_global_relay, passed_global_pace_partne
     login_manager = LoginManager()
     login_manager.login_view = 'login'
     login_manager.session_protection = None
-    if not MULTIPLAYER:
-        # Find first profile.bin if one exists and use it. Multi-profile
-        # support is deprecated and now unsupported for non-multiplayer mode.
-        player_id = None
-        for name in os.listdir(STORAGE_DIR):
-            path = "%s/%s" % (STORAGE_DIR, name)
-            if os.path.isdir(path) and os.path.exists("%s/profile.bin" % path):
-                try:
-                    player_id = int(name)
-                except ValueError:
-                    continue
-                break
-        if not player_id:
-            player_id = 1
-            if not make_profile_dir(player_id):
-                sys.exit(1)
-        AnonUser.player_id = player_id
-        login_manager.anonymous_user = AnonUser
     login_manager.init_app(app)
 
     @login_manager.user_loader
     def load_user(uid):
-        return db.session.get(User, int(uid))
+        return load_account_identity(uid)
 
     send_message_thread = threading.Thread(target=send_server_back_online_message)
     send_message_thread.start()

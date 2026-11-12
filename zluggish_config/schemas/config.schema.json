@@ -12,14 +12,6 @@
     "server": {
       "type": "object",
       "properties": {
-        "multiplayer": {
-          "type": "boolean",
-          "default": false
-        },
-        "family_mode": {
-          "type": "boolean",
-          "default": false
-        },
         "advertised_ip": {
           "type": "string",
           "default": "127.0.0.1"
@@ -27,12 +19,12 @@
       },
       "additionalProperties": false
     },
-    "launcher": {
+    "accounts": {
       "type": "object",
       "properties": {
-        "auto_launch": {
+        "allow_self_registration": {
           "type": "boolean",
-          "default": false
+          "default": true
         }
       },
       "additionalProperties": false
@@ -155,16 +147,6 @@
             }
           },
           "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "mail": {
-      "type": "object",
-      "properties": {
-        "credentials_file": {
-          "type": "string",
-          "default": ""
         }
       },
       "additionalProperties": false

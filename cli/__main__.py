@@ -46,9 +46,17 @@ def parser():
             if group == "settings":
                 scope = command.add_mutually_exclusive_group(required=True)
                 scope.add_argument("--user")
-                scope.add_argument("--anonymous", action="store_true")
                 scope.add_argument("--peloton", action="store_true")
                 scope.add_argument("--solo-blob", action="store_true")
+    accounts = groups.add_parser("accounts").add_subparsers(dest="action", required=True)
+    migration = accounts.add_parser("migrate")
+    migration.add_argument("--server-dir")
+    migration.add_argument("--solo-player", type=int)
+    migration.add_argument("--settings-source", choices=["anonymous", "rider"])
+    recovery = accounts.add_parser("recover")
+    recovery.add_argument("--user", required=True, type=int)
+    recovery.add_argument("--admin", action="store_true")
+    recovery.add_argument("--remove-password", action="store_true")
     return root
 
 
@@ -60,6 +68,10 @@ def main(argv=None):
         return 0
     from zluggish_config.store import ConfigError, paths
     try:
+        if args.group == "accounts":
+            from .accounts import run
+            run(args, paths(args.storage_dir, args.config))
+            return 0
         from . import config, settings
         location = paths(args.storage_dir, args.config)
         (config if args.group == "config" else settings).run(args, location)

@@ -25,8 +25,8 @@ META = {"$schema": {"type": "string"}}
 USER = obj({**META, "settings_version": {"const": 1, "default": 1}, **USER_FIELDS["properties"]}, required=["settings_version"])
 SERVER = obj({
     **META, "config_version": {"const": 1, "default": 1},
-    "server": obj({"multiplayer": BOOL(), "family_mode": BOOL(), "advertised_ip": TEXT("127.0.0.1")}),
-    "launcher": obj({"auto_launch": BOOL()}),
+    "server": obj({"advertised_ip": TEXT("127.0.0.1")}),
+    "accounts": obj({"allow_self_registration": BOOL(True)}),
     "bots": obj({"enabled": BOOL(), "multiplier": field("integer", 1, minimum=1, maximum=100), "riders_file": TEXT()}),
     "proxy": obj({"mode": field("string", "auto", enum=["auto", "enabled", "disabled"])}),
     "dns": obj({"enabled": BOOL()}),
@@ -38,7 +38,6 @@ SERVER = obj({
         "discord": obj({"enabled": BOOL(), "credentials_file": TEXT(), "channel": field("integer", 0, minimum=0),
                         "welcome_message": TEXT(), "help_message": TEXT(), "announce_players": BOOL()}),
     }),
-    "mail": obj({"credentials_file": TEXT()}),
     "logging": obj({"level": field("string", "INFO", enum=["DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL", "NOTSET"])}),
     "network": obj({
         "host": TEXT(),

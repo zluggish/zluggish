@@ -1,65 +1,42 @@
 {% extends "./layout.html" %}
 {% block content %}
-  <h1><div class="text-shadow">Zwift</div></h1>
-  {% if username != "zoffline" %}
-    <h4 class="text-shadow">Logged in as {{ username }}</h4>
-  {% endif %}
-  <div class="row">
-    <div class="col-md-12">
-      <a href="{{ url_for('settings', username=username) }}" class="btn btn-sm btn-secondary">Back</a>
-      {% if uname or passw %}
-        <a href="/delete/zwift_credentials.bin" class="btn btn-sm btn-danger">Remove credentials</a>
-      {% endif %}
-    </div>
-  </div>
-  <div class="row">
-    <div class="col-sm-6 col-md-5 top-buffer">
-      <form id="profile" action="{{ url_for('profile', username=username) }}" method="post">
-        <div class="row">
-          <div class="col-md-12">
-            <label class="col-form-label col-form-label-sm text-shadow">Zwift username</label>
-            <input type="text" id="username" name="username" value="{{ uname }}" class="form-control form-control-sm">
-          </div>
-          <div class="col-md-12">
-            <label class="col-form-label col-form-label-sm text-shadow">Zwift password</label>
-            <input type="password" id="password" name="password" value="{{ passw }}" class="form-control form-control-sm">
-          </div>
-          <div class="col-md-12 top-buffer">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="zwift_profile" name="zwift_profile">
-              <label class="form-check-label text-shadow" for="zwift_profile">Download profile</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="achievements" name="achievements">
-              <label class="form-check-label text-shadow" for="achievements">Download achievements</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="zwift_upload" name="zwift_upload" {% if upload and uname and passw %}checked{% endif %}>
-              <label class="form-check-label text-shadow" for="zwift_upload">Upload activities</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="zwift_click" name="zwift_click" {% if click and uname and passw %}checked{% endif %}>
-              <label class="form-check-label text-shadow" for="zwift_click">Authenticate Click</label>
-            </div>
-          </div>
-        </div>
-        <div class="row">
-          <div class="col-md-12 top-buffer">
-            <input type="submit" value="Submit" class="btn btn-sm btn-light">
-          </div>
-        </div>
-      </form>
-      {% with messages = get_flashed_messages() %}
-        {% if messages %}
-          <ul class="list-group top-buffer">
-          {% for message in messages %}
-            <li class="list-group-item py-2">
-              <div class="text-shadow">{{ message }}</div>
-            </li>
-          {% endfor %}
-          </ul>
-        {% endif %}
-      {% endwith %}
-    </div>
-  </div>
+<h1 class="text-shadow">Import Zwift profile</h1>
+<p class="text-shadow">Local rider: {{ current_user.first_name }} {{ current_user.last_name }} · Rider #{{ current_user.player_id }}</p>
+<a href="{{ url_for('user_home', username=username) }}" class="btn btn-secondary">Back</a>
+<p class="text-shadow top-buffer">Import selected profile data into this rider. Your local password and rider ID stay unchanged. Activities are not imported. You will review replacements before applying them.</p>
+<form method="post" enctype="multipart/form-data" class="col-sm-6 top-buffer">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="text-shadow" for="source">Import source</label>
+  <select id="source" name="source" class="form-control">
+    <option value="zwift">Download from official Zwift</option>
+    <option value="files">Files from the profile export helper</option>
+  </select>
+  <label class="text-shadow" for="username">Official Zwift username (download only)</label>
+  <input id="username" name="username" class="form-control" autocomplete="off">
+  <label class="text-shadow" for="password">Official Zwift password (download only)</label>
+  <input id="password" type="password" name="password" class="form-control" autocomplete="off">
+  <p class="text-shadow">Download:</p>
+  <label class="text-shadow"><input type="checkbox" name="zwift_profile" checked> Profile and progression</label><br>
+  <label class="text-shadow"><input type="checkbox" name="achievements"> Achievements</label><br>
+  <label class="text-shadow"><input type="checkbox" name="economy"> Economy configuration</label>
+  <p class="text-shadow top-buffer">Or choose exported files (only selected files will be replaced):</p>
+  {% for name in ['profile.bin', 'achievements.bin', 'economy_config.txt'] %}
+  <label class="text-shadow" for="{{ name }}">{{ name }}</label>
+  <input type="file" id="{{ name }}" name="{{ name }}" class="form-control">
+  {% endfor %}
+  <button class="btn btn-light top-buffer" type="submit">Review import</button>
+</form>
+<h2 class="text-shadow top-buffer">Official Zwift connections</h2>
+<p class="text-shadow">Importing does not enable uploads or Click authentication. Credentials are stored encrypted only for enabled connections.</p>
+<form method="post" class="col-sm-6">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="action" value="connections">
+  <label class="text-shadow">Official username <input name="username" class="form-control" autocomplete="off"></label>
+  <label class="text-shadow">Official password <input name="password" type="password" class="form-control" autocomplete="off"></label>
+  <p class="text-shadow">Leave credentials empty to keep the saved connection.</p>
+  <label class="text-shadow"><input type="checkbox" name="zwift_upload" {% if upload %}checked{% endif %}> Upload activities</label><br>
+  <label class="text-shadow"><input type="checkbox" name="zwift_click" {% if click %}checked{% endif %}> Authenticate Click</label><br>
+  <button class="btn btn-light top-buffer" type="submit">Save connections</button>
+</form>
+{% for message in get_flashed_messages() %}<p class="alert alert-info top-buffer">{{ message }}</p>{% endfor %}
 {% endblock %}

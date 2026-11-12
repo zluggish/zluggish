@@ -62,16 +62,16 @@ div#working {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
-.family-page {
+.rider-picker-page {
     max-width: 640px;
     max-height: calc(100vh - 70px);
     overflow-y: auto;
     padding: 8px 8px 24px;
 }
-.family-rider-form {
+.rider-picker-rider-form {
     margin-bottom: 10px;
 }
-.family-rider {
+.rider-picker-rider {
     display: flex;
     align-items: center;
     width: 100%;
@@ -84,13 +84,13 @@ div#working {
     cursor: pointer;
     overflow-wrap: anywhere;
 }
-.family-rider:hover, .family-rider:focus {
+.rider-picker-rider:hover, .rider-picker-rider:focus {
     border-color: #212529;
 }
-.family-rider small {
+.rider-picker-rider small {
     display: block;
 }
-.family-avatar {
+.rider-picker-avatar {
     flex-shrink: 0;
     width: 56px;
     height: 56px;
@@ -98,14 +98,14 @@ div#working {
     border-radius: 50%;
     object-fit: cover;
 }
-.family-avatar-fallback {
+.rider-picker-avatar-fallback {
     display: flex;
     align-items: center;
     justify-content: center;
     background: #e9ecef;
     font-size: 24px;
 }
-.family-switch-form {
+.rider-picker-switch-form {
     display: inline-block;
     background: transparent;
     padding: 0;

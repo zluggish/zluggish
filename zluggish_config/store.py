@@ -69,12 +69,12 @@ def parse(text, path="configuration"):
 
 
 def validate(value, schema, path="configuration"):
+    if schema is SERVER and (any(k in value.get("server", {}) for k in ("multiplayer", "family_mode")) or "launcher" in value or "mail" in value):
+        raise ConfigError(f"{path}: retired account/launcher/mail settings; stop the server and run zluggish accounts migrate")
     error = next(Draft202012Validator(schema).iter_errors(value), None)
     if error:
         key = ".".join(map(str, error.absolute_path)) or "<root>"
         raise ConfigError(f"{path}: {key}: failed {error.validator} validation")
-    if schema is SERVER and value.get("server", {}).get("family_mode") and not value.get("server", {}).get("multiplayer"):
-        raise ConfigError(f"{path}: server.family_mode requires server.multiplayer")
     return value
 
 
@@ -133,7 +133,7 @@ def database_users(storage):
 
 def user_path(location, user=None):
     if user is None:
-        return location.storage / "anonymous" / "settings.jsonc"
+        raise ConfigError("Select a rider with --user ID; anonymous settings are retired")
     if isinstance(user, bool) or not str(user).isdigit() or int(user) < 1:
         raise ConfigError("--user must be an existing positive player ID")
     if int(user) not in database_users(location.storage):
@@ -191,7 +191,7 @@ def resolve_server(document, location, environ=None):
                 raise ConfigError(f"{name}: invalid environment override") from None
     validate(settings, SERVER, location.config)
     for reference in (settings["ghosts"]["profile_file"], settings["bots"]["riders_file"],
-                      settings["mail"]["credentials_file"], settings["integrations"]["discord"]["credentials_file"]):
+                      settings["integrations"]["discord"]["credentials_file"]):
         path = asset_path(location, reference)
         if path is not None and not path.is_file():
             raise ConfigError(f"{path}: referenced file missing")
@@ -201,7 +201,7 @@ def resolve_server(document, location, environ=None):
 
 
 def load_user(location, server, user=None):
-    document = read_document(user_path(location, user), USER, {})
+    document = read_document(user_path(location, user), USER, {}) if user is not None else {}
     return merge(merge(defaults(USER), server["user_defaults"]), document)
 
 
