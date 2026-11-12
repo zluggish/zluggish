@@ -1,5 +1,6 @@
 """Real Flask account/launcher routes, token handoff, imports and legacy conversion."""
 import importlib.util
+from contextlib import closing
 import io
 import json
 from pathlib import Path
@@ -492,21 +493,21 @@ class OfflineSchemaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'zwift-offline.db'
             old_hash = generate_password_hash('secret')
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.execute('CREATE TABLE user (player_id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, pass_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0)')
                 db.execute('INSERT INTO user VALUES (1, ?, ?, 0)', ('local@example.test', old_hash))
             migrate_schema(directory)
             migrate_schema(directory)
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 self.assertEqual(db.execute('SELECT pass_hash,is_admin,auth_version FROM user').fetchone(), (old_hash, 1, 1))
                 self.assertFalse(next(c for c in db.execute('PRAGMA table_info(user)') if c[1]=='pass_hash')[3])
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.execute('CREATE TABLE version (version INTEGER)')
                 db.execute('INSERT INTO version VALUES (4)')
                 db.execute('CREATE TABLE account_state (id INTEGER PRIMARY KEY, setup_complete INTEGER)')
                 db.execute('INSERT INTO account_state VALUES (1,1)')
             recover(directory, 1, 'new')
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 row = db.execute('SELECT pass_hash, auth_version FROM user').fetchone()
                 self.assertTrue(check_password_hash(row[0], 'new'))
                 self.assertEqual(row[1], 2)
@@ -548,7 +549,7 @@ class OfflineSchemaTests(unittest.TestCase):
             config.write_text('{"config_version":1,"proxy":{"mode":"disabled"}}')
             database = storage/'zwift-offline.db'
             old_hash = generate_password_hash('existing-password')
-            with sqlite3.connect(database) as db:
+            with closing(sqlite3.connect(database)) as db, db:
                 db.execute('CREATE TABLE user (player_id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, pass_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0)')
                 db.execute('INSERT INTO user VALUES (1, ?, ?, ?, ?, 0)', ('old@example.test', 'Old', 'Rider', old_hash))
                 db.execute('CREATE TABLE version (version INTEGER PRIMARY KEY)')
@@ -564,7 +565,7 @@ class OfflineSchemaTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(main(['--storage-dir', directory, 'accounts', 'migrate']), 0)
             require_current_schema(storage)
-            with sqlite3.connect(database) as db:
+            with closing(sqlite3.connect(database)) as db, db:
                 self.assertEqual(db.execute('SELECT pass_hash,is_admin,auth_version FROM user').fetchone(), (old_hash,1,1))
                 self.assertEqual(db.execute('SELECT version FROM version').fetchone(), (4,))
                 self.assertEqual(db.execute('SELECT setup_complete FROM account_state').fetchone(), (1,))
@@ -589,7 +590,7 @@ class OfflineSchemaTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(main(['--storage-dir', directory, 'accounts', 'migrate']), 0)
             require_current_schema(storage)
-            with sqlite3.connect(storage/'zwift-offline.db') as db:
+            with closing(sqlite3.connect(storage/'zwift-offline.db')) as db, db:
                 self.assertEqual(db.execute('SELECT player_id,first_name,pass_hash,is_admin FROM user').fetchone(),(42,'Legacy',None,1))
             self.assertEqual((storage/'42/profile.bin').read_bytes(), raw)
             self.assertTrue(json.loads((storage/'42/settings.jsonc').read_text())['ghosts']['enabled'])
