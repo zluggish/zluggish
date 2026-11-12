@@ -1,0 +1,9 @@
+# Generated, vendored, and large data files are maintained by their sources.
+protobuf/
+cdn/
+data/
+storage/
+build/
+dist/
+*.egg-info/
+.venv/

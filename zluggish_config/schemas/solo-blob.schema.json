@@ -72,10 +72,7 @@
       "minimum": 0
     },
     "latency_comp": {
-      "type": [
-        "number",
-        "string"
-      ],
+      "type": ["number", "string"],
       "default": 0
     },
     "formation_interval": {

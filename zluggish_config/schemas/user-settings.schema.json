@@ -38,10 +38,7 @@
             "method": {
               "type": "string",
               "default": "paid",
-              "enum": [
-                "paid",
-                "free"
-              ]
+              "enum": ["paid", "free"]
             }
           },
           "additionalProperties": false
@@ -83,7 +80,5 @@
     }
   },
   "additionalProperties": false,
-  "required": [
-    "settings_version"
-  ]
+  "required": ["settings_version"]
 }

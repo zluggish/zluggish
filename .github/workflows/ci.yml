@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches:
-      - 'main'
+      - "main"
     tags:
-      - '*'
+      - "*"
 
 jobs:
   docker:
@@ -31,7 +31,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/zoffline
+          images: ghcr.io/${{ github.repository_owner }}/zluggish
           tags: |
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
