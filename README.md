@@ -56,6 +56,14 @@ Note that iPhone and iPad are not supported clients: iOS and iPados are too lock
 
 Setting up zoffline requires two primary steps. First, zoffline must be installed and run on a system before running Zwift (either on the system running Zwift or on another locally networked system). Second, Zwift must be configured to use zoffline instead of the official Zwift server.
 
+For a fresh installation, create `storage/config.jsonc` before starting the server (or copy `examples/config.jsonc`):
+
+```json
+{ "config_version": 1 }
+```
+
+For existing storage, follow [Migration → Old storage](#old-storage). After configuring the client, use the server's printed setup link to create your first rider.
+
 ### Step 1: Install zoffline
 
 There are four ways with which to install and run zoffline depending on your platform:
@@ -207,7 +215,7 @@ to generate your own certificates and do the same.
   - Run Zwift, hopefully it verifies download and runs
 - Play Zwift:
   - Virtual Hosts button must be ON
-  - Start Zwift and sign in using any email/password or create a new user if multiplayer is enabled.
+  - Create a local rider through the server setup page, set its local password, then sign in with the handle shown in Settings.
 
 Why: We need to redirect Zwift to use zoffline (this is done by the Virtual Hosts app) and convince Zwift to
 accept zoffline's self signed certificates for Zwift's domain names (this is done by the patch tool ZofflineObb).
@@ -233,7 +241,7 @@ accept zoffline's self signed certificates for Zwift's domain names (this is don
     - (modify on PC)
     - `adb push hosts /etc/hosts`
   - Note: If you know what you're doing and have a capable enough router you can adjust your router to alter these DNS records instead of modifying your `hosts` file.
-- Start Zwift and sign in using any email/password or create a new user if multiplayer is enabled.
+- Create a local rider through the server setup page, set its local password, then sign in with the handle shown in Settings.
 
 Why: We need to redirect Zwift to use zoffline and convince Zwift to
 accept zoffline's self signed certificates for Zwift's domain names. Feel free
@@ -247,39 +255,28 @@ To use Zwift online like normal, comment out or remove the line added to the `ho
 file before starting Zwift. Then ensure Zwift is fully closed (right click
 the Zwift system tray icon and exit) and restart Zwift.
 
-### Step 3 [OPTIONAL]: Obtain current Zwift profile
+### Step 3 [OPTIONAL]: Import your official Zwift profile
 
-<details><summary>Expand</summary>
+Create/select the destination local rider first, then use **Import Zwift profile** on rider home or **Settings → Zwift**. Download selected data with official credentials, or choose exported `profile.bin`, `achievements.bin` and `economy_config.txt` files from `scripts/get_profile.py -u <official_username>`.
 
-If you don't obtain your current Zwift profile before first starting Zwift with
-zoffline enabled, you will be prompted to create a new profile (height, weight,
-gender). Your profile can be further customized and changed via the in game
-menu (e.g. name, nationality, weight change, etc).
+Review the source name/ID and destination rider before confirming. Selected profile/progression, achievement and economy files replace those categories with backups; unselected categories and local activities stay unchanged. Imported names update both the picker and in-game profile unless **Keep local name** is selected. Imports preserve the local numeric ID, login password, role and folder. Reimport replaces progress rather than merging it. Duplicate/unknown source warnings require confirmation. Finish active rides before importing.
 
-To obtain your current profile:
+Official credentials do not become a local password and are not saved by importing. Uploads and Click authentication are separate opt-in connection settings. Importing does not fetch historical activities or enable ongoing synchronization. File imports do not prove official-account ownership.
 
-- **NOTE:** instead of performing the steps below you can instead use the "Settings - Zwift" button in the launcher window (if using Android, access `https://<zoffline_ip>/profile/zoffline/`).
-- Ensure zoffline is disabled.
-- Run `scripts/get_profile.py -u <your_zwift_username>`
-  - Or, if using the Windows zoffline.exe version without Python installed you can run `get_profile.exe` obtained from https://github.com/oldnapalm/zoffline-helper/releases/latest in place of `scripts/get_profile.py`
-- Move the resulting `profile.bin`, `achievements.bin` and `economy_config.txt` (saved in whatever directory you ran get_profile.py in) into the `storage/1` directory.
-  - If using zoffline.exe on Windows, create a `storage/1` directory within the same folder as zoffline.exe if it does not already exist.
-  - If using Docker, the directory `1` should be in the path you passed to `-v`
-
-</details>
+Do not copy files blindly into `storage/<local-player-id>` or a folder named after the official player ID. Use the rider-targeted import form so files are validated and IDs/names are normalized. The helper requires access to official Zwift services; temporarily disable client redirection when exporting if necessary.
 
 ### Step 4 [OPTIONAL]: Upload activities
 
 <details><summary>Strava</summary>
 
-- Two upload methods are available and can be selected on the "Settings - Strava" page of the launcher (if using Android, access `https://<zoffline_ip>/strava/zoffline/`):
+- Two upload methods are available and can be selected on the "Settings - Strava" page of the launcher (if using Android, access the selected rider’s Settings page):
   - **API application (requires an active paid subscription):**
     - Get CLIENT_ID and CLIENT_SECRET from https://www.strava.com/settings/api
     - **NOTE:** instead of performing the steps below you can instead set the authorization callback domain of your API application to `launcher.zwift.com` and use the "Settings - Strava" page of the launcher (Windows and macOS only).
     - Run `scripts/strava_auth.py --client-id CLIENT_ID --client-secret CLIENT_SECRET`
       - Or, if using the Windows zoffline.exe version without Python installed you can run `strava_auth.exe` obtained from https://github.com/oldnapalm/zoffline-helper/releases/latest in place of `scripts/strava_auth.py`
     - Open http://localhost:8000/ and authorize.
-    - Move the resulting `strava_token.txt` (saved in whatever directory you ran `strava_auth.py` in) into the `storage/1` directory.
+    - Move the resulting `strava_token.txt` (saved in whatever directory you ran `strava_auth.py` in) into the `storage/<local-player-id>` directory.
   - **Browser session cookie (free):**
     - Log in to https://www.strava.com in a browser, open the developer tools (F12), navigate to "Application - Storage - Cookies" and copy the `_strava4_session` cookie value.
     - Paste and save the value on the "Settings - Strava" page of the launcher.
@@ -291,13 +288,13 @@ To obtain your current profile:
 
 - **NOTE:** Garmin Connect login is no longer supported ([matin/garth#222](https://github.com/matin/garth/discussions/222)).
 - Use [this script](https://gist.github.com/coleman8er/5c8e192d2aa3c8a3a6220c5702e8a5e6) to login and save tokens.
-- Move the resulting `oauth1_token.json` and `oauth2_token.json` from `~/.garth` (`C:\Users\<username>\.garth`) to `storage/1/garth`.
+- Move the resulting `oauth1_token.json` and `oauth2_token.json` from `~/.garth` (`C:\Users\<username>\.garth`) to `storage/<local-player-id>/garth`.
 
 </details>
 
 <details><summary>Intervals.icu</summary>
 
-- Use the "Settings - Intervals" button in the launcher window to enter your credentials (if using Android, access `https://<zoffline_ip>/intervals/zoffline/`).
+- Use the "Settings - Intervals" button in the launcher window to enter your credentials (if using Android, access the selected rider’s Settings page).
 - Copy "Athlete ID" and "API Key" from https://intervals.icu/settings under "Developer Settings".
 
 </details>
@@ -324,73 +321,84 @@ To obtain your current profile:
 
 </details>
 
-### Step 6 [OPTIONAL]: Enable multiplayer
+### Rider accounts and household riding
 
-<details><summary>Expand</summary>
+Every installation uses local rider accounts, whether one person or several people ride. Each desktop launcher startup shows **Who’s riding?**, including when only one rider exists. Select a rider, choose ride options, then **Start Zwift**. **Switch rider** returns to the picker. Progress, workouts, ghosts, activities and integrations remain separate.
 
-To enable support for multiple users perform the steps below:
+On a fresh installation, open the **Create your first rider** link printed by the server. It contains a one-use setup token, also stored in `storage/setup-token.txt` until setup completes. For a remote server use its reachable hostname/IP in the link. The same **Add rider** form is used for the first and later riders: enter a name and optionally a local password. The first rider is the owner/admin; later riders are regular accounts. An official Zwift account is optional. Without importing a profile, Zwift collects physical profile details when you first ride.
 
-- Set `server.multiplayer` to `true` in `storage/config.jsonc`.
-- If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in `storage/config.jsonc` to the IP address of the PC running zoffline.
-  - TCP ports 80, 443, 3025 and UDP port 3024 will need to be open on the PC running zoffline if it's running remotely.
-- Start Zwift and create an account.
-  - This account will only exist on your zoffline server and has no relation with your actual Zwift account.
-- To enable password resets, create a credentials file with Gmail login credentials and reference it through `mail.credentials_file` in server JSONC.
-  - You need to access https://security.google.com/settings/security/apppasswords and create an app password to allow the login from the server.
-  - Optionally, the third line can contain the host for the recovery URL (server IP will be used by default).
+Riders with passwords show a password prompt when selected. Riders without passwords can be selected by anyone who can reach the server, including an owner left without a password. In **Settings → Local password**, add protection, or confirm the current password to change/remove it. Changing protection revokes previous sessions, including game refresh tokens. Local passwords are independent of official Zwift and integration credentials.
 
-</details>
+**Add rider** appears on the picker by default. Disable anonymous registration with `accounts.allow_self_registration: false` in server JSONC and restart; signed-in admins can still add riders. Duplicate display names are allowed; cards show rider numbers. Two devices can ride as different users concurrently. Starting another ride as a rider already active is rejected; switching the launcher does not stop an existing game.
 
-### Family mode: choose a rider without a password
+Android uses native credential login, so set a local password for that rider and use the login handle shown in Settings. There is no passwordless native picker.
 
-Family mode is an optional login screen for a trusted household using multiplayer. Every desktop launcher startup shows **Who’s riding?** with all local accounts, including administrators. Choose a name to open that rider’s existing map, climb, and ghost settings, then click **Start Zwift**. Progress, activities, workouts, and service connections remain separate for each rider.
+For a separate server, set `server.advertised_ip` and allow TCP 80, 443, 3025 and UDP 3024 on the local network. This enables private household riding, not access to Zwift’s public multiplayer world.
 
-To enable it:
+### Password recovery
 
-1. Back up your `storage` directory, including `zwift-offline.db`.
-2. Set `server.multiplayer` and `server.family_mode` to `true` in `storage/config.jsonc`.
-3. Restart zoffline. Family mode requires multiplayer; the server will report an error and exit if multiplayer is disabled.
+Forgotten local passwords and owner access are recovered on the server through the CLI. Stop the server and run:
 
-The option applies to the whole server. In family mode, remembered logins and `launcher.auto_launch` do not skip the rider picker, even if only one account exists. **Switch rider** returns to the list. Different devices can select different riders and ride concurrently.
+```sh
+zluggish --storage-dir "/path/to/storage" accounts recover --user 1 --admin
+```
 
-Use **Add family member** to create a rider with only a name. Duplicate names are allowed; each card shows its unique rider number. New family accounts have no administrator privileges. Existing accounts, passwords, player IDs, and privileges are preserved.
-
-Anyone who can reach this server can select any listed account, access its settings and configured integrations, and use its administrative privileges. Family mode is intended for a household where that access is acceptable.
-
-**Returning to password login or using Android:** Existing accounts keep their passwords. New family accounts receive a unique internal username and an unguessable password that is not displayed. While family mode is enabled, the server owner can select the rider, open **Settings**, note the username shown there (`family-…@local.invalid`), and use **Set login password** to assign a known password. No email reset setup is needed for this procedure. Do this for each new account that needs password login, then set `server.family_mode` to `false` and restart to restore the normal launcher. If you already disabled family mode, temporarily enable it again to set those passwords.
-
-Android uses a native login screen rather than the desktop picker. Existing Android credentials continue to work; a new family account needs the username and password set through the procedure above before it can log in on Android. Real Zwift credentials for imports/uploads and credentials or tokens for connected services are still required separately. Family mode does not share ghost recordings.
+This prompts privately for a new local password and can restore an explicit admin role. Omit `--admin` for password-only recovery, or use `--remove-password` to make the account open.
 
 ### Step 7 [OPTIONAL]: Enable IPv6
 
 To enable support for IPv6 set the environment variable `ZOFFLINE_SERVER_HOST` or use the script `run_ipv6.bat`.
 
-## Legacy configuration migration
+## Migration
 
-Zluggish uses JSONC configuration instead of the legacy zwift-offline settings files. **Migrate existing installations before starting the new server.**
+### Old storage
 
-1. Stop the server and back up the entire `storage` directory, including `zwift-offline.db`.
-2. From the Zluggish project directory, install the management CLI in your Python environment:
+These instructions apply to everyone bringing existing storage from the legacy app, including both singleplayer and multiplayer installations. New installations use the first-rider setup described above and do not need migration.
+
+1. Stop the server and back up the entire `storage` directory, including `zwift-offline.db`, settings, activities, and signing/encryption keys.
+2. In the server's Python environment, install/update the management CLI:
 
    ```sh
    pip install -e .
    ```
 
-3. Replace `/path/to/storage` below with your existing storage directory. Preview the proposed settings with `--dry-run` and review the output before running the migration and validation commands:
+3. If the old storage has no `config.jsonc`, convert the legacy marker/INI settings first. Preview before applying:
 
    ```sh
    zluggish --storage-dir "/path/to/storage" config migrate --dry-run
    zluggish --storage-dir "/path/to/storage" config migrate --output "/path/to/storage/config.jsonc"
+   ```
+
+4. Upgrade accounts, database and preferences explicitly through the CLI. This step also converts existing JSONC settings, removing retired server, launcher and mail options:
+
+   ```sh
+   zluggish --storage-dir "/path/to/storage" accounts migrate
    zluggish --storage-dir "/path/to/storage" config validate
    ```
 
-4. Restart the server with the same storage directory. Rider preferences and bot settings are migrated too; credentials, activities, and recordings stay in place. If you choose a configuration file outside storage, set `ZLUGGISH_CONFIG` to its path in the server's environment before restarting.
+5. Restart with the same storage directory. If configuration is external, supply `--config /path/to/config.jsonc` to CLI commands and set `ZLUGGISH_CONFIG` for the server. If the CLI is installed separately from the server source, pass `--server-dir /path/to/zluggish` to `accounts migrate`.
+
+Migration runs offline under the server storage lock, backs up changed files/database, and upgrades the database before the server starts. Startup checks compatibility and prints the migration command when needed; it does not upgrade old storage automatically.
+
+An unambiguous solo profile becomes a real open owner account with its existing numeric player ID, `storage/<player_id>/` folder, progress, integrations and anonymous preference overrides. Existing multiplayer users retain their usernames, password hashes and effective admin rights. Everyone uses the rider picker afterward, and remembered sessions need a fresh login. Rider directories are not renamed.
+
+If several legacy profiles or conflicting preferences exist, migration stops rather than guessing. Choose the intended solo folder and preference source explicitly:
+
+```sh
+zluggish --storage-dir "/path/to/storage" accounts migrate --solo-player 42 --settings-source anonymous
+```
+
+Use `--settings-source rider` to preserve that rider's existing preferences. Unselected folders remain untouched. An imported profile's official ID may differ from its local folder number; use the folder number. Restore missing profile files before converting orphan rider data. For a settings-only conflict on an unused installation, omit `--solo-player`.
+
+Password recovery now uses `accounts recover`, described above. Gmail/SMTP recovery, emailed reset links and `mail.credentials_file` are removed. Migration leaves old mail credential files untouched and unused.
+
+Backups end in `.accounts-<timestamp>.bak`. Rollback requires restoring the matching database/config/settings snapshot while stopped; running an old binary against the new passwordless schema is not rollback. Restoring a snapshot after further rides discards those subsequent writes.
 
 ## Extra features
 
 <details><summary>Ghosts</summary>
 
-- Enable this feature by checking "Enable ghosts" in zoffline's launcher (if using Android, access `https://<zoffline_ip>/user/zoffline/`, check "Enable ghosts" and click "Start Zwift" to save the option).
+- Enable this feature by checking "Enable ghosts" in zoffline's launcher (if using Android, access the selected rider’s home page, check "Enable ghosts" and click "Start Zwift" to save the option).
 - When you save an activity, the ghost will be saved in `storage/<player_id>/ghosts/<world>/<route>`. Next time you ride the same route, the ghost will be loaded.
 - Type `.regroup` in chat to regroup the ghosts.
 - Equipment can be customized by creating a file `ghost_profile.txt` inside the `storage` folder. The script `find_equip.py` can populate this asset; set `ghosts.profile_file` to its path in server JSONC.

@@ -1,11 +1,7 @@
 {% extends "./layout.html" %}
 {% block content %}
   <h1><div class="text-shadow">Zwift Launcher</div></h1>
-  {% if family_mode %}
-    <h4 class="text-shadow">Riding as {{ (current_user.first_name ~ ' ' ~ current_user.last_name)|trim or username }}</h4>
-  {% elif username != "zoffline" %}
-    <h4 class="text-shadow">Logged in as {{ username }}</h4>
-  {% endif %}
+  <h4 class="text-shadow">Riding as {{ (current_user.first_name ~ ' ' ~ current_user.last_name)|trim or username }}</h4>
   {% if restarting %}
     <div class="row">
       <div class="col-sm-6 col-md-5">
@@ -24,22 +20,17 @@
         {% endif %}
         <a href="/reloadbots" class="btn btn-sm btn-warning">Reload bots</a>
       {% endif %}
-      {% if family_mode %}
-        <form action="{{ url_for('family_switch') }}" method="post" class="family-switch-form">
-          <input type="hidden" name="csrf_token" value="{{ family_csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-secondary">Switch rider</button>
-        </form>
-      {% elif username != "zoffline" %}
-        <a href="{{ url_for('logout', username=username) }}" class="btn btn-sm btn-secondary">Logout</a>
-      {% endif %}
+      <a href="{{ url_for('profile', username=username) }}" class="btn btn-sm btn-secondary">Import Zwift profile</a>
+      <form action="{{ url_for('switch_rider') }}" method="post" class="rider-picker-switch-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-secondary">Switch rider</button>
+      </form>
     </div>
   </div>
   <div class="row">
     <div class="col-sm-6 col-md-5">
       <form method="POST" action="/start-zwift" class="top-buffer">
-        {% if family_mode %}
-          <input type="hidden" name="csrf_token" value="{{ family_csrf_token() }}">
-        {% endif %}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
           <div class="col-md-12">
             <label class="text-shadow">Map</label>

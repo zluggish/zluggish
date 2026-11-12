@@ -37,6 +37,7 @@ def post_credentials(session, username, password):
     try:
         response = session.post(
             url="https://secure.zwift.com/auth/realms/zwift/tokens/access/codes",
+            timeout=30,
             headers={
                 "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate",
@@ -55,6 +56,7 @@ def post_credentials(session, username, password):
             allow_redirects=False,
         )
 
+        response.raise_for_status()
         json_dict = json.loads(response.content)
 
         return (json_dict["access_token"], json_dict["refresh_token"], json_dict["expires_in"])
@@ -70,6 +72,7 @@ def query(session, access_token, route):
     try:
         response = session.get(
             url="https://us-or-rly101.zwift.com/%s" % route,
+            timeout=30,
             headers={
                 "Accept-Encoding": "gzip, deflate",
                 "Accept": "application/x-protobuf-lite",
@@ -81,6 +84,7 @@ def query(session, access_token, route):
             },
         )
 
+        response.raise_for_status()
         return response.content
 
     except requests.exceptions.RequestException as e:
@@ -91,6 +95,7 @@ def api_login(session, access_token, login_request):
     try:
         response = session.post(
             url="https://us-or-rly101.zwift.com/api/users/login",
+            timeout=30,
             headers={
                 "Content-Type": "application/x-protobuf-lite",
                 "Accept": "application/x-protobuf-lite",
@@ -103,6 +108,7 @@ def api_login(session, access_token, login_request):
             data=login_request.SerializeToString(),
         )
 
+        response.raise_for_status()
         return response.content
 
     except requests.exceptions.RequestException as e:
@@ -115,6 +121,7 @@ def logout(session, refresh_token):
     try:
         response = session.post(
             url="https://secure.zwift.com/auth/realms/zwift/tokens/logout",
+            timeout=30,
             headers={
                 "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate",

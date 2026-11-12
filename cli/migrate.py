@@ -20,8 +20,7 @@ def candidates(location, output):
     def text(name):
         return (storage / name).read_text(encoding="utf-8").rstrip("\r\n")
     for filename, section, key in (
-        ("multiplayer.txt", "server", "multiplayer"), ("family_mode.txt", "server", "family_mode"),
-        ("auto_launch.txt", "launcher", "auto_launch"), ("fake-dns.txt", "dns", "enabled"),
+        ("fake-dns.txt", "dns", "enabled"),
         ("all_time_leaderboards.txt", "leaderboards", "all_time"),
         ("unlock_entitlements.txt", "equipment", "unlock_entitlements"),
         ("unlock_all_equipment.txt", "equipment", "unlock_all"),
@@ -48,8 +47,6 @@ def candidates(location, output):
         server["ghosts"]["profile_file"] = reference("ghost_profile.txt")
     if exists("bot.txt"):
         server["bots"]["riders_file"] = reference("bot.txt")
-    if exists("gmail_credentials.txt"):
-        server["mail"]["credentials_file"] = reference("gmail_credentials.txt")
     if exists("discord.cfg"):
         cfg = ConfigParser(interpolation=None)
         cfg.read(storage / "discord.cfg", encoding="utf-8")
@@ -89,7 +86,8 @@ def candidates(location, output):
     # Match the old single-player launcher's first profile choice exactly.
     anonymous_player = next((int(name) for name in os.listdir(storage)
                              if name.isdigit() and (storage / name / 'profile.bin').is_file()), 1) if storage.exists() else 1
-    result[storage / "anonymous" / "settings.jsonc"] = (USER, preferences(anonymous_player, exists("enable_ghosts.txt")))
+    if not users:
+        result[storage / "anonymous" / "settings.jsonc"] = (USER, preferences(anonymous_player, exists("enable_ghosts.txt")))
     for old, new, schema in (("peloton.txt", "peloton.jsonc", PELOTON), ("solo_blob.txt", "solo_blob.jsonc", SOLO_BLOB)):
         if exists(old):
             # These legacy files were JSON. The strict JSON decoder rejects unsupported syntax.

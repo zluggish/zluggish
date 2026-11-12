@@ -2,12 +2,10 @@
 {
   "config_version": 1,
   "server": {
-    "multiplayer": false,
-    "family_mode": false,
     "advertised_ip": "127.0.0.1",
   },
-  "launcher": {
-    "auto_launch": false,
+  "accounts": {
+    "allow_self_registration": true,
   },
   "bots": {
     "enabled": false,
@@ -42,9 +40,6 @@
       "help_message": "",
       "announce_players": false,
     },
-  },
-  "mail": {
-    "credentials_file": "",
   },
   "logging": {
     "level": "INFO",
