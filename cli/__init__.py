@@ -1,1 +1,1 @@
-"""The zluggish management CLI. Server startup belongs to the existing launchers."""
+"""The zluggish management CLI."""

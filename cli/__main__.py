@@ -1,4 +1,4 @@
-"""Management only: configuration inspection, editing, and offline migration."""
+"""CLI for configuration inspection, editing, and offline migration."""
 import argparse
 from importlib.metadata import version, PackageNotFoundError
 import json

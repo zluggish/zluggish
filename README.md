@@ -1,14 +1,46 @@
-# zoffline
+# zluggish
 
-zoffline enables the use of [Zwift](http://zwift.com) offline by acting as a partial implementation of a Zwift server. By default zoffline is only for a single player. See [Step 6: Enable Multiplayer](#step-6-optional-enable-multiplayer) for how to enable support for multiple users/profiles.
+Zluggish is a self-hosted, open source server implementation of [Zwift](http://zwift.com) that implements several features not available in the official app.
 
-zoffline also offers riding against ghosts (your previous rides). Enable this feature by checking "Enable ghosts" in zoffline's launcher. See [Extra features](#extra-features) for more details.
+This project builds on [zwift-offline](https://github.com/zoffline/zwift-offline) and [its fork](https://github.com/fatsbrown/zwift-offline).
 
-Additionally, zoffline's launcher allows selecting a specific map to ride on without mucking about with config files.
+If you are migrating from the legacy zwift-offline app, please read the migration docs below.
 
-## Configuration and CLI
+## Features
 
-Server configuration is now JSONC. Existing installations must stop and run `zluggish config migrate` before upgrading; fresh installations copy `examples/config.jsonc` into storage. Install the Python CLI with `pip install -e .`. It manages configuration and rider preferences; existing launchers still start the server. See [configuration, migration, and CLI instructions](docs/configuration.md).
+Zluggish gives you complete control over the server, including the following features:
+
+- **Offline play**: ride without having to communicate with Zwift servers
+- **Choose any map**: ride wherever you want without being constrained by the official schedule
+- **Your own ghosts**: ride alongside your previous efforts, regroup ghosts through chat, and customize their appearance
+- **Custom RoboPacers and pelotons**: build pacers from recorded rides and add configurable followers, with control over group size, equipment, formation, and rider strength.
+- **Saved-position bookmarks**: save named places during a ride, start another session from a bookmark, or return to one using in-game teleport.
+- **Intervals.icu planned workouts**: bring scheduled workouts into the launcher and sync completed activities back to Intervals.icu. Exported TrainingPeaks `.zwo` workouts can also be imported through a local folder.
+- **Local records and data**: keep profiles, activities, and recordings in storage you can back up and inspect, with optional all-time leaderboards for your server.
+- **Equipment and progression control**: customize equipment availability and Drop balances on your own server, without grinding through unlocks.
+
+Note that Zluggish is offline-only: there is no connection to Zwift's public multiplayer world. You cannot join riders on the official service, participate in its races, group rides, or club events, or compete on its global leaderboards. Local progression and records are separate from your official Zwift account. You can still ride with family or friends connected to your own Zluggish server using private multiplayer.
+
+## Requirements
+
+**Zluggish requires a technical setup**, so you have to be comfortable with that to use it.
+
+The **server** stores your progress and runs the ride services while the **client** is the device running the Zwift app and displaying the ride. In many cases the server and client can be on the same machine.
+
+### Server requirements
+
+- Windows, Linux and macOS are supported
+- Docker is the recommended deployment method
+
+### Client requirements
+
+Windows and macOS is recommended for the client, but Android is an advanced option that requires manual app patching.
+
+In addition, you must fulfill the [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB).
+
+Note that iPhone and iPad are not supported clients: iOS and iPados are too locked dowh.
+
+
 
 ## Install
 
@@ -317,7 +349,28 @@ Android uses a native login screen rather than the desktop picker. Existing Andr
 
 To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST`` or use the script ``run_ipv6.bat``.
 
-### Extra features
+## Legacy configuration migration
+
+Zluggish uses JSONC configuration instead of the legacy zwift-offline settings files. **Migrate existing installations before starting the new server.**
+
+1. Stop the server and back up the entire `storage` directory, including `zwift-offline.db`.
+2. From the Zluggish project directory, install the management CLI in your Python environment:
+
+   ```sh
+   pip install -e .
+   ```
+
+3. Replace `/path/to/storage` below with your existing storage directory. Preview the proposed settings with `--dry-run` and review the output before running the migration and validation commands:
+
+   ```sh
+   zluggish --storage-dir "/path/to/storage" config migrate --dry-run
+   zluggish --storage-dir "/path/to/storage" config migrate --output "/path/to/storage/config.jsonc"
+   zluggish --storage-dir "/path/to/storage" config validate
+   ```
+
+4. Restart the server with the same storage directory. Rider preferences and bot settings are migrated too; credentials, activities, and recordings stay in place. If you choose a configuration file outside storage, set `ZLUGGISH_CONFIG` to its path in the server's environment before restarting.
+
+## Extra features
 
 <details><summary>Ghosts</summary>
 
@@ -491,11 +544,10 @@ If you get this error even though zoffline is up to date, rename the file ``Zwif
 </details>
 
 
-## Disclaimer
+## Legal notice
 
-Zwift is a trademark of Zwift, Inc., which is not affiliated with the maker of
-this project and does not endorse this project.
+Zluggish is an independent, community-developed project. It is **not affiliated with, endorsed by, sponsored by, or officially supported by Zwift, Inc.** Zwift is a trademark of Zwift, Inc. Other product and company names belong to their respective owners; references to them do not imply affiliation or endorsement.
 
-All product and company names are trademarks of their respective holders. Use of
-them does not imply any affiliation with or endorsement by them.
+Zluggish is licensed under the **GNU Affero General Public License, version 3 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full terms, including the warranty disclaimer. Third-party components retain their respective licenses and copyright notices. This license does not grant rights to Zwift's proprietary client, game assets, or trademarks.
 
+This project is based on [zwift-offline](https://github.com/zoffline/zwift-offline) and [fatsbrown's fork of zwift-offline](https://github.com/fatsbrown/zwift-offline). Credit for that foundation belongs to their authors and contributors.
