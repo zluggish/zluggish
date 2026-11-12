@@ -61,11 +61,13 @@ export class Accounts {
 
     if (!fresh && existingPath !== path) {
       const source = new DatabaseSync(existingPath);
+
       try {
         source.exec('PRAGMA journal_mode=DELETE');
       } finally {
         source.close();
       }
+
       renameSync(existingPath, path);
     }
 

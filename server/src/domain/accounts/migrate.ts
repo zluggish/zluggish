@@ -109,8 +109,10 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
       db.prepare('SELECT 1 FROM user LIMIT 1').get() ? 1 : 0,
     );
     db.exec('DELETE FROM version; INSERT INTO version VALUES (4); COMMIT;');
+
     if (path !== destination) db.exec('PRAGMA journal_mode=DELETE');
     db.close();
+
     if (path !== destination) renameSync(path, destination);
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');

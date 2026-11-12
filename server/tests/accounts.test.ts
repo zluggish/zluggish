@@ -50,11 +50,13 @@ function browser(app: ReturnType<typeof createApp>) {
 await test('first-owner setup and passwordless rider selection are real HTTP flows', async (t) => {
   const f = runtimeFixture(t);
   const client = browser(f.app);
+
   for (const path of ['/launcher', '/launcher/ride', '/ride']) {
     const launch = await client.request(path);
     assert.equal(launch.status, 302);
     assert.equal(launch.headers.get('Location'), '/login/');
   }
+
   const redirect = await client.request('/login/');
   assert.equal(redirect.status, 302);
   assert.equal(redirect.headers.get('Location'), '/riders/add/');
@@ -65,15 +67,19 @@ await test('first-owner setup and passwordless rider selection are real HTTP flo
 
   assert.match(html, /<title>Add rider<\/title>/);
   assert.ok(!html.includes('setup_token'));
+
   const rejected = await client.request('/riders/add/', {
     method: 'POST',
     body: new URLSearchParams({ display_name: 'Missing CSRF' }),
   });
+
   assert.equal(rejected.status, 400);
+
   const response = await client.request('/riders/add/', {
     method: 'POST',
     body: new URLSearchParams({ csrf_token: csrf, display_name: 'Alex Rider' }),
   });
+
   assert.equal(response.status, 302);
   assert.equal(f.accounts.get(1)?.first_name, 'Alex');
   assert.equal(f.accounts.get(1)?.last_name, 'Rider');
@@ -260,11 +266,13 @@ await test('account migration publishes the renamed database and preserves rider
   renameSync(current, legacy);
   // SQLite backup work needs a live event loop on newer Node releases.
   const keepAlive = setInterval(() => {}, 1000);
+
   try {
     await migrateAccounts(f.accounts.storage);
   } finally {
     clearInterval(keepAlive);
   }
+
   assert.ok(existsSync(current));
   assert.ok(!existsSync(legacy));
   const reopened = new Accounts(f.accounts.storage);

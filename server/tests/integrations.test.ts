@@ -405,6 +405,7 @@ await test('launcher assets are served safely and game assets redirect to the CD
 
   const redirect = await f.app.request('/gameassets/Game.xml');
   assert.equal(redirect.status, 302);
+  // eslint-disable-next-line unicorn/prefer-https -- The launcher must redirect to the HTTP CDN listener.
   assert.equal(redirect.headers.get('Location'), 'http://cdn.zwift.com/gameassets/Game.xml');
 });
 

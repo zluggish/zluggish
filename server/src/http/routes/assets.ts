@@ -44,5 +44,6 @@ export function assetRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   serve('/mochi', resolve(runtime.config.storageDir, 'mochi'));
 
   // Launcher 1.1.17 requests game assets over HTTPS; the CDN listener can proxy them.
+  // eslint-disable-next-line unicorn/prefer-https -- HTTP reaches the separate CDN listener and avoids a redirect loop.
   app.get('/gameassets/*', (c) => c.redirect(`http://cdn.zwift.com${c.req.path}`));
 }

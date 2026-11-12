@@ -25,13 +25,23 @@ import { run } from '#cli/cli';
 function fixture(t: TestContext) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-migrate-'));
   const storage = resolve(root, 'storage');
+  const stores: SettingsStore[] = [];
   mkdirSync(storage);
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => {
+    for (const store of stores) store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
 
   return {
     root,
     storage,
     output: resolve(root, 'external/zluggish.config.ts'),
+    openSettings(readOnly = false) {
+      const store = new SettingsStore(storage, readOnly);
+      stores.push(store);
+
+      return store;
+    },
   };
 }
 
@@ -92,8 +102,7 @@ await test('direct migration generates loadable TS and preferences with no JSONC
   assert.equal(loaded.config.storageDir, f.storage);
   assert.equal(loaded.config.bots.ridersFile, resolve(f.storage, 'bot.txt'));
   assert.ok(!readFileSync(f.output, 'utf8').includes('do-not-copy-this-secret'));
-  const store = new SettingsStore(f.storage, true);
-  t.after(() => store.close());
+  const store = f.openSettings(true);
 
   const settings = resolveRiderSettings(loaded.config.riderDefaults, store.read(42));
 
@@ -220,8 +229,7 @@ await test('CLI migrates directly, validates and typechecks the externally gener
 
 await test('preference reset exposes configured defaults and invalid writes fail validation', (t) => {
   const f = fixture(t);
-  const store = new SettingsStore(f.storage);
-  t.after(() => store.close());
+  const store = f.openSettings();
 
   const defaults = validateConfig({
     riderDefaults: { ghosts: { enabled: true } },

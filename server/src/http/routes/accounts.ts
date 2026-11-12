@@ -3,7 +3,6 @@ import { html } from 'hono/html';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { HTTPException } from 'hono/http-exception';
-import { resolve } from 'node:path';
 import { z } from 'zod';
 import { identityOf } from '#src/domain/accounts/repository';
 import { resolveRiderSettings } from '#src/node/persistence/settings';
