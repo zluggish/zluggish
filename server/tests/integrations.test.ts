@@ -388,6 +388,16 @@ await test('launcher assets are served safely and game assets redirect to the CD
   const style = await f.app.request('/style/site.css');
   assert.equal(style.status, 200);
   assert.equal(style.headers.get('Content-Type'), 'text/css');
+  assert.match(await style.text(), /background-image: url\('\/style\/background.jpg'\)/);
+  const background = await f.app.request('/style/background.jpg');
+  assert.equal(background.status, 200);
+  assert.equal(background.headers.get('Content-Type'), 'image/jpeg');
+  const loading = await f.app.request('/static/web/launcher/embed.html');
+  assert.equal(loading.status, 200);
+  assert.equal(loading.headers.get('Content-Type'), 'text/html; charset=utf-8');
+  assert.match(await loading.text(), /Loading Zwift/);
+  const traversal = await f.app.request('/static/%2e%2e/%2e%2e/tokens.json');
+  assert.equal(traversal.status, 404);
   const response9 = await f.app.request('/style/%2e%2e/%2e%2e/README.md');
   assert.equal(response9.status, 404);
   const response10 = await f.app.request('/mochi/watopian/missing.json');

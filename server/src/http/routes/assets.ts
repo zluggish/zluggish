@@ -10,6 +10,7 @@ const types = new Map([
   ['.jpg', 'image/jpeg'],
   ['.svg', 'image/svg+xml'],
   ['.js', 'text/javascript'],
+  ['.html', 'text/html; charset=utf-8'],
 ]);
 
 function inside(root: string, path: string) {
@@ -39,6 +40,7 @@ export function assetRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     });
 
   serve('/style', resolve(runtime.assets, 'cdn/style'));
+  serve('/static', resolve(runtime.assets, 'cdn/static'));
   serve('/mochi', resolve(runtime.config.storageDir, 'mochi'));
 
   // Launcher 1.1.17 requests game assets over HTTPS; the CDN listener can proxy them.

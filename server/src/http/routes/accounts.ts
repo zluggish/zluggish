@@ -19,12 +19,26 @@ export function page(title: string, body: ReturnType<typeof html>) {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width" />
         <title>${title}</title>
+        <link rel="stylesheet" href="/style/site.css" />
         <style>
           body {
             font: 18px system-ui;
             max-width: 50rem;
             margin: 3rem auto;
             padding: 1rem;
+            overflow: auto;
+            min-height: calc(100vh - 8rem);
+          }
+          a {
+            color: white;
+            text-shadow: 1px 1px 2px black;
+          }
+          button {
+            background: #f26722;
+            color: white;
+            border: 1px solid white;
+            border-radius: 0.3rem;
+            cursor: pointer;
           }
           input,
           button,
@@ -44,7 +58,7 @@ export function page(title: string, body: ReturnType<typeof html>) {
         </style>
       </head>
       <body>
-        <h1>${title}</h1>
+        <h1 class="text-shadow">${title}</h1>
         ${body}
       </body>
     </html>`;

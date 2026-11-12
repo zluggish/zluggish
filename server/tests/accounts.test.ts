@@ -52,6 +52,7 @@ await test('first-owner setup and passwordless rider selection are real HTTP flo
   assert.equal(redirect.status, 302);
   const setup = await client.request('/riders/add/');
   const html = await setup.text();
+  assert.match(html, /<link rel="stylesheet" href="\/style\/site.css"/);
   const csrf = /name="csrf_token"\s+value="([^"]+)"/.exec(html)?.[1] ?? '';
 
   const setupToken = readFileSync(resolve(f.accounts.storage, 'setup-token.txt'), 'utf8');
