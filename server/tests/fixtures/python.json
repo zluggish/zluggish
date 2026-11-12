@@ -1,0 +1,55 @@
+{
+  "key": "000102030405060708090a0b0c0d0e0f",
+  "payload": "080110ffffffffffffffff7f1a0462696b65",
+  "packets": [
+    {
+      "flags": 0,
+      "wire": "006fa73a52546c32c37c160c18d9d85b976d3955990fbd",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b65a84e866a"
+    },
+    {
+      "flags": 1,
+      "wire": "010000002a6fa73a52546c32c37c160c18d9d85b976d39ca0e2580",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b6537d9ac57"
+    },
+    {
+      "flags": 2,
+      "wire": "0200076fa73a52546c32c37c160c18d9d85b976d39ecfa925b",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b65112d1b8c"
+    },
+    {
+      "flags": 3,
+      "wire": "0300070000002a6fa73a52546c32c37c160c18d9d85b976d399a0dc5ad",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b6567da4c7a"
+    },
+    {
+      "flags": 4,
+      "wire": "040000007b6fa73a52546c32c37c160c18d9d85b976d394dece49c",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b65b03b6d4b"
+    },
+    {
+      "flags": 5,
+      "wire": "050000007b0000002a6fa73a52546c32c37c160c18d9d85b976d39fe2666c4",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b6503f1ef13"
+    },
+    {
+      "flags": 6,
+      "wire": "060000007b00076fa73a52546c32c37c160c18d9d85b976d39c9fe9c02",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b65342915d5"
+    },
+    {
+      "flags": 7,
+      "wire": "070000007b00070000002a6fa73a52546c32c37c160c18d9d85b976d39e74843f8",
+      "decrypted": "080110ffffffffffffffff7f1a0462696b651a9fca2f"
+    }
+  ],
+  "credentialKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "credentials": "000102030405060708090a0b0c0d0e0f3f1d3c2e87f4f4f380ca2521c5d779528408a2e633157a9ec0f90ac2f5",
+  "password": "synthetic-password",
+  "scryptHash": "scrypt:32768:8:1$VRPGNkdYj0NUKljQ$49c621cdddb01d08aa476b12b1e0da871a30bdb432e4c26bb42f61ba173451ceb8f0d961107e5dca8b367e05537e76e0b61c9b52f15fdecb77695d9a812878cf",
+  "sha256Hash": "sha256$salt$204793ac6038d7d9f3bcf6f94ac8d3c4f5c10ea8731d15103e31f7a26cec1640",
+  "profile": "08ffffffffffffffff7f220f53796e7468657469632052696465723000a01f07",
+  "secret": "000102030405060708090a0b0c0d0e0f",
+  "identity": "42:7",
+  "cookie": "42:7|9045f10f6e1c7a5512474c8cdd9d44c42ab24c815565c2666743201c04ee1f9ea930a21f5e3e3a5829efc21439f81eec846da9123915cd91d4caecdfff1aefc1"
+}

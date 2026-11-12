@@ -1,0 +1,7 @@
+import { defineConfig } from 'zluggish/config';
+
+export default defineConfig({
+  storageDir: '../storage',
+  server: { advertisedIp: '127.0.0.1' },
+  network: { host: '127.0.0.1', api: { port: 8787, useCert: false } },
+});

@@ -1,0 +1,75 @@
+{
+  "name": "zluggish",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "exports": {
+    "./config": {
+      "types": "./dist/src/config/index.d.ts",
+      "default": "./dist/src/config/index.js"
+    },
+    "./internal/*": {
+      "types": "./dist/src/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/src/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --conditions=development --import tsx --test tests/*.test.ts",
+    "dev": "node --conditions=development --import tsx src/main.ts",
+    "start": "node dist/src/main.js",
+    "format": "pnpm --dir ../cli format",
+    "format:fix": "pnpm --dir ../cli format:fix",
+    "lint": "pnpm --dir ../cli lint",
+    "lint:fix": "pnpm --dir ../cli lint:fix",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format",
+    "codegen": "buf generate && node scripts/normalize-generated.mjs"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.0.0",
+    "@garmin/fitsdk": "^21.221.0",
+    "@hono/node-server": "2.1.8",
+    "discord.js": "^14.28.1",
+    "dns-packet": "^5.6.1",
+    "fast-xml-parser": "^5.12.0",
+    "fs-ext-extra-prebuilt": "^2.2.17",
+    "garminconnect-js": "^0.11.1",
+    "hono": "^4.0.0",
+    "ini": "^6.0.0",
+    "jiti": "^2.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.75.0",
+    "@bufbuild/protoc-gen-es": "2.17.0",
+    "@types/dns-packet": "^5.6.5",
+    "@types/ini": "^4.1.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@bufbuild/buf",
+      "esbuild"
+    ]
+  },
+  "imports": {
+    "#src/*": {
+      "types": "./src/*.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/src/*.js"
+    },
+    "#tests/*": {
+      "types": "./tests/*.ts",
+      "development": "./tests/*.ts",
+      "default": "./dist/tests/*.js"
+    }
+  }
+}

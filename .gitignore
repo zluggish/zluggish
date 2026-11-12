@@ -8,3 +8,8 @@ logs/
 
 *.egg-info/
 .venv/
+
+# TypeScript server
+node_modules/
+server/.cache/
+server/.migration-test/

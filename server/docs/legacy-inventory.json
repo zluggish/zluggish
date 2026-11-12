@@ -1,0 +1,1653 @@
+{
+  "source": "git:6940d4f:zwift_offline.py",
+  "routes": [
+    {
+      "path": "/signup/",
+      "methods": ["GET", "POST"],
+      "function": "signup",
+      "line": 657,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/riders/add/",
+      "methods": ["GET", "POST"],
+      "function": "add_rider",
+      "line": 751,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/riders/switch/",
+      "methods": ["POST"],
+      "function": "switch_rider",
+      "line": 785,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/login/",
+      "methods": ["GET", "POST"],
+      "function": "login",
+      "line": 793,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/push/fcm/<type>/<token>",
+      "methods": ["POST", "DELETE"],
+      "function": "api_push_fcm_production",
+      "line": 817,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/push/fcm/<type>/<token>/enables",
+      "methods": ["PUT"],
+      "function": "api_push_fcm_production",
+      "line": 817,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/users",
+      "methods": ["POST"],
+      "function": "api_users",
+      "line": 821,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/users/password-reset/",
+      "methods": ["POST"],
+      "function": "api_users_password_reset",
+      "line": 841,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/reset/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "reset",
+      "line": 856,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/strava/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "strava",
+      "line": 880,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/strava/<username>/test",
+      "methods": ["GET"],
+      "function": "strava_test",
+      "line": 915,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/strava_auth",
+      "methods": ["GET"],
+      "function": "strava_auth",
+      "line": 935,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/authorization",
+      "methods": ["GET", "POST"],
+      "function": "authorization",
+      "line": 946,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/profile/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "profile",
+      "line": 1246,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/profile/<username>/confirm/",
+      "methods": ["GET", "POST"],
+      "function": "confirm_profile_import",
+      "line": 1353,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/garmin/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "garmin",
+      "line": 1421,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/garmin_auth",
+      "methods": ["GET"],
+      "function": "garmin_auth",
+      "line": 1435,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/intervals/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "intervals",
+      "line": 1451,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/intervals/<username>/sync",
+      "methods": ["GET"],
+      "function": "intervals_sync",
+      "line": 1466,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/trainingpeaks/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "trainingpeaks",
+      "line": 1474,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/trainingpeaks/<username>/sync",
+      "methods": ["GET"],
+      "function": "trainingpeaks_sync",
+      "line": 1486,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/user/<username>/",
+      "methods": ["GET"],
+      "function": "user_home",
+      "line": 1494,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/restart",
+      "methods": ["GET"],
+      "function": "restart_server",
+      "line": 1552,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/cancelrestart",
+      "methods": ["GET"],
+      "function": "cancel_restart_server",
+      "line": 1566,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/reloadbots",
+      "methods": ["GET"],
+      "function": "reload_bots",
+      "line": 1580,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/settings/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "settings",
+      "line": 1591,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/download",
+      "methods": ["POST"],
+      "function": "download",
+      "line": 1613,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/download/<int:player_id>/avatarLarge.jpg",
+      "methods": ["GET"],
+      "function": "download_avatarLarge",
+      "line": 1618,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/delete/<path:filename>",
+      "methods": ["GET"],
+      "function": "delete",
+      "line": 1627,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/power_curves/<username>/",
+      "methods": ["GET", "POST"],
+      "function": "power_curves",
+      "line": 1646,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/logout/<username>",
+      "methods": ["GET"],
+      "function": "logout",
+      "line": 1664,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/can-create",
+      "methods": ["GET"],
+      "function": "api_clubs_club_cancreate",
+      "line": 1713,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/event-feed",
+      "methods": ["GET"],
+      "function": "api_eventfeed",
+      "line": 1717,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/campaign/profile/campaigns",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/announcements/active",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/recommendation/profile",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/recommendations/recommendation",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/subscription/plan",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/quest/quests/all-quests",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/quest/quests/my-quests",
+      "methods": ["GET"],
+      "function": "api_empty_arrays",
+      "line": 1734,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/assetcms/<path:path>",
+      "methods": ["GET"],
+      "function": "api_assetcms",
+      "line": 1738,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/workout/schedule/list",
+      "methods": ["GET"],
+      "function": "api_workout_schedule_list",
+      "line": 1779,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/head-unit-bff/game-home",
+      "methods": ["GET"],
+      "function": "api_game_home",
+      "line": 1786,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/head-unit-bff/carousels/for-you",
+      "methods": ["GET"],
+      "function": "api_for_you",
+      "line": 1794,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/workout/workouts/<workout_id>",
+      "methods": ["GET"],
+      "function": "api_planned_workout",
+      "line": 1810,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/tp-workouts/intervalsicu/<uuid:workout_id>.zwo",
+      "methods": ["GET"],
+      "function": "api_planned_workout_cdn_download",
+      "line": 1818,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/head-unit-bff/<path:path>",
+      "methods": ["GET"],
+      "function": "api_head_unit_bff",
+      "line": 1824,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activity-feed/feed/",
+      "methods": ["GET"],
+      "function": "api_activity_feed",
+      "line": 1869,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activity-feed-service-v2/feed/<feed_type>",
+      "methods": ["GET"],
+      "function": "api_activity_feed_service_v2",
+      "line": 1887,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activity-feed-service-v2/feed/<feed_type>/<int:profile_id>",
+      "methods": ["GET"],
+      "function": "api_activity_feed_service_v2",
+      "line": 1887,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activity-feed-service-v2/profiles/<int:profile_id>/activities/recoverable",
+      "methods": ["GET"],
+      "function": "api_activity_feed_service_v2_profiles_activities_recoverable",
+      "line": 1898,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activities/<int:activity_id>",
+      "methods": ["GET"],
+      "function": "api_activities",
+      "line": 1944,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/activities/<int:activity_id>/file/<file>",
+      "methods": ["GET"],
+      "function": "api_activities_file",
+      "line": 1973,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/auth",
+      "methods": ["GET"],
+      "function": "api_auth",
+      "line": 1977,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/server",
+      "methods": ["GET"],
+      "function": "api_server",
+      "line": 1981,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/servers",
+      "methods": ["GET"],
+      "function": "api_servers",
+      "line": 1985,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/list/my-clubs",
+      "methods": ["GET"],
+      "function": "api_clubs",
+      "line": 1992,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/reset-my-active-club.proto",
+      "methods": ["POST"],
+      "function": "api_clubs",
+      "line": 1992,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/featured",
+      "methods": ["GET"],
+      "function": "api_clubs",
+      "line": 1992,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club",
+      "methods": ["GET"],
+      "function": "api_clubs",
+      "line": 1992,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/my-clubs-summary",
+      "methods": ["GET"],
+      "function": "api_clubs_club_my_clubs_summary",
+      "line": 1996,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/clubs/club/list/my-clubs.proto",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/campaign/proto/campaigns",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/campaign/proto/campaigns/completed",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/campaign/public/proto/campaigns/active",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/player-playbacks/player/settings",
+      "methods": ["GET", "POST"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/scoring/current",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/game-asset-patching-service/manifest",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/workout/progress",
+      "methods": ["POST"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/power-curve/power-profile/proto",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/coach/public/plan-settings",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/membership/profiles/me/feature-gate-access",
+      "methods": ["GET"],
+      "function": "api_proto_empty",
+      "line": 2010,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/game_info/version",
+      "methods": ["GET"],
+      "function": "api_gameinfo_version",
+      "line": 2014,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/game_info",
+      "methods": ["GET"],
+      "function": "api_gameinfo",
+      "line": 2021,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/users/login",
+      "methods": ["POST"],
+      "function": "api_users_login",
+      "line": 2044,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/session/refresh",
+      "methods": ["POST"],
+      "function": "relay_session_refresh",
+      "line": 2101,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/session/renew",
+      "methods": ["POST"],
+      "function": "relay_session_refresh",
+      "line": 2101,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/users/logout",
+      "methods": ["POST"],
+      "function": "api_users_logout",
+      "line": 2129,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/analytics/event",
+      "methods": ["POST"],
+      "function": "api_analytics_event",
+      "line": 2135,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/per-session-info",
+      "methods": ["GET"],
+      "function": "api_per_session_info",
+      "line": 2141,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/<int:event_id>",
+      "methods": ["GET"],
+      "function": "api_events_id",
+      "line": 2216,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/search",
+      "methods": ["POST"],
+      "function": "api_events_search",
+      "line": 2224,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/subgroups/signup/<int:rel_id>",
+      "methods": ["POST"],
+      "function": "api_events_subgroups_signup_id",
+      "line": 2258,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/signup/<int:rel_id>",
+      "methods": ["DELETE"],
+      "function": "api_events_subgroups_signup_id",
+      "line": 2258,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/subgroups/register/<int:ev_sg_id>",
+      "methods": ["POST"],
+      "function": "api_events_subgroups_register_id",
+      "line": 2272,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/subgroups/entrants/<int:ev_sg_id>",
+      "methods": ["GET"],
+      "function": "api_events_subgroups_entrants_id",
+      "line": 2277,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/subgroups/invited_ride_sweepers/<int:ev_sg_id>",
+      "methods": ["GET"],
+      "function": "api_events_subgroups_invited_ride_sweepers_id",
+      "line": 2283,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/events/subgroups/invited_ride_leaders/<int:ev_sg_id>",
+      "methods": ["GET"],
+      "function": "api_events_subgroups_invited_ride_leaders_id",
+      "line": 2287,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/race/event_starting_line/<int:event_id>",
+      "methods": ["POST"],
+      "function": "relay_race_event_starting_line_id",
+      "line": 2291,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/zfiles",
+      "methods": ["POST"],
+      "function": "api_zfiles",
+      "line": 2298,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/zfiles/list",
+      "methods": ["GET"],
+      "function": "api_zfiles_list",
+      "line": 2343,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/zfiles/<int:file_id>/download",
+      "methods": ["GET"],
+      "function": "api_zfiles_download",
+      "line": 2354,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/zfiles/<int:file_id>",
+      "methods": ["DELETE"],
+      "function": "api_zfiles_delete",
+      "line": 2365,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/style/<path:filename>",
+      "methods": ["GET"],
+      "function": "custom_style",
+      "line": 2378,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/gameassets/<path:filename>",
+      "methods": ["GET"],
+      "function": "gameassets",
+      "line": 2384,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/telemetry/config",
+      "methods": ["GET"],
+      "function": "api_telemetry_config",
+      "line": 2389,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/v1/track",
+      "methods": ["POST"],
+      "function": "hvc_ingestion_service_batch",
+      "line": 2399,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/hvc-ingestion-service/batch",
+      "methods": ["POST"],
+      "function": "hvc_ingestion_service_batch",
+      "line": 2399,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/hvc-ingestion-service/batch",
+      "methods": ["POST"],
+      "function": "hvc_ingestion_service_batch",
+      "line": 2399,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/actions-service/structured-events/batch",
+      "methods": ["POST"],
+      "function": "api_actions_service_structured_events_batch",
+      "line": 2404,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/me",
+      "methods": ["GET"],
+      "function": "api_profiles_me",
+      "line": 2528,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": false
+    },
+    {
+      "path": "/api/profiles/me/entitlements",
+      "methods": ["GET"],
+      "function": "api_profiles_me_entitlements",
+      "line": 2537,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:profile_id>",
+      "methods": ["GET"],
+      "function": "api_profiles_json",
+      "line": 2551,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/garmin/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/trainingpeaks/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/strava/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/withings/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/todaysplan/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/runtastic/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/underarmour/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/partners/fitbit/auth",
+      "methods": ["GET"],
+      "function": "api_profiles_partners",
+      "line": 2562,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/privacy",
+      "methods": ["POST"],
+      "function": "api_profiles_id_privacy",
+      "line": 2568,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:m_player_id>/followers",
+      "methods": ["GET"],
+      "function": "api_profiles_followers",
+      "line": 2609,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:m_player_id>/followees",
+      "methods": ["GET"],
+      "function": "api_profiles_followers",
+      "line": 2609,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:m_player_id>/followees-in-common/<int:t_player_id>",
+      "methods": ["GET"],
+      "function": "api_profiles_followers",
+      "line": 2609,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/search/profiles/restricted",
+      "methods": ["POST"],
+      "function": "api_search_profiles",
+      "line": 2627,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/search/profiles",
+      "methods": ["POST"],
+      "function": "api_search_profiles",
+      "line": 2627,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/membership-status",
+      "methods": ["GET"],
+      "function": "api_profiles_membership_status",
+      "line": 2641,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/statistics",
+      "methods": ["GET"],
+      "function": "api_profiles_id_statistics",
+      "line": 2645,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/profiles/me/phone",
+      "methods": ["PUT"],
+      "function": "api_profiles_me_phone",
+      "line": 2655,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/me/<int:player_id>",
+      "methods": ["PUT"],
+      "function": "api_profiles_me_id",
+      "line": 2673,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>",
+      "methods": ["PUT"],
+      "function": "api_profiles_id",
+      "line": 2707,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/in-game-fields",
+      "methods": ["PUT"],
+      "function": "api_profiles_id",
+      "line": 2707,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/photo",
+      "methods": ["POST"],
+      "function": "api_profiles_id_photo_post",
+      "line": 2727,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/activities",
+      "methods": ["GET", "POST"],
+      "function": "api_profiles_activities",
+      "line": 2740,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": false
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/activities/<int:activity_id>/images",
+      "methods": ["POST"],
+      "function": "api_profiles_activities_images",
+      "line": 2762,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/activities/<int:activity_id>/medias",
+      "methods": ["POST"],
+      "function": "api_profiles_activities_medias",
+      "line": 2778,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/uploads/media/<int:media_id>",
+      "methods": ["PUT"],
+      "function": "uploads_media",
+      "line": 2791,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles",
+      "methods": ["GET"],
+      "function": "api_profiles",
+      "line": 2852,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/player-playbacks/player/playback",
+      "methods": ["POST"],
+      "function": "player_playbacks_player_playback",
+      "line": 2906,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/player-playbacks/player/<player_id>/playbacks/<segment_id>/<option>",
+      "methods": ["GET"],
+      "function": "player_playbacks_player_playbacks",
+      "line": 2926,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/player-playback/playbacks/<path:filename>",
+      "methods": ["GET"],
+      "function": "player_playback_playbacks",
+      "line": 2959,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/activities/<int:activity_id>",
+      "methods": ["PUT", "DELETE"],
+      "function": "api_profiles_activities_id",
+      "line": 3170,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:receiving_player_id>/activities/0/rideon",
+      "methods": ["POST"],
+      "function": "api_profiles_activities_rideon",
+      "line": 3225,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/notifications",
+      "methods": ["GET"],
+      "function": "api_notifications",
+      "line": 3287,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/notifications/<int:notif_id>",
+      "methods": ["PUT"],
+      "function": "api_notifications_put",
+      "line": 3297,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/<int:meetup_id>",
+      "methods": ["DELETE"],
+      "function": "api_private_event_remove",
+      "line": 3318,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/<int:meetup_id>/accept",
+      "methods": ["PUT"],
+      "function": "api_private_event_accept",
+      "line": 3340,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/<int:meetup_id>/reject",
+      "methods": ["PUT"],
+      "function": "api_private_event_reject",
+      "line": 3346,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/<int:meetup_id>",
+      "methods": ["PUT"],
+      "function": "api_private_event_edit",
+      "line": 3352,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event",
+      "methods": ["POST"],
+      "function": "api_private_event_new",
+      "line": 3429,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/feed",
+      "methods": ["GET"],
+      "function": "api_private_event_feed",
+      "line": 3515,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/<int:event_id>",
+      "methods": ["GET"],
+      "function": "api_private_event_id",
+      "line": 3563,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/private_event/entitlement",
+      "methods": ["GET"],
+      "function": "api_private_event_entitlement",
+      "line": 3570,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/events/subgroups/<int:meetup_id>/late-join",
+      "methods": ["GET"],
+      "function": "relay_events_subgroups_id_late_join",
+      "line": 3576,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/goals/<int:goal_id>",
+      "methods": ["PUT"],
+      "function": "api_profiles_goals_put",
+      "line": 3701,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/goals",
+      "methods": ["GET", "POST"],
+      "function": "api_profiles_goals",
+      "line": 3740,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/profiles/<int:player_id>/goals/<int:goal_id>",
+      "methods": ["DELETE"],
+      "function": "api_profiles_goals_id",
+      "line": 3776,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/tcp-config",
+      "methods": ["GET"],
+      "function": "api_tcp_config",
+      "line": 3786,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/tcp-config",
+      "methods": ["GET"],
+      "function": "api_tcp_config",
+      "line": 3786,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds",
+      "methods": ["GET"],
+      "function": "relay_worlds",
+      "line": 3916,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/dropin",
+      "methods": ["GET"],
+      "function": "relay_worlds",
+      "line": 3916,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/teleport-targets",
+      "methods": ["GET"],
+      "function": "relay_teleport_targets",
+      "line": 3946,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/<int:server_realm>/aggregate/mobile",
+      "methods": ["GET"],
+      "function": "relay_worlds_id_aggregate_mobile",
+      "line": 4025,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/<int:server_realm>",
+      "methods": ["GET"],
+      "function": "relay_worlds_id",
+      "line": 4043,
+      "decorators": [],
+      "strictSlashes": false
+    },
+    {
+      "path": "/relay/worlds/<int:server_realm>/join",
+      "methods": ["POST"],
+      "function": "relay_worlds_id_join",
+      "line": 4048,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/<int:server_realm>/players/<int:player_id>",
+      "methods": ["GET"],
+      "function": "relay_worlds_id_players_id",
+      "line": 4055,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/hash-seeds",
+      "methods": ["GET"],
+      "function": "relay_worlds_hash_seeds",
+      "line": 4079,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/attributes",
+      "methods": ["POST"],
+      "function": "relay_worlds_attributes",
+      "line": 4132,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/segment-results",
+      "methods": ["POST"],
+      "function": "api_segment_results",
+      "line": 4203,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/personal-records/my-records",
+      "methods": ["GET"],
+      "function": "api_personal_records_my_records",
+      "line": 4239,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/personal-records/my-segment-ride-stats/<sport>",
+      "methods": ["GET"],
+      "function": "api_personal_records_my_segment_ride_stats",
+      "line": 4269,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/personal-records/results/summary/profiles/me/<sport>",
+      "methods": ["GET"],
+      "function": "api_personal_records_results_summary",
+      "line": 4289,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/personal-records/results/summary/profiles/me/<sport>/segments/<segment_id>/by-quarter",
+      "methods": ["GET"],
+      "function": "api_personal_records_results_summary_by_quarter",
+      "line": 4315,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/personal-records/results/summary/profiles/me/<sport>/segments/<segment_id>/date/<year>/<quarter>/all",
+      "methods": ["GET"],
+      "function": "api_personal_records_results_summary_all",
+      "line": 4342,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/route-results",
+      "methods": ["POST"],
+      "function": "route_results",
+      "line": 4360,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/route-results/completion-stats/all",
+      "methods": ["GET"],
+      "function": "api_route_results_completion_stats_all",
+      "line": 4377,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/achievement/route-completion-achievements",
+      "methods": ["GET"],
+      "function": "api_achievement_route_completion_achievements",
+      "line": 4407,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/achievement/route-completion-achievement-unlocks",
+      "methods": ["POST"],
+      "function": "api_achievement_route_completion_achievement_unlocks",
+      "line": 4424,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/race-results",
+      "methods": ["POST"],
+      "function": "api_race_results",
+      "line": 4442,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/race-results/summary",
+      "methods": ["GET"],
+      "function": "api_race_results_summary",
+      "line": 4455,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/live-segment-results-service/leaders",
+      "methods": ["GET"],
+      "function": "live_segment_results_service_leaders",
+      "line": 4499,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/live-segment-results-service/leaderboard/<segment_id>",
+      "methods": ["GET"],
+      "function": "live_segment_results_service_leaderboard_segment_id",
+      "line": 4519,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/relay/worlds/<int:server_realm>/leave",
+      "methods": ["POST"],
+      "function": "relay_worlds_leave",
+      "line": 4540,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/mochi/<path:file>",
+      "methods": ["GET"],
+      "function": "mochi_download",
+      "line": 4545,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/experimentation/v1/variant",
+      "methods": ["POST"],
+      "function": "experimentation_v1_variant",
+      "line": 4579,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/experimentation/v1/machine-id-variant",
+      "methods": ["POST"],
+      "function": "experimentation_v1_machine_id_variant",
+      "line": 4587,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/achievement/loadPlayerAchievements",
+      "methods": ["GET"],
+      "function": "achievement_loadPlayerAchievements",
+      "line": 4606,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/achievement/unlock",
+      "methods": ["POST"],
+      "function": "achievement_unlock",
+      "line": 4634,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/achievement/category/<category_id>",
+      "methods": ["GET"],
+      "function": "api_achievement_category",
+      "line": 4654,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/power-curve/best/<option>",
+      "methods": ["GET"],
+      "function": "api_power_curve_best",
+      "line": 4661,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/player-profile/user-game-storage/attributes",
+      "methods": ["GET", "POST"],
+      "function": "api_player_profile_user_game_storage_attributes",
+      "line": 4676,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/fitness/streaks",
+      "methods": ["GET"],
+      "function": "api_fitness_streaks",
+      "line": 4750,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/fitness/metrics-and-goals",
+      "methods": ["GET"],
+      "function": "api_fitness_metrics_and_goals",
+      "line": 4779,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/fitness/fitness-goals/history",
+      "methods": ["PUT"],
+      "function": "api_fitness_fitness_goals_history",
+      "line": 4886,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/api/d-lock-service/device/authenticate",
+      "methods": ["POST"],
+      "function": "api_d_lock_service_device_authenticate",
+      "line": 4898,
+      "decorators": ["jwt_to_session_cookie", "login_required"],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/rb_bf03269xbi",
+      "methods": ["POST"],
+      "function": "auth_rb",
+      "line": 5205,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/launcher",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/launcher/ride",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/launcher/realms/zwift/protocol/openid-connect/auth",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/launcher/realms/zwift/protocol/openid-connect/registrations",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/protocol/openid-connect/auth",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/login-actions/request/login",
+      "methods": ["GET", "POST"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/protocol/openid-connect/registrations",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/login-actions/startriding",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/tokens/login",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/tokens/registrations",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/ride",
+      "methods": ["GET"],
+      "function": "launch_zwift",
+      "line": 5220,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/protocol/openid-connect/token",
+      "methods": ["POST"],
+      "function": "auth_realms_zwift_protocol_openid_connect_token",
+      "line": 5251,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/auth/realms/zwift/protocol/openid-connect/logout",
+      "methods": ["POST"],
+      "function": "auth_realms_zwift_protocol_openid_connect_logout",
+      "line": 5282,
+      "decorators": [],
+      "strictSlashes": true
+    },
+    {
+      "path": "/start-zwift",
+      "methods": ["POST"],
+      "function": "start_zwift",
+      "line": 5289,
+      "decorators": ["login_required"],
+      "strictSlashes": true
+    }
+  ],
+  "models": [
+    "User",
+    "AccountState",
+    "Activity",
+    "SegmentResult",
+    "RouteResult",
+    "Goal",
+    "GoalMetrics",
+    "Playback",
+    "Zfile",
+    "PrivateEvent",
+    "Notification",
+    "ActivityFile",
+    "ActivityImage",
+    "ActivityMedia",
+    "PowerCurve",
+    "Version"
+  ],
+  "protoFiles": [
+    "activity.proto",
+    "events.proto",
+    "fitness.proto",
+    "goal.proto",
+    "hash-seeds.proto",
+    "login.proto",
+    "per-session-info.proto",
+    "playback.proto",
+    "profile.proto",
+    "race-result.proto",
+    "route-completion-achievement.proto",
+    "route-result.proto",
+    "segment-result.proto",
+    "structured_events.proto",
+    "tcp-node-msgs.proto",
+    "udp-node-msgs.proto",
+    "user_storage.proto",
+    "variants.proto",
+    "world.proto",
+    "zfiles.proto"
+  ]
+}

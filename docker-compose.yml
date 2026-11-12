@@ -2,8 +2,11 @@ services:
   zluggish:
     image: ghcr.io/zluggish/zluggish:latest
     build:
-      context: .
+      context: ./server
       dockerfile: Dockerfile
+      target: server
+    environment:
+      ZLUGGISH_ADVERTISED_IP: ${ZLUGGISH_ADVERTISED_IP:-127.0.0.1}
     container_name: zluggish
     volumes:
       - /etc/localtime:/etc/localtime:ro

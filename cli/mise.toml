@@ -1,0 +1,45 @@
+[tools]
+node = '24'
+pnpm = '10'
+
+[tasks.install]
+description = 'Install server and CLI dependencies'
+run = ['pnpm --dir ../server install --frozen-lockfile', 'pnpm install --frozen-lockfile']
+
+[tasks.build]
+description = 'Build server and CLI'
+run = 'pnpm build'
+
+[tasks.test]
+description = 'Run server and CLI tests'
+depends = ['build']
+run = ['pnpm --dir ../server test', 'pnpm test']
+
+[tasks.lint]
+description = 'Lint and typecheck server and CLI'
+depends = ['build']
+run = ['pnpm lint', 'pnpm --dir ../server typecheck', 'pnpm typecheck']
+
+[tasks.format-fix]
+description = 'Format project files'
+run = 'pnpm format:fix'
+
+[tasks.format]
+description = 'Check project formatting'
+run = 'pnpm format'
+
+[tasks.check]
+description = 'Run lint, formatting checks, and tests'
+depends = ['lint', 'format', 'test']
+
+[tasks.server-dev]
+description = 'Run the Hono server'
+run = 'pnpm --dir ../server dev'
+
+[tasks.server-codegen]
+description = 'Generate TypeScript protobuf codecs'
+run = 'pnpm --dir ../server codegen'
+
+[tasks.cli]
+description = 'Run CLI from source'
+run = 'pnpm cli'

@@ -1,2 +1,6 @@
 .git
 .gitignore
+
+**/node_modules
+server/dist
+.venv

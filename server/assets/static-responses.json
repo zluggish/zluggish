@@ -1,0 +1,599 @@
+[
+  {
+    "methods": [
+      "POST",
+      "DELETE"
+    ],
+    "path": "/api/push/fcm/:type/:token",
+    "body": "",
+    "mode": "text",
+    "status": 500,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/push/fcm/:type/:token/enables",
+    "body": "",
+    "mode": "text",
+    "status": 500,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club/can-create",
+    "body": {
+      "reason": "DISABLED",
+      "result": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/campaign/profile/campaigns",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/announcements/active",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/recommendation/profile",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/recommendations/recommendation",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/subscription/plan",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/quest/quests/all-quests",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/quest/quests/my-quests",
+    "body": [],
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/activity-feed-service-v2/profiles/:profile_id/activities/recoverable",
+    "body": {
+      "activity": null
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/auth",
+    "body": {
+      "realm": "zwift",
+      "launcher": "https://launcher.zwift.com/launcher",
+      "url": "https://secure.zwift.com/auth/"
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/server",
+    "body": {
+      "build": "zwift_1.267.0",
+      "version": "1.267.0"
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/servers",
+    "body": {
+      "baseUrl": "https://us-or-rly101.zwift.com/relay"
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club/list/my-clubs",
+    "body": {
+      "total": 0,
+      "results": []
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/clubs/club/reset-my-active-club.proto",
+    "body": {
+      "total": 0,
+      "results": []
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club/featured",
+    "body": {
+      "total": 0,
+      "results": []
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club",
+    "body": {
+      "total": 0,
+      "results": []
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club/my-clubs-summary",
+    "body": {
+      "invitedCount": 0,
+      "requestedCount": 0,
+      "results": []
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/clubs/club/list/my-clubs.proto",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/campaign/proto/campaigns",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/campaign/proto/campaigns/completed",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/campaign/public/proto/campaigns/active",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "path": "/api/player-playbacks/player/settings",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/scoring/current",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/game-asset-patching-service/manifest",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/workout/progress",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/power-curve/power-profile/proto",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/coach/public/plan-settings",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/membership/profiles/me/feature-gate-access",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/analytics/event",
+    "body": "",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/events/subgroups/register/:ev_sg_id",
+    "body": "{\"registered\":true}",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/events/subgroups/invited_ride_sweepers/:ev_sg_id",
+    "body": "[]",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/events/subgroups/invited_ride_leaders/:ev_sg_id",
+    "body": "[]",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/relay/race/event_starting_line/:event_id",
+    "body": "",
+    "mode": "text",
+    "status": 204,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/telemetry/config",
+    "body": {
+      "analyticsEvents": true,
+      "batchInterval": 120,
+      "innermostCullingRadius": 1500,
+      "isEnabled": true,
+      "key": "aXBSdlpza3p1aVlNOENrMTBQSzZEZ004Z2pwRm8zZUE6",
+      "remoteLogLevel": 3,
+      "sampleInterval": 60,
+      "url": "https://us-or-rly101.zwift.com/v1/track",
+      "urlBatch": "https://us-or-rly101.zwift.com/hvc-ingestion-service/batch",
+      "telemetryEvents": true,
+      "gzip": false,
+      "structuredEventsUrl": "https://us-or-rly101.zwift.com/api/actions-service/structured-events/batch"
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/v1/track",
+    "body": {
+      "success": true
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/hvc-ingestion-service/batch",
+    "body": {
+      "success": true
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hvc-ingestion-service/batch",
+    "body": {
+      "success": true
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/garmin/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/trainingpeaks/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/strava/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/withings/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/todaysplan/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/runtastic/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/underarmour/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/partners/fitbit/auth",
+    "body": {
+      "status": "notConnected",
+      "clientId": "zwift",
+      "sandbox": false
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/profiles/:player_id/membership-status",
+    "body": {
+      "status": "active"
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/private_event/entitlement",
+    "body": {
+      "entitled": true
+    },
+    "mode": "json",
+    "status": 200,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/achievement/category/:category_id",
+    "body": "",
+    "mode": "text",
+    "status": 404,
+    "authenticated": false
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/auth/rb_bf03269xbi",
+    "body": "OK(Java)",
+    "mode": "text",
+    "status": 200,
+    "authenticated": false
+  }
+]

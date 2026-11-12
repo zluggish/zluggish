@@ -1,0 +1,407 @@
+import type { GarminClient, MfaState } from 'garminconnect-js';
+import type { Context, Hono } from 'hono';
+import { html } from 'hono/html';
+import { HTTPException } from 'hono/http-exception';
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { z } from 'zod';
+import type { Rider } from '#src/domain/accounts/repository';
+import { savePowerCurve } from '#src/domain/activities/fit';
+import { garminClient } from '#src/node/integrations/garmin';
+import { authorizationUrl, checkSession, exchangeCode, writeToken } from '#src/node/integrations/strava';
+import { officialHeaders, officialLogin, officialRelay } from '#src/node/integrations/zwift';
+import { RestartScheduler } from '#src/node/lifecycle/restart';
+import { writeDurable } from '#src/node/persistence/files';
+import { Connections } from '#src/node/persistence/connections';
+import { resolveRiderSettings } from '#src/node/persistence/settings';
+import type { Runtime, RuntimeEnv } from '#src/http/runtime';
+import { authenticated, csrf, page } from '#src/http/routes/accounts';
+import { sendMessage } from '#src/http/routes/social';
+
+function admin(c: Env) {
+  const rider = authenticated(c);
+
+  return { rider, allowed: rider.is_admin !== 0 };
+}
+
+const token = (c: Env) => html`<input type="hidden" name="csrf_token" value="${c.get('browser').csrf}" />`;
+
+type Env = Context<RuntimeEnv>;
+
+const removable = z.enum([
+  'zwift_credentials.bin',
+  'intervals_credentials.bin',
+  'strava_api.bin',
+  'strava_token.txt',
+  'strava4_session.txt',
+  'garmin_credentials.bin',
+  'garth/oauth1_token.json',
+]);
+
+const text = z.string().catch('');
+
+export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
+  const connections = new Connections(runtime.config.storageDir);
+
+  const restart = new RestartScheduler(
+    (message) => sendMessage(runtime, message),
+    runtime.stop ?? (() => process.kill(process.pid, 'SIGINT')),
+  );
+
+  const folder = (rider: Rider) => runtime.profiles.folder(rider.player_id);
+
+  function cookieOf(rider: Rider) {
+    const file = resolve(folder(rider), 'strava4_session.txt');
+
+    return existsSync(file) ? (readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '') : '';
+  }
+
+  function stravaPage(c: Env, rider: Rider, message = '') {
+    const method = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id)).uploads
+      .strava.method;
+
+    const client = connections.read(rider.player_id, 'strava');
+    const authorized = existsSync(resolve(folder(rider), 'strava_token.txt'));
+
+    return c.html(
+      page(
+        'Strava',
+        html`${message ? html`<p>${message}</p>` : ''}
+          <form method="post">
+            ${token(c)}<label
+              >Upload method<select name="method">
+                <option value="paid" ${method === 'paid' ? 'selected' : ''}>API</option>
+                <option value="free" ${method === 'free' ? 'selected' : ''}>Session cookie</option>
+              </select></label
+            ><button>Save method</button>
+          </form>
+          <h2>API</h2>
+          <form method="post">
+            ${token(c)}<label>Client ID<input name="client_id" value="${client?.[0] ?? ''}" /></label>
+            <label
+              >Client secret<input type="password" name="client_secret" placeholder="${client ? 'Saved' : ''}"
+            /></label>
+            <button>Save API credentials</button>
+          </form>
+          <p>
+            ${authorized ? 'Authorized.' : 'Not authorized.'}
+            ${client ? html`<a href="/strava_auth">Authorize with Strava</a>` : ''}
+          </p>
+          <h2>Session cookie</h2>
+          <form method="post">
+            ${token(c)}<label
+              >_strava4_session<input
+                type="password"
+                name="_strava4_session"
+                placeholder="${cookieOf(rider) ? 'Saved' : ''}"
+            /></label>
+            <button>Save cookie</button>
+          </form>
+          <p>${cookieOf(rider) ? html`<a href="/strava/${rider.username}/test">Test session</a>` : ''}</p>
+          ${removable.options
+            .filter((file) => file.startsWith('strava'))
+            .map((file) =>
+              existsSync(resolve(folder(rider), file))
+                ? html`<form method="post" action="/delete/${file}">${token(c)}<button>Remove ${file}</button></form>`
+                : '',
+            )}`,
+      ),
+    );
+  }
+
+  app.on(['GET', 'POST'], '/strava/:username/', async (c) => {
+    const rider = authenticated(c);
+
+    if (c.req.method !== 'POST') return stravaPage(c, rider);
+    const form = await csrf(c, runtime);
+    let message: string;
+
+    if ('_strava4_session' in form) {
+      const cookie = text.parse(form._strava4_session).trim();
+
+      if (cookie) {
+        writeDurable(resolve(folder(rider), 'strava4_session.txt'), cookie, true);
+        message = 'Session cookie saved.';
+      } else message = "Session cookie can't be empty.";
+    } else if ('method' in form) {
+      const method = z.enum(['paid', 'free']).safeParse(form.method);
+
+      if (method.success) {
+        runtime.settings.save(rider.player_id, {
+          ...runtime.settings.read(rider.player_id),
+          'uploads.strava.method': method.data,
+        });
+        message = 'Strava upload method saved.';
+      } else message = 'Unknown upload method.';
+    } else {
+      const id = text.parse(form.client_id).trim();
+      const secret = text.parse(form.client_secret).trim();
+
+      if (id && secret) {
+        connections.save(rider.player_id, 'strava', [id, secret]);
+        message = 'Credentials saved.';
+      } else message = "Client ID and secret can't be empty.";
+    }
+
+    return stravaPage(c, rider, message);
+  });
+
+  app.get('/strava/:username/test', async (c) => {
+    const rider = authenticated(c);
+    const cookie = cookieOf(rider);
+
+    if (!cookie) return stravaPage(c, rider, 'No session configured.');
+
+    try {
+      return stravaPage(
+        c,
+        rider,
+        (await checkSession(cookie)) ? 'Session is valid.' : 'Session is not valid. Update the cookie.',
+      );
+    } catch {
+      return stravaPage(c, rider, 'Could not reach Strava. Check your internet connection.');
+    }
+  });
+
+  app.get('/strava_auth', (c) => {
+    const rider = authenticated(c);
+    const client = connections.read(rider.player_id, 'strava');
+
+    if (!client?.[0]) return stravaPage(c, rider, 'Save API credentials first.');
+
+    return c.redirect(authorizationUrl(client[0], c.get('browser').csrf));
+  });
+
+  app.on(['GET', 'POST'], '/authorization', async (c) => {
+    const rider = authenticated(c);
+    const client = connections.read(rider.player_id, 'strava');
+    const code = c.req.query('code');
+
+    // The state echoes this browser's CSRF token so a foreign code cannot be attached.
+    const browserToken = c.get('browser').csrf;
+
+    if (!client || !code || !browserToken || c.req.query('state') !== browserToken)
+      return stravaPage(c, rider, 'Strava authorization canceled.');
+
+    try {
+      writeToken(resolve(folder(rider), 'strava_token.txt'), await exchangeCode(client[0], client[1], code));
+
+      return stravaPage(c, rider, 'Strava authorized.');
+    } catch {
+      return stravaPage(c, rider, 'Strava authorization canceled.');
+    }
+  });
+
+  const pendingGarmin = new Map<string, { client: GarminClient; state: MfaState; identity: string; expires: number }>();
+
+  function garminPage(c: Env, rider: Rider, message = '') {
+    const client = connections.read(rider.player_id, 'garmin');
+
+    const authorized = existsSync(resolve(folder(rider), 'garth/oauth1_token.json'));
+
+    return c.html(
+      page(
+        'Garmin',
+        html`${message ? html`<p>${message}</p>` : ''}
+          <form method="post">
+            ${token(c)}<label>Username<input name="username" value="${client?.[0] ?? ''}" /></label>
+            <label>Password<input type="password" name="password" placeholder="${client ? 'Saved' : ''}" /></label>
+            <button>Save credentials</button>
+          </form>
+          <p>
+            ${authorized ? 'Authorized.' : 'Not authorized.'}
+            ${client
+              ? html`<form method="post" action="/garmin_auth">${token(c)}<button>Authorize with Garmin</button></form>`
+              : ''}
+          </p>
+          ${removable.options
+            .filter((file) => file.startsWith('gar'))
+            .map((file) =>
+              existsSync(resolve(folder(rider), file))
+                ? html`<form method="post" action="/delete/${file}">${token(c)}<button>Remove ${file}</button></form>`
+                : '',
+            )}`,
+      ),
+    );
+  }
+
+  app.on(['GET', 'POST'], '/garmin/:username/', async (c) => {
+    const rider = authenticated(c);
+
+    if (c.req.method !== 'POST') return garminPage(c, rider);
+    const form = await csrf(c, runtime);
+    const username = text.parse(form.username).trim();
+    const password = text.parse(form.password);
+
+    if (!username || !password) return garminPage(c, rider, "Garmin credentials can't be empty.");
+
+    connections.save(rider.player_id, 'garmin', [username, password]);
+
+    return garminPage(c, rider, 'Credentials saved.');
+  });
+
+  app.get('/garmin_auth', (c) => garminPage(c, authenticated(c), 'Use the authorization button to connect.'));
+  app.post('/garmin_auth', async (c) => {
+    const rider = authenticated(c);
+    const form = await csrf(c, runtime);
+    const key = c.get('browserId');
+    const identity = `${rider.player_id}:${rider.auth_version}`;
+
+    for (const [id, entry] of pendingGarmin) if (entry.expires < Date.now()) pendingGarmin.delete(id);
+
+    try {
+      if (form.code === undefined) {
+        const credentials = connections.read(rider.player_id, 'garmin');
+
+        if (!credentials) return garminPage(c, rider, 'Save credentials first.');
+
+        const client = garminClient(resolve(folder(rider), 'garth'), runtime.config.integrations.garmin.domain);
+
+        const result = await client.login(credentials[0], credentials[1]);
+
+        if (result.state === 'mfa_required') {
+          if (pendingGarmin.size >= 100) throw new Error('Too many pending authorizations');
+          pendingGarmin.set(key, {
+            client,
+            state: result.mfaState,
+            identity,
+            expires: Date.now() + 300_000,
+          });
+
+          return c.html(
+            page(
+              'Garmin verification',
+              html`<form method="post" action="/garmin_auth">
+                ${token(c)}<label>Verification code<input name="code" autocomplete="one-time-code" required /></label
+                ><button>Verify</button>
+              </form>`,
+            ),
+          );
+        }
+      } else {
+        const pending = pendingGarmin.get(key);
+        pendingGarmin.delete(key);
+
+        if (!pending || pending.identity !== identity) throw new Error('Expired authorization');
+        await pending.client.resumeLogin(pending.state, z.string().min(1).max(32).parse(form.code));
+      }
+
+      return garminPage(c, rider, 'Garmin authorized.');
+    } catch {
+      pendingGarmin.delete(key);
+
+      return garminPage(c, rider, 'Garmin authorization failed or expired. Try again.');
+    }
+  });
+
+  app.post('/delete/*', async (c) => {
+    const rider = authenticated(c);
+    await csrf(c, runtime);
+
+    const file = removable.safeParse(decodeURIComponent(c.req.path.slice('/delete/'.length)));
+
+    if (!file.success) throw new HTTPException(403);
+    rmSync(resolve(folder(rider), file.data), { force: true });
+
+    if (file.data.startsWith('strava')) return c.redirect(`/strava/${rider.username}/`);
+
+    if (file.data.startsWith('garmin') || file.data.startsWith('garth'))
+      return c.redirect(`/garmin/${rider.username}/`);
+
+    return c.redirect(`/settings/${rider.username}/`);
+  });
+
+  app.on(['GET', 'POST'], '/power_curves/:username/', async (c) => {
+    const rider = authenticated(c);
+
+    if (c.req.method === 'POST') {
+      const form = await csrf(c, runtime);
+
+      runtime.accounts.db.prepare('DELETE FROM power_curve WHERE player_id=?').run(rider.player_id);
+
+      if (!form.create) return c.redirect(`/settings/${rider.username}/`);
+      const fit = resolve(folder(rider), 'fit');
+
+      if (existsSync(fit))
+        for (const name of readdirSync(fit))
+          try {
+            savePowerCurve(runtime.accounts, runtime.profiles, rider.player_id, readFileSync(resolve(fit, name)));
+          } catch {
+            console.warn(`Power curve unavailable for ${name}`);
+          }
+
+      return c.redirect(`/settings/${rider.username}/`);
+    }
+
+    return c.html(
+      page(
+        'Power curves',
+        html`<form method="post">
+          ${token(c)}<label><input type="checkbox" name="create" />Recreate from saved activities</label
+          ><button>Delete existing power curves</button>
+        </form>`,
+      ),
+    );
+  });
+
+  app.post('/api/d-lock-service/device/authenticate', async (c) => {
+    const rider = authenticated(c);
+    const credentials = connections.read(rider.player_id, 'zwift');
+
+    const enabled = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id)).devices
+      .zwiftClick.enabled;
+
+    if (!enabled || !credentials) return c.body(null, 204);
+
+    try {
+      const token = await officialLogin(credentials[0], credentials[1]);
+
+      const response = await fetch(`${officialRelay}/api/d-lock-service/device/authenticate`, {
+        method: 'POST',
+        headers: {
+          ...officialHeaders(token),
+          'Content-Type': c.req.header('Content-Type') ?? 'application/octet-stream',
+          Accept: c.req.header('Accept') ?? '*/*',
+        },
+        body: new Uint8Array(await c.req.arrayBuffer()),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      return new Response(await response.arrayBuffer(), {
+        status: response.status,
+        headers: {
+          'Content-Type': response.headers.get('Content-Type') ?? 'application/octet-stream',
+        },
+      });
+    } catch {
+      return c.body(null, 204);
+    }
+  });
+
+  app.post('/restart', async (c) => {
+    const { rider, allowed } = admin(c);
+    await csrf(c, runtime);
+
+    if (allowed) restart.start();
+
+    return c.redirect(`/user/${rider.username}/`);
+  });
+
+  app.post('/cancelrestart', async (c) => {
+    const { rider, allowed } = admin(c);
+    await csrf(c, runtime);
+
+    if (allowed) restart.cancel();
+
+    return c.redirect(`/user/${rider.username}/`);
+  });
+
+  app.post('/reloadbots', async (c) => {
+    const { rider, allowed } = admin(c);
+    await csrf(c, runtime);
+
+    if (allowed) runtime.world.simulation?.reload();
+
+    return c.redirect(`/user/${rider.username}/`);
+  });
+}
