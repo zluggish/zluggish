@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  typescript:
+  server:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,16 +24,34 @@ jobs:
         with:
           version: '10.28.1'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir ../cli install --frozen-lockfile
-      - run: pnpm --dir ../cli build
-      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm --dir ../cli test
       - run: pnpm build
       - run: pnpm codegen
       - run: git diff --exit-code -- src/protocol/generated
-      - run: pnpm format
+
+  cli:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.28.1'
+      - run: pnpm --dir ../server install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
 
   quality:
     runs-on: ubuntu-26.04
