@@ -395,7 +395,7 @@ await test('launcher assets are served safely and game assets redirect to the CD
 
   const redirect = await f.app.request('/gameassets/Game.xml');
   assert.equal(redirect.status, 302);
-  assert.equal(redirect.headers.get('Location'), 'https://cdn.zwift.com/gameassets/Game.xml');
+  assert.equal(redirect.headers.get('Location'), 'http://cdn.zwift.com/gameassets/Game.xml');
 });
 
 await test('the mobile aggregate composes goals, activities, events and invitations', async (t) => {

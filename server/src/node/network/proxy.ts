@@ -1,4 +1,4 @@
-import { request } from 'node:http';
+import { request } from 'node:https';
 import { Resolver } from 'node:dns';
 
 const resolver = new Resolver();
