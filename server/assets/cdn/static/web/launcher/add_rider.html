@@ -12,7 +12,9 @@
       <input id="confirm_password" name="confirm_password" type="password" class="form-control" autocomplete="new-password">
       <div class="top-buffer">
         <button type="submit" class="btn btn-sm btn-light">Add rider</button>
+        {% if not first_rider %}
         <a href="{{ url_for('login') }}" class="btn btn-sm btn-secondary">Back</a>
+        {% endif %}
       </div>
     </form>
     {% for message in get_flashed_messages() %}

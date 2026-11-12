@@ -220,7 +220,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
               >Name<input name="display_name" maxlength="100" required autofocus /></label
             ><label>Optional password<input type="password" name="password" /></label
             ><label>Confirm password<input type="password" name="confirm_password" /></label
-            ><button>Create rider</button> <a href="/login/">Cancel</a>
+            ><button>Create rider</button> ${first ? '' : html`<a href="/login/">Cancel</a>`}
           </form>`,
       ),
     );
