@@ -4,7 +4,6 @@ import dns.rdataclass
 import dns.rdatatype
 import dns.resolver
 import socketserver
-import os
 
 class DNSUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
@@ -36,7 +35,8 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
         socket.sendto(response.to_wire(), self.client_address)
 
 class DNSServer:
-    def __init__(self, port=53):
+    def __init__(self, port=53, host=""):
+        self.host = host
         DNSServer.namemap = {}
         DNSServer.resolver = dns.resolver.Resolver(configure=False)
         DNSServer.resolver.nameservers = ['8.8.8.8', '8.8.4.4']
@@ -45,13 +45,13 @@ class DNSServer:
     def addname(self, name, ip):
         DNSServer.namemap[name] = ip
     def start(self):
-        HOST = os.environ.get('ZOFFLINE_SERVER_HOST', '')
+        HOST = self.host
         PORT = self.port
         server = socketserver.ThreadingUDPServer((HOST, PORT), DNSUDPHandler)
         server.serve_forever()
 
-def fake_dns(server_ip):
-    dns = DNSServer()
+def fake_dns(server_ip, host=""):
+    dns = DNSServer(host=host)
     dns.addname('secure.zwift.com.', server_ip)
     dns.addname('us-or-rly101.zwift.com.', server_ip)
     dns.start()

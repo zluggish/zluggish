@@ -23,17 +23,13 @@ import udp_node_msgs_pb2
 import tcp_node_msgs_pb2
 import profile_pb2
 
-if getattr(sys, 'frozen', False):
-    # If we're running as a pyinstaller bundle
-    SCRIPT_DIR = sys._MEIPASS
-    STORAGE_DIR = "%s/storage" % os.path.dirname(sys.executable)
-else:
-    SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-    STORAGE_DIR = "%s/storage" % SCRIPT_DIR
+SCRIPT_DIR = zo.SCRIPT_DIR
+STORAGE_DIR = zo.STORAGE_DIR
+SETTINGS = zo.SETTINGS
 
 CDN_DIR = "%s/cdn" % SCRIPT_DIR
-CDN_PROXY = os.path.isfile('%s/cdn-proxy.txt' % STORAGE_DIR)
-if not CDN_PROXY and not os.path.isfile('%s/disable_proxy.txt' % STORAGE_DIR):
+CDN_PROXY = SETTINGS['proxy']['mode'] == 'enabled'
+if SETTINGS['proxy']['mode'] == 'auto':
     # If CDN proxy is disabled, try to resolve zwift.com using Google public DNS
     try:
         import dns.resolver
@@ -62,20 +58,12 @@ if not CDN_PROXY and not os.path.isfile('%s/disable_proxy.txt' % STORAGE_DIR):
         pass
 
 PACE_PARTNERS_DIR = "%s/robopacers" % STORAGE_DIR
-FAKE_DNS_FILE = "%s/fake-dns.txt" % STORAGE_DIR
-ENABLE_BOTS_FILE = "%s/enable_bots.txt" % STORAGE_DIR
-DISCORD_CONFIG_FILE = "%s/discord.cfg" % STORAGE_DIR
-if os.path.isfile(DISCORD_CONFIG_FILE):
+if SETTINGS['integrations']['discord']['enabled']:
     from discord_bot import DiscordThread
-    discord = DiscordThread(DISCORD_CONFIG_FILE)
+    discord = DiscordThread(SETTINGS['integrations']['discord'],
+                            zo.asset_path(zo.CONFIG_PATHS, SETTINGS['integrations']['discord']['credentials_file']))
 else:
-    class DummyDiscord():
-        def send_message(self, msg, sender_id=None):
-            pass
-        def change_presence(self, n):
-            pass
-        announce = False
-    discord = DummyDiscord()
+    discord = zo.NullDiscord()
 
 bot_update_freq = 3
 pacer_update_freq = 1
@@ -487,8 +475,8 @@ def play_pace_partners():
         if pause > 0: time.sleep(pause)
 
 def get_names():
-    bots_file = '%s/bot.txt' % STORAGE_DIR
-    if os.path.isfile(bots_file):
+    bots_file = zo.asset_path(zo.CONFIG_PATHS, SETTINGS['bots']['riders_file'])
+    if bots_file:
         with open(bots_file) as f:
             return json.load(f)['riders']
     with open('%s/data/names.txt' % SCRIPT_DIR) as f:
@@ -501,12 +489,7 @@ def get_names():
     return riders
 
 def load_bots():
-    multiplier = 1
-    with open(ENABLE_BOTS_FILE) as f:
-        try:
-            multiplier = min(int(f.readline().rstrip('\r\n')), 100)
-        except ValueError:
-            pass
+    multiplier = SETTINGS['bots']['multiplier']
     i = 1
     loop_riders = []
     for name in os.listdir(STORAGE_DIR):
@@ -549,7 +532,7 @@ def play_bots():
         start = time.perf_counter()
         if zo.reload_pacer_bots:
             zo.reload_pacer_bots = False
-            if os.path.isfile(ENABLE_BOTS_FILE):
+            if SETTINGS['bots']['enabled']:
                 global_bots.clear()
                 load_bots()
         for bot_id in global_bots.keys():
@@ -836,12 +819,12 @@ solo_blob_thread = threading.Thread(target=play_solo_blob)
 solo_blob_thread.daemon = True
 solo_blob_thread.start()
 
-if os.path.isfile(ENABLE_BOTS_FILE):
+if SETTINGS['bots']['enabled']:
     load_bots()
     bot = threading.Thread(target=play_bots)
     bot.start()
 
-SERVER_HOST = os.environ.get('ZOFFLINE_SERVER_HOST', '')
+SERVER_HOST = SETTINGS['network']['host']
 if ':' in SERVER_HOST:
     import socket
     socketserver.ThreadingTCPServer.address_family = socket.AF_INET6
@@ -850,22 +833,19 @@ if ':' in SERVER_HOST:
 socketserver.ThreadingTCPServer.allow_reuse_address = True
 socketserver.ThreadingUDPServer.allow_reuse_address = True
 
-cdn_host = os.environ.get('ZOFFLINE_CDN_HOST', SERVER_HOST)
-cdn_port = int(os.environ.get('ZOFFLINE_CDN_PORT', 80))
+cdn_host, cdn_port = zo.network(SETTINGS, 'cdn')
 httpd = socketserver.ThreadingTCPServer((cdn_host, cdn_port), CDNHandler)
 zoffline_thread = threading.Thread(target=httpd.serve_forever)
 zoffline_thread.daemon = True
 zoffline_thread.start()
 
-tcp_host = os.environ.get('ZOFFLINE_TCP_HOST', SERVER_HOST)
-tcp_port = int(os.environ.get('ZOFFLINE_TCP_PORT', 3025))
+tcp_host, tcp_port = zo.network(SETTINGS, 'tcp')
 tcpserver = socketserver.ThreadingTCPServer((tcp_host, tcp_port), TCPHandler)
 tcpserver_thread = threading.Thread(target=tcpserver.serve_forever)
 tcpserver_thread.daemon = True
 tcpserver_thread.start()
 
-udp_host = os.environ.get('ZOFFLINE_UDP_HOST', SERVER_HOST)
-udp_port = int(os.environ.get('ZOFFLINE_UDP_PORT', 3024))
+udp_host, udp_port = zo.network(SETTINGS, 'udp')
 udpserver = socketserver.ThreadingUDPServer((udp_host, udp_port), UDPHandler)
 udpserver_thread = threading.Thread(target=udpserver.serve_forever)
 udpserver_thread.daemon = True
@@ -874,9 +854,9 @@ udpserver_thread.start()
 ri = threading.Thread(target=remove_inactive)
 ri.start()
 
-if os.path.exists(FAKE_DNS_FILE):
+if SETTINGS['dns']['enabled']:
     from fake_dns import fake_dns
-    dns = threading.Thread(target=fake_dns, args=(zo.server_ip,))
+    dns = threading.Thread(target=fake_dns, args=(zo.server_ip, SERVER_HOST))
     dns.start()
 
 zo.run_standalone(online, global_relay, global_pace_partners, global_bots, global_ghosts, regroup_ghosts, discord)

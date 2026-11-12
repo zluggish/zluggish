@@ -1,0 +1,96 @@
+// Server configuration. Existing installs: run zluggish config migrate first.
+{
+  "config_version": 1,
+  "server": {
+    "multiplayer": false,
+    "family_mode": false,
+    "advertised_ip": "127.0.0.1"
+  },
+  "launcher": {
+    "auto_launch": false
+  },
+  "bots": {
+    "enabled": false,
+    "multiplier": 1,
+    "riders_file": ""
+  },
+  "proxy": {
+    "mode": "auto"
+  },
+  "dns": {
+    "enabled": false
+  },
+  "leaderboards": {
+    "all_time": false
+  },
+  "equipment": {
+    "unlock_entitlements": false,
+    "unlock_all": false
+  },
+  "ghosts": {
+    "profile_file": ""
+  },
+  "integrations": {
+    "garmin": {
+      "domain": "garmin.com"
+    },
+    "discord": {
+      "enabled": false,
+      "credentials_file": "",
+      "channel": 0,
+      "welcome_message": "",
+      "help_message": "",
+      "announce_players": false
+    }
+  },
+  "mail": {
+    "credentials_file": ""
+  },
+  "logging": {
+    "level": "INFO"
+  },
+  "network": {
+    "host": "",
+    "cdn": {
+      "host": null,
+      "port": 80
+    },
+    "tcp": {
+      "host": null,
+      "port": 3025
+    },
+    "udp": {
+      "host": null,
+      "port": 3024
+    },
+    "api": {
+      "host": null,
+      "port": 443,
+      "use_cert": true
+    }
+  },
+  "user_defaults": {
+    "ghosts": {
+      "enabled": false
+    },
+    "uploads": {
+      "zwift": {
+        "enabled": false
+      },
+      "strava": {
+        "method": "paid"
+      }
+    },
+    "devices": {
+      "zwift_click": {
+        "enabled": false
+      }
+    },
+    "workouts": {
+      "trainingpeaks": {
+        "bridge_folder": ""
+      }
+    }
+  },
+  "$schema": "./config.schema.json"
+}

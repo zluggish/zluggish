@@ -3,7 +3,7 @@ Pelotons for zoffline: a RoboPacer + a custom group of bots that follow it in
 formation, move around inside the group, stretch out on climbs and adapt their
 power, cadence and heart rate so the group looks real.
 
-The configuration lives in storage/peloton.txt (JSON) and is reloaded
+The configuration lives in storage/peloton.jsonc (JSONC) and is reloaded
 automatically when the file changes. A peloton can also be created/removed from
 the chat with ".peloton <n>" / ".peloton off" while riding near a RoboPacer.
 
@@ -13,7 +13,6 @@ dependencies (game dictionary, world clock, logger) are injected.
 
 import bisect
 import itertools
-import json
 import logging
 import math
 import os
@@ -24,7 +23,10 @@ import time
 import profile_pb2
 import udp_node_msgs_pb2
 
-CONFIG_FILE_NAME = 'peloton.txt'
+from zluggish_config.schema import PELOTON, PELOTON_DEFAULTS as DEFAULT_PELOTON_CONFIG
+from zluggish_config.store import read_document, edit_document
+
+CONFIG_FILE_NAME = 'peloton.jsonc'
 
 # ID range reserved for followers. Must stay below 9000000 (bookmarks) and
 # 10000000 (ghosts), and above RoboPacer IDs.
@@ -83,19 +85,6 @@ PROFILE_ITEMS = ['first_name', 'last_name', 'is_male', 'country_code', 'bike_fra
     'bike_wheel_rear', 'glasses_type', 'ride_jersey', 'ride_helmet_type', 'ride_shoes_type', 'ride_socks_type',
     'run_shirt_type', 'run_shorts_type', 'run_shoes_type']
 
-DEFAULT_PELOTON_CONFIG = {
-    'bots': 20,                 # number of followers
-    'columns': 0,               # max group width (0 = automatic)
-    'row_gap': 2.2,             # meters between rows
-    'lateral_spacing': 65000,   # lateral spacing in roadPosition units (100000 = 1 m)
-    'beside_pacer': 2,          # bots riding alongside the pacer
-    'dynamics': 1.0,            # 0 = rigid formation, 1 = normal, 2 = very lively
-    'shuffle_interval': 30,     # average seconds between position changes
-    'draft': 0.7,               # fraction of power used by a bot on a wheel
-    'climb_stretch': 1.0,       # how much the group stretches on climbs
-    'max_drop': 40,             # max meters a weak bot can drop back
-    'riders': [],               # custom bots (name, country, equipment, position, strength...)
-}
 
 
 def course_of(state):
@@ -457,7 +446,7 @@ class Peloton:
 
 
 class PelotonManager:
-    """Loads pelotons from storage/peloton.txt, updates them on every tick of the
+    """Loads pelotons from storage/peloton.jsonc, updates them on every tick of the
     RoboPacers thread and handles the .peloton chat command."""
 
     def __init__(self, storage_dir, pace_partners, names_provider, game_dictionary, world_time,
@@ -481,18 +470,7 @@ class PelotonManager:
     # ---------- configuration ----------
 
     def _read_config(self):
-        if not os.path.isfile(self.config_file):
-            return {'pelotons': []}
-        with open(self.config_file, encoding='utf-8') as f:
-            config = json.load(f)
-        if not isinstance(config.get('pelotons'), list):
-            raise ValueError('"pelotons" must be a list')
-        return config
-
-    def _write_config(self, config):
-        with open(self.config_file, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-        self.logger.info('[Peloton] config saved to %s' % self.config_file)
+        return {'pelotons': [], **read_document(self.config_file, PELOTON, {})}
 
     def _find_pacer_id(self, pacer_reference):
         """Accepts the RoboPacer folder name or its player ID."""
@@ -608,7 +586,7 @@ class PelotonManager:
 
     def chat_command(self, state, arguments):
         """.peloton           -> size of the nearest RoboPacer's peloton
-           .peloton <n>       -> creates/updates the peloton with n bots (saved to peloton.txt)
+           .peloton <n>       -> creates/updates the peloton with n bots (saved to peloton.jsonc)
            .peloton off       -> removes that RoboPacer's peloton"""
         pacer_id = self._nearest_pacer_id(state)
         if pacer_id is None:
@@ -618,26 +596,32 @@ class PelotonManager:
             config = self._read_config()
         except Exception as exc:
             self.logger.error('[Peloton] chat_command - invalid config: %s' % repr(exc))
-            return 'peloton.txt is invalid, check the server log'
+            return 'peloton.jsonc is invalid, check the server log'
         entries = config['pelotons']
-        entry = next((e for e in entries if isinstance(e, dict) and self._find_pacer_id(e.get('pacer', '')) == pacer_id), None)
+        entry = next((e for e in entries if self._find_pacer_id(e.get('pacer', '')) == pacer_id), None)
         arguments = arguments.strip().lower()
         if not arguments:
             return '%s: %d bots' % (pacer_name, entry.get('bots', 0) if entry else 0)
-        if arguments == 'off':
-            if entry:
-                entries.remove(entry)
-                self._write_config(config)
-                self.load()
-            return 'Peloton removed from %s' % pacer_name
-        if not arguments.isdigit():
+        if arguments != 'off' and not arguments.isdigit():
             return 'Usage: .peloton <bots> | .peloton off'
-        bots = clamp(int(arguments), 0, MAX_BOTS_PER_PELOTON)
-        if entry is None:
-            entry = {'pacer': self._pacer_reference(pacer_id)}
-            entries.append(entry)
-        entry['bots'] = bots
-        self._write_config(config)
+        bots = 0 if arguments == 'off' else clamp(int(arguments), 0, MAX_BOTS_PER_PELOTON)
+        def change(document):
+            entries = document.setdefault('pelotons', [])
+            entry = next((e for e in entries if self._find_pacer_id(e.get('pacer', '')) == pacer_id), None)
+            if arguments == 'off':
+                if entry:
+                    entries.remove(entry)
+            else:
+                if entry is None:
+                    entry = {'pacer': self._pacer_reference(pacer_id)}
+                    entries.append(entry)
+                entry['bots'] = bots
+        try:
+            edit_document(self.config_file, PELOTON, change, initial={'pelotons': []})
+        except (ValueError, OSError) as exc:
+            self.logger.error('[Peloton] could not save config: %s', exc)
+            return 'Could not save peloton settings; check the server log'
         self.load()
-        self.logger.info('[Peloton] chat_command - %s now has %d bots' % (pacer_name, bots))
+        if arguments == 'off':
+            return 'Peloton removed from %s' % pacer_name
         return 'Peloton of %d bots following %s' % (bots, pacer_name)

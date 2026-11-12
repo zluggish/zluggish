@@ -3,6 +3,7 @@
 Run with: python -m unittest discover -s tests -v
 """
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -23,11 +24,10 @@ class FamilyModeTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         server = Path(cls.temp.name)
         for folder in ('data', 'cdn'):
-            (server / folder).symlink_to(root / folder, target_is_directory=True)
+            shutil.copytree(root / folder, server / folder)
         storage = server / 'storage'
         storage.mkdir()
-        (storage / 'multiplayer.txt').touch()
-        (storage / 'family_mode.txt').touch()
+        (storage / 'config.jsonc').write_text(json.dumps({'config_version': 1, 'server': {'multiplayer': True, 'family_mode': True}, 'proxy': {'mode': 'disabled'}}))
         shutil.copyfile(root / 'zwift_offline.py', server / 'zwift_offline.py')
         sys.path.insert(0, str(root / 'protobuf'))
         spec = importlib.util.spec_from_file_location('family_test_server', server / 'zwift_offline.py')
@@ -51,10 +51,13 @@ class FamilyModeTests(unittest.TestCase):
         with cls.zo.app.app_context():
             cls.zo.db.session.remove()
             cls.zo.db.engine.dispose()
+        cls.zo.SERVER_LOCK.release()
         cls.temp.cleanup()
 
     def setUp(self):
         self.zo.FAMILY_MODE = True
+        for path in (Path(self.temp.name) / 'storage').glob('*/settings.jsonc'):
+            path.unlink()
         self.client = self.zo.app.test_client()
         with self.zo.app.app_context():
             self.zo.db.drop_all()
@@ -144,9 +147,8 @@ class FamilyModeTests(unittest.TestCase):
 
     def test_all_launcher_aliases_show_picker_even_with_auto_launch_and_remember(self):
         self.add_user()
-        auto_launch = Path(self.temp.name) / 'storage/auto_launch.txt'
-        auto_launch.touch()
-        self.addCleanup(auto_launch.unlink)
+        self.zo.SETTINGS['launcher']['auto_launch'] = True
+        self.addCleanup(self.zo.SETTINGS['launcher'].update, auto_launch=False)
         aliases = [str(rule) for rule in self.zo.app.url_map.iter_rules()
                    if rule.endpoint == 'launch_zwift' and str(rule) != '/ride']
         self.assertIn('/launcher/ride', aliases)
@@ -196,6 +198,16 @@ class FamilyModeTests(unittest.TestCase):
             'csrf_token': token, 'map': 'LONDON', 'climb': 'CALENDAR', 'enableghosts': 'on'})
         self.assertEqual(response.location, '/ride')
         self.assertEqual(self.zo.map_override['127.0.0.1'], 'LONDON')
+        settings = Path(self.temp.name) / 'storage/1/settings.jsonc'
+        self.assertTrue(json.loads(settings.read_text())['ghosts']['enabled'])
+        self.assertFalse((settings.parent.parent / 'enable_ghosts.txt').exists())
+        with self.zo.app.app_context():
+            self.assertEqual(self.zo.db.session.get(self.zo.User, 1).enable_ghosts, 1)
+        from zluggish_config.store import edit_setting
+        from zluggish_config.schema import USER
+        edit_setting(settings, USER, 'ghosts.enabled', False)
+        response = self.client.get('/user/rider1@example.test/')
+        self.assertFalse(self.zo.rider_ghosts(1))
         self.client.get('/login/')
         self.assertEqual(self.client.post('/start-zwift').location, '/login/')
 
@@ -262,15 +274,15 @@ class FamilyModeTests(unittest.TestCase):
         server = Path(self.temp.name) / 'zwift_offline.py'
         spec = importlib.util.spec_from_file_location('invalid_family_server', server)
         module = importlib.util.module_from_spec(spec)
-        exists = self.zo.os.path.exists
-        def without_multiplayer(path):
-            return False if str(path).endswith('/multiplayer.txt') else exists(path)
-        with patch('os.path.exists', side_effect=without_multiplayer):
-            with self.assertLogs('zoffline', level='ERROR') as logs:
-                with self.assertRaises(SystemExit) as error:
-                    spec.loader.exec_module(module)
-        self.assertEqual(error.exception.code, 1)
-        self.assertIn('requires storage/multiplayer.txt', logs.output[0])
+        config = Path(self.temp.name) / 'storage/config.jsonc'
+        original = config.read_text()
+        config.write_text(json.dumps({'config_version': 1, 'server': {'multiplayer': False, 'family_mode': True}}))
+        self.addCleanup(config.write_text, original)
+        with self.assertLogs('zoffline', level='ERROR') as logs:
+            with self.assertRaises(SystemExit) as error:
+                spec.loader.exec_module(module)
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn('requires server.multiplayer', logs.output[0])
 
 
 if __name__ == '__main__':
