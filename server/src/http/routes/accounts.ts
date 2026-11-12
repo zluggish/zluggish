@@ -217,7 +217,12 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         html`<p>${error}</p>
           <form method="post">
             <input type="hidden" name="csrf_token" value="${session.csrf}" /><label
-              >Name<input name="display_name" maxlength="100" required autofocus /></label
+              >Name<input
+                name="display_name"
+                value="${first ? 'zluggish' : ''}"
+                maxlength="100"
+                required
+                autofocus /></label
             ><label>Optional password<input type="password" name="password" /></label
             ><label>Confirm password<input type="password" name="confirm_password" /></label
             ><button>Create rider</button> ${first ? '' : html`<a href="/login/">Cancel</a>`}
