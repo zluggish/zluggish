@@ -10,8 +10,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ['3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.12"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -20,3 +20,11 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v3
+      - run: mise run lint
+      - run: mise run format

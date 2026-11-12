@@ -57,10 +57,7 @@
             "default": 40
           },
           "pacer": {
-            "type": [
-              "integer",
-              "string"
-            ]
+            "type": ["integer", "string"]
           },
           "enabled": {
             "type": "boolean",
@@ -120,12 +117,7 @@
                   "type": "boolean"
                 },
                 "position": {
-                  "enum": [
-                    "front",
-                    "middle",
-                    "back",
-                    "any"
-                  ]
+                  "enum": ["front", "middle", "back", "any"]
                 },
                 "strength": {
                   "type": "number"
@@ -149,9 +141,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "pacer"
-        ]
+        "required": ["pacer"]
       },
       "default": []
     }

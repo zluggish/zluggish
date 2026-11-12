@@ -63,11 +63,7 @@
         "mode": {
           "type": "string",
           "default": "auto",
-          "enum": [
-            "auto",
-            "enabled",
-            "disabled"
-          ]
+          "enum": ["auto", "enabled", "disabled"]
         }
       },
       "additionalProperties": false
@@ -203,10 +199,7 @@
           "type": "object",
           "properties": {
             "host": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "default": null
             },
             "port": {
@@ -222,10 +215,7 @@
           "type": "object",
           "properties": {
             "host": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "default": null
             },
             "port": {
@@ -241,10 +231,7 @@
           "type": "object",
           "properties": {
             "host": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "default": null
             },
             "port": {
@@ -260,10 +247,7 @@
           "type": "object",
           "properties": {
             "host": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "default": null
             },
             "port": {
@@ -314,10 +298,7 @@
                 "method": {
                   "type": "string",
                   "default": "paid",
-                  "enum": [
-                    "paid",
-                    "free"
-                  ]
+                  "enum": ["paid", "free"]
                 }
               },
               "additionalProperties": false
@@ -362,7 +343,5 @@
     }
   },
   "additionalProperties": false,
-  "required": [
-    "config_version"
-  ]
+  "required": ["config_version"]
 }
