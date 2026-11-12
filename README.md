@@ -307,7 +307,9 @@ The Runalyze adapter reads the rider's existing `storage/<local-player-id>/runal
 
 Every installation uses local rider accounts, whether one person or several people ride. Each desktop launcher startup shows **Who’s riding?**, including when only one rider exists. Select a rider, choose ride options, then **Start Zwift**. **Switch rider** returns to the picker. Progress, workouts, ghosts, activities and integrations remain separate.
 
-On a fresh installation, open the **Create your first rider** link printed by the server. It contains a one-use setup token, also stored in `storage/setup-token.txt` until setup completes. For a remote server use its reachable hostname/IP in the link. The same **Add rider** form is used for the first and later riders: enter a name and optionally a local password. The first rider is the owner/admin; later riders are regular accounts. An official Zwift account is optional. Without importing a profile, Zwift collects physical profile details when you first ride.
+The account and activity database is `storage/zluggish.db`. Existing Zluggish databases named `zwift-offline.db` are renamed on startup; legacy databases are renamed after `accounts migrate` succeeds.
+
+On a fresh installation, the launcher opens the **Add rider** screen directly. The same **Add rider** form is used for the first and later riders: enter a name and optionally a local password. The first rider is the owner/admin; later riders are regular accounts. An official Zwift account is optional. Without importing a profile, Zwift collects physical profile details when you first ride.
 
 Riders with passwords show a password prompt when selected. Riders without passwords can be selected by anyone who can reach the server, including an owner left without a password. In **Settings → Local password**, add protection, or confirm the current password to change/remove it. Changing protection revokes previous sessions, including game refresh tokens. Local passwords are independent of official Zwift and integration credentials.
 
@@ -337,7 +339,7 @@ Set `network.host: '::'` in `zluggish.config.ts`, or choose per-listener `host` 
 
 These instructions apply to legacy singleplayer and multiplayer installations. Fresh storage uses first-rider setup and does not need conversion.
 
-1. Stop every server using the storage. Back up the entire `storage/` directory, including `zwift-offline.db`, profiles, activities, preferences, credentials and signing/encryption keys. Keep the previous release/image for rollback.
+1. Stop every server using the storage. Back up the entire `storage/` directory, including `zluggish.db` (or legacy `zwift-offline.db`), profiles, activities, preferences, credentials and signing/encryption keys. Keep the previous release/image for rollback.
 2. Install and build the Node packages using the source instructions above. Start with a restored storage copy; do not run old and new servers against the same directory.
 3. For original marker/text/INI/JSON configuration, migrate directly to TypeScript. Choose a new destination that does not already exist:
 

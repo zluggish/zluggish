@@ -1,7 +1,7 @@
 import { runtimeFixture } from '#tests/support/runtime';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
@@ -10,6 +10,8 @@ import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { createApp } from '#src/http/app';
+import { Accounts } from '#src/domain/accounts/repository';
+import { migrateAccounts } from '#src/domain/accounts/migrate';
 import { ProfileImports } from '#src/domain/profiles/imports';
 
 function browser(app: ReturnType<typeof createApp>) {
@@ -48,29 +50,33 @@ function browser(app: ReturnType<typeof createApp>) {
 await test('first-owner setup and passwordless rider selection are real HTTP flows', async (t) => {
   const f = runtimeFixture(t);
   const client = browser(f.app);
+  for (const path of ['/launcher', '/launcher/ride', '/ride']) {
+    const launch = await client.request(path);
+    assert.equal(launch.status, 302);
+    assert.equal(launch.headers.get('Location'), '/login/');
+  }
   const redirect = await client.request('/login/');
   assert.equal(redirect.status, 302);
-  const setup = await client.request('/riders/add/');
+  assert.equal(redirect.headers.get('Location'), '/riders/add/');
+  const setup = await client.request(redirect.headers.get('Location')!);
   const html = await setup.text();
   assert.match(html, /<link rel="stylesheet" href="\/style\/site.css"/);
   const csrf = /name="csrf_token"\s+value="([^"]+)"/.exec(html)?.[1] ?? '';
 
-  const setupToken = readFileSync(resolve(f.accounts.storage, 'setup-token.txt'), 'utf8');
-
-  const request = (token: string) =>
-    client.request('/riders/add/', {
-      method: 'POST',
-      body: new URLSearchParams({
-        csrf_token: csrf,
-        setup_token: token,
-        display_name: 'Alex Rider',
-      }),
-    });
-
-  const response1 = await request('invalid');
-  assert.equal(response1.status, 403);
-  const response2 = await request(setupToken);
-  assert.equal(response2.status, 302);
+  assert.match(html, /<title>Add rider<\/title>/);
+  assert.ok(!html.includes('setup_token'));
+  const rejected = await client.request('/riders/add/', {
+    method: 'POST',
+    body: new URLSearchParams({ display_name: 'Missing CSRF' }),
+  });
+  assert.equal(rejected.status, 400);
+  const response = await client.request('/riders/add/', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf_token: csrf, display_name: 'Alex Rider' }),
+  });
+  assert.equal(response.status, 302);
+  assert.equal(f.accounts.get(1)?.first_name, 'Alex');
+  assert.equal(f.accounts.get(1)?.last_name, 'Rider');
   assert.equal(f.accounts.get(1)?.is_admin, 1);
   assert.equal(existsSync(resolve(f.accounts.storage, 'setup-token.txt')), false);
   await client.picker();
@@ -227,4 +233,41 @@ await test('native login and HTTP login share one relay owner with protobuf econ
   assert.equal(decoded.relaySessionId, user.player_id);
   assert.deepEqual(f.world.relays.get(BigInt(user.player_id))?.key, Buffer.from(key));
   assert.ok(decoded.economyConfig?.cyclingLevels.length);
+});
+
+await test('existing Zluggish database is renamed without losing riders', async (t) => {
+  const f = runtimeFixture(t);
+  const rider = await f.accounts.create('Existing Rider', '', true);
+  f.accounts.close();
+  const current = resolve(f.accounts.storage, 'zluggish.db');
+  const legacy = resolve(f.accounts.storage, 'zwift-offline.db');
+  assert.ok(existsSync(current));
+  renameSync(current, legacy);
+  const reopened = new Accounts(f.accounts.storage);
+  t.after(() => reopened.close());
+  assert.equal(reopened.get(rider.player_id)?.first_name, 'Existing');
+  assert.ok(existsSync(current));
+  assert.ok(!existsSync(legacy));
+  reopened.close();
+});
+
+await test('account migration publishes the renamed database and preserves riders', async (t) => {
+  const f = runtimeFixture(t);
+  const rider = await f.accounts.create('Migrated Rider', '', true);
+  f.accounts.close();
+  const current = resolve(f.accounts.storage, 'zluggish.db');
+  const legacy = resolve(f.accounts.storage, 'zwift-offline.db');
+  renameSync(current, legacy);
+  // SQLite backup work needs a live event loop on newer Node releases.
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    await migrateAccounts(f.accounts.storage);
+  } finally {
+    clearInterval(keepAlive);
+  }
+  assert.ok(existsSync(current));
+  assert.ok(!existsSync(legacy));
+  const reopened = new Accounts(f.accounts.storage);
+  assert.equal(reopened.get(rider.player_id)?.first_name, 'Migrated');
+  reopened.close();
 });

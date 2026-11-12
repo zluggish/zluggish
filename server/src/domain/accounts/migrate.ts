@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { z } from 'zod';
@@ -9,7 +9,9 @@ import { createSchemaSQL } from '#src/node/persistence/schema';
 import { ConfigError } from '#src/config/index';
 
 export async function migrateAccounts(storage: string, soloPlayer?: number) {
-  const path = resolve(storage, 'zwift-offline.db');
+  const destination = resolve(storage, 'zluggish.db');
+  const legacyPath = resolve(storage, 'zwift-offline.db');
+  const path = existsSync(destination) || !existsSync(legacyPath) ? destination : legacyPath;
   const fresh = !existsSync(path);
   const db = new DatabaseSync(path);
 
@@ -107,10 +109,13 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
       db.prepare('SELECT 1 FROM user LIMIT 1').get() ? 1 : 0,
     );
     db.exec('DELETE FROM version; INSERT INTO version VALUES (4); COMMIT;');
+    if (path !== destination) db.exec('PRAGMA journal_mode=DELETE');
+    db.close();
+    if (path !== destination) renameSync(path, destination);
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
     throw error;
   } finally {
-    db.close();
+    if (db.isOpen) db.close();
   }
 }

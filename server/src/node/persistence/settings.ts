@@ -156,7 +156,8 @@ export class SettingsStore {
 }
 
 export function checkRider(storage: string, playerId: number) {
-  const path = resolve(storage, 'zwift-offline.db');
+  const currentDatabase = resolve(storage, 'zluggish.db');
+  const path = existsSync(currentDatabase) ? currentDatabase : resolve(storage, 'zwift-offline.db');
 
   if (!existsSync(path)) throw new ConfigError('Unknown rider; initialize accounts before changing preferences');
   const db = new DatabaseSync(path, { readOnly: true });

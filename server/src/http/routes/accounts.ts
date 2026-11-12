@@ -3,11 +3,8 @@ import { html } from 'hono/html';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { HTTPException } from 'hono/http-exception';
-import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { writeDurable } from '#src/node/persistence/files';
 import { identityOf } from '#src/domain/accounts/repository';
 import { resolveRiderSettings } from '#src/node/persistence/settings';
 import type { Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -97,11 +94,6 @@ export function peerAddress(c: Context<RuntimeEnv>) {
 
 export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const { accounts, sessions, world } = runtime;
-  const setupPath = resolve(accounts.storage, 'setup-token.txt');
-
-  if (!accounts.setupComplete() && !existsSync(setupPath))
-    writeDurable(setupPath, randomBytes(32).toString('base64url'));
-
   app.use('*', async (c, next) => {
     const authorization = c.req.header('Authorization');
     const existing = getCookie(c, 'zluggish_session');
@@ -146,8 +138,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const session = c.get('browser');
     session.selected = false;
 
-    if (!accounts.setupComplete())
-      return c.redirect(`/riders/add/?setup_token=${encodeURIComponent(c.req.query('setup_token') ?? '')}`);
+    if (!accounts.setupComplete()) return c.redirect('/riders/add/');
     let error = '';
 
     if (c.req.method === 'POST') {
@@ -206,19 +197,13 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (!first && !runtime.config.accounts.allowSelfRegistration && !current?.is_admin) throw new HTTPException(403);
     const session = c.get('browser');
     let error = '';
-    let setup = c.req.query('setup_token') ?? '';
 
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
-      setup = z.string().catch('').parse(form.setup_token);
-
-      if (first && setup !== readFileSync(setupPath, 'utf8').trim()) throw new HTTPException(403);
       const password = z.string().catch('').parse(form.password);
 
       if (password === z.string().catch('').parse(form.confirm_password)) {
         await accounts.create(z.string().parse(form.display_name), password, first);
-
-        if (first) unlinkSync(setupPath);
 
         return c.redirect('/login/');
       }
@@ -228,14 +213,11 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     return c.html(
       page(
-        first ? 'Create your first rider' : 'Add rider',
+        'Add rider',
         html`<p>${error}</p>
           <form method="post">
-            <input type="hidden" name="csrf_token" value="${session.csrf}" /><input
-              type="hidden"
-              name="setup_token"
-              value="${setup}"
-            /><label>Name<input name="display_name" maxlength="100" required /></label
+            <input type="hidden" name="csrf_token" value="${session.csrf}" /><label
+              >Name<input name="display_name" maxlength="100" required autofocus /></label
             ><label>Optional password<input type="password" name="password" /></label
             ><label>Confirm password<input type="password" name="confirm_password" /></label
             ><button>Create rider</button> <a href="/login/">Cancel</a>

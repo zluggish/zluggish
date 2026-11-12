@@ -185,7 +185,8 @@ export function migrationCandidate(options: MigrationOptions) {
   });
 
   const riders = [];
-  const database = resolve(storage, 'zwift-offline.db');
+  const currentDatabase = resolve(storage, 'zluggish.db');
+  const database = existsSync(currentDatabase) ? currentDatabase : resolve(storage, 'zwift-offline.db');
 
   if (existsSync(database)) {
     const db = new DatabaseSync(database, { readOnly: true });

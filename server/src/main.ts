@@ -57,11 +57,6 @@ const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.net
 
 console.log(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
 
-if (!owner.runtime.accounts.setupComplete())
-  console.log(
-    `Create your first rider: ${api.useCert ? 'https' : 'http'}://${config.server.advertisedIp}:${api.port}/login/?setup_token=${readFileSync(resolve(config.storageDir, 'setup-token.txt'), 'utf8').trim()}`,
-  );
-
 let stopping = false;
 
 function shutdown() {

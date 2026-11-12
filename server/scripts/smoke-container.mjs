@@ -47,7 +47,7 @@ try {
   assert.ok(ready, errors);
   assert.equal((await fetch('http://127.0.0.1:24443/api/game_info')).status, 200);
   assert.equal((await fetch('http://127.0.0.1:24080/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml')).status, 200);
-  assert.ok(existsSync('/usr/src/app/zwift-offline/storage/zwift-offline.db'));
+  assert.ok(existsSync('/usr/src/app/zwift-offline/storage/zluggish.db'));
   child.kill('SIGTERM');
 
   const result = await Promise.race([

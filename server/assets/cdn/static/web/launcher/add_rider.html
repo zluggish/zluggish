@@ -1,21 +1,17 @@
 {% extends "./layout.html" %}
 {% block content %}
-  <h1><div class="text-shadow">{{ 'Create your first rider' if first_rider else 'Add rider' }}</div></h1>
+  <h1><div class="text-shadow">Add rider</div></h1>
   <div class="rider-picker-page">
     <form action="{{ url_for('add_rider') }}" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="display_name" class="text-shadow">Name</label>
       <input type="text" id="display_name" name="display_name" class="form-control form-control-sm" maxlength="100" required autofocus autocomplete="name">
-      {% if first_rider %}
-      <p class="text-shadow">Use the setup link printed by the server to create the owner account.</p>
-      <input type="hidden" name="setup_token" value="{{ setup_token }}">
-      {% endif %}
       <label for="password" class="text-shadow">Local password (optional)</label>
       <input id="password" name="password" type="password" class="form-control" autocomplete="new-password">
       <label for="confirm_password" class="text-shadow">Confirm password</label>
       <input id="confirm_password" name="confirm_password" type="password" class="form-control" autocomplete="new-password">
       <div class="top-buffer">
-        <button type="submit" class="btn btn-sm btn-light">{{ 'Create your first rider' if first_rider else 'Add rider' }}</button>
+        <button type="submit" class="btn btn-sm btn-light">Add rider</button>
         <a href="{{ url_for('login') }}" class="btn btn-sm btn-secondary">Back</a>
       </div>
     </form>

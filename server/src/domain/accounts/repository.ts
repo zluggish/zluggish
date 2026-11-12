@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -24,11 +24,13 @@ export class Accounts {
   readonly db: DatabaseSync;
 
   constructor(readonly storage: string) {
-    const path = resolve(storage, 'zwift-offline.db');
-    const fresh = !existsSync(path);
+    const path = resolve(storage, 'zluggish.db');
+    const legacyPath = resolve(storage, 'zwift-offline.db');
+    const existingPath = existsSync(path) ? path : legacyPath;
+    const fresh = !existsSync(existingPath);
 
     if (!fresh) {
-      const inspection = new DatabaseSync(path, { readOnly: true });
+      const inspection = new DatabaseSync(existingPath, { readOnly: true });
 
       try {
         const version = z
@@ -55,6 +57,16 @@ export class Accounts {
       }
     } else if (existsSync(storage) && readdirSync(storage).some((name) => /^\d+$/.test(name))) {
       throw new ConfigError('Legacy rider folders require accounts migrate; refusing to create new identities');
+    }
+
+    if (!fresh && existingPath !== path) {
+      const source = new DatabaseSync(existingPath);
+      try {
+        source.exec('PRAGMA journal_mode=DELETE');
+      } finally {
+        source.close();
+      }
+      renameSync(existingPath, path);
     }
 
     mkdirSync(storage, { recursive: true });
