@@ -1,6 +1,5 @@
 import asyncio
 import aiohttp
-import os
 import threading
 
 from configparser import ConfigParser
@@ -39,20 +38,17 @@ class DiscordBot(discord.Client):
 
 
 class DiscordThread(threading.Thread):
-    def __init__(self, config_file):
+    def __init__(self, settings, credentials_file):
         threading.Thread.__init__(self)
-        if not os.path.isfile(config_file):
-            raise Exception("DiscordThread invoked without a configuration file")
-
-        self.CONFIG = ConfigParser()
-        SECTION = 'discord'
-        self.CONFIG.read(config_file)
-        self.token = self.CONFIG.get(SECTION, 'token')
-        self.webhook = self.CONFIG.get(SECTION, 'webhook')
-        self.channel = self.CONFIG.getint(SECTION, 'channel')
-        self.welcome_msg = self.CONFIG.get(SECTION, 'welcome_message', fallback='')
-        self.help_msg = self.CONFIG.get(SECTION, 'help_message', fallback='')
-        self.announce = self.CONFIG.getboolean(SECTION, 'announce_players', fallback=False)
+        # This referenced INI contains credentials only; all options come from JSONC.
+        credentials = ConfigParser(interpolation=None)
+        credentials.read(credentials_file)
+        self.token = credentials.get('discord', 'token')
+        self.webhook = credentials.get('discord', 'webhook')
+        self.channel = settings['channel']
+        self.welcome_msg = settings['welcome_message']
+        self.help_msg = settings['help_message']
+        self.announce = settings['announce_players']
 
         self.intents = discord.Intents.default()
         self.intents.members = True

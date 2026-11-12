@@ -72,7 +72,11 @@ import workouts_manifest
 import planned_workouts
 import free_strava
 
-logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+from zluggish_config import (ConfigError, paths as config_paths, load_server, load_user,
+                             save_user, asset_path, network)
+from filelock import FileLock, Timeout
+
+logging.basicConfig(level="INFO")
 logger = logging.getLogger('zoffline')
 logger.setLevel(logging.DEBUG)
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARN)
@@ -96,8 +100,25 @@ def make_dir(name):
         return False
     return True
 
+# Validate settings before creating storage, keys, a database, or listeners.
+CONFIG_PATHS = config_paths(source=__file__)
+STORAGE_DIR = str(CONFIG_PATHS.storage)
+try:
+    SETTINGS = load_server(CONFIG_PATHS)
+except ConfigError as exc:
+    logger.error("%s", exc)
+    sys.exit(2)
+logging.getLogger().setLevel(SETTINGS['logging']['level'])
+logger.setLevel(SETTINGS['logging']['level'])
+
 # Ensure storage dir exists
 if not make_dir(STORAGE_DIR):
+    sys.exit(1)
+SERVER_LOCK = FileLock(str(CONFIG_PATHS.storage / '.server.lock'), timeout=0)
+try:
+    SERVER_LOCK.acquire()
+except Timeout:
+    logger.error("Storage is in use by another server or a configuration migration")
     sys.exit(1)
 
 SSL_DIR = "%s/ssl" % SCRIPT_DIR
@@ -106,26 +127,16 @@ DATABASE_CUR_VER = 3
 ZWIFT_VER_CUR = ET.parse('%s/cdn/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml' % SCRIPT_DIR).getroot().get('sversion')
 
 # For auth server
-AUTOLAUNCH_FILE = "%s/auto_launch.txt" % STORAGE_DIR
-SERVER_IP_FILE = "%s/server-ip.txt" % STORAGE_DIR
-if os.path.exists(SERVER_IP_FILE):
-    with open(SERVER_IP_FILE, 'r') as f:
-        server_ip = f.read().rstrip('\r\n')
-else:
-    server_ip = '127.0.0.1'
+server_ip = SETTINGS['server']['advertised_ip']
 SECRET_KEY_FILE = "%s/secret-key.txt" % STORAGE_DIR
-ENABLEGHOSTS_FILE = "%s/enable_ghosts.txt" % STORAGE_DIR
 GHOST_PROFILE = None
-GHOST_PROFILE_FILE = "%s/ghost_profile.txt" % STORAGE_DIR
-if os.path.exists(GHOST_PROFILE_FILE):
+GHOST_PROFILE_FILE = asset_path(CONFIG_PATHS, SETTINGS['ghosts']['profile_file'])
+if GHOST_PROFILE_FILE:
     with open(GHOST_PROFILE_FILE) as f:
         GHOST_PROFILE = json.load(f)
-ALL_TIME_LEADERBOARDS = os.path.exists("%s/all_time_leaderboards.txt" % STORAGE_DIR)
-MULTIPLAYER = os.path.exists("%s/multiplayer.txt" % STORAGE_DIR)
-FAMILY_MODE = os.path.exists("%s/family_mode.txt" % STORAGE_DIR)
-if FAMILY_MODE and not MULTIPLAYER:
-    logger.error("Family mode requires storage/multiplayer.txt. Enable multiplayer and restart.")
-    sys.exit(1)
+ALL_TIME_LEADERBOARDS = SETTINGS['leaderboards']['all_time']
+MULTIPLAYER = SETTINGS['server']['multiplayer']
+FAMILY_MODE = SETTINGS['server']['family_mode']
 if MULTIPLAYER:
     if not make_dir(LOGS_DIR):
         sys.exit(1)
@@ -140,11 +151,7 @@ if not os.path.exists(CREDENTIALS_KEY_FILE):
 with open(CREDENTIALS_KEY_FILE, 'rb') as f:
     credentials_key = f.read()
 
-GARMIN_DOMAIN = 'garmin.com'
-GARMIN_DOMAIN_FILE = '%s/garmin_domain.txt' % STORAGE_DIR
-if os.path.exists(GARMIN_DOMAIN_FILE):
-    with open(GARMIN_DOMAIN_FILE) as f:
-        GARMIN_DOMAIN = f.readline().rstrip('\r\n')
+GARMIN_DOMAIN = SETTINGS['integrations']['garmin']['domain']
 
 import warnings
 warnings.simplefilter("ignore")
@@ -193,6 +200,7 @@ class User(UserMixin, db.Model):
     first_name = db.Column(db.Text, nullable=False)
     last_name = db.Column(db.Text, nullable=False)
     pass_hash = db.Column(db.Text, nullable=False)
+    # Retained only so old database schemas/rollback remain compatible. Never read or updated.
     enable_ghosts = db.Column(db.Integer, nullable=False, default=1)
     is_admin = db.Column(db.Integer, nullable=False, default=0)
     remember = db.Column(db.Integer, nullable=False, default=0)
@@ -222,11 +230,24 @@ class AnonUser(User, AnonymousUserMixin, db.Model):
     username = "zoffline"
     first_name = "z"
     last_name = "offline"
-    enable_ghosts = os.path.isfile(ENABLEGHOSTS_FILE)
     is_admin = False
 
     def is_authenticated(self):
         return True
+
+def rider_settings(player_id=None):
+    return load_user(CONFIG_PATHS, SETTINGS, player_id if MULTIPLAYER else None)
+
+
+def rider_ghosts(player_id=None):
+    return rider_settings(player_id)['ghosts']['enabled']
+
+
+@app.errorhandler(ConfigError)
+def settings_error(exc):
+    logger.warning("Rider settings: %s", exc)
+    return "Rider settings are invalid. Correct settings.jsonc and retry.", 409
+
 
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -778,7 +799,7 @@ def login():
 
 def send_mail(username, token):
     try:
-        with open('%s/gmail_credentials.txt' % STORAGE_DIR) as f:
+        with open(asset_path(CONFIG_PATHS, SETTINGS['mail']['credentials_file'])) as f:
             sender_email = f.readline().rstrip('\r\n')
             password = f.readline().rstrip('\r\n')
             host = f.readline().rstrip('\r\n')
@@ -894,11 +915,7 @@ def reset(username):
 
 
 def strava_upload_method(player_id):
-    file = '%s/%s/strava_upload_method.txt' % (STORAGE_DIR, player_id)
-    if not os.path.exists(file):
-        return 'paid'
-    with open(file) as f:
-        return f.readline().rstrip('\r\n')
+    return rider_settings(player_id)['uploads']['strava']['method']
 
 
 @app.route("/strava/<username>/", methods=["GET", "POST"])
@@ -925,8 +942,8 @@ def strava(username):
         elif 'method' in request.form:
             if request.form['method'] in ('paid', 'free'):
                 method = request.form['method']
-                with open('%s/strava_upload_method.txt' % profile_dir, 'w') as f:
-                    f.write(method)
+                save_user(CONFIG_PATHS, 'uploads.strava.method', method,
+                          current_user.player_id if MULTIPLAYER else None)
                 flash("Strava upload method saved.")
         elif request.form['client_id'] == "" or request.form['client_secret'] == "":
             flash("Client ID and secret can't be empty.")
@@ -1218,22 +1235,13 @@ def sync_intervals_workout_for_player(player_id, timeout=30):
         return {"status": "error", "message": "Intervals.icu workout sync failed."}
 
 
-def trainingpeaks_bridge_folder_file(player_id):
-    return os.path.join(STORAGE_DIR, str(player_id), 'trainingpeaks_bridge_folder.txt')
-
-
 def load_trainingpeaks_bridge_folder(player_id):
-    file = trainingpeaks_bridge_folder_file(player_id)
-    if not os.path.exists(file):
-        return ''
-    with open(file) as fd:
-        return fd.read().strip()
+    return rider_settings(player_id)['workouts']['trainingpeaks']['bridge_folder']
 
 
 def save_trainingpeaks_bridge_folder(player_id, folder):
-    file = trainingpeaks_bridge_folder_file(player_id)
-    with open(file, 'w') as fd:
-        fd.write(folder.strip())
+    save_user(CONFIG_PATHS, 'workouts.trainingpeaks.bridge_folder', folder.strip(),
+              player_id if MULTIPLAYER else None)
 
 
 def sync_trainingpeaks_workout_for_player(player_id):
@@ -1270,8 +1278,6 @@ def profile(username):
     profile_dir = os.path.join(STORAGE_DIR, str(current_user.player_id))
     file = os.path.join(profile_dir, 'zwift_credentials.bin')
     cred = decrypt_credentials(file)
-    upload = os.path.join(profile_dir, 'zwift_upload.txt')
-    click = os.path.join(profile_dir, 'zwift_click.txt')
     if request.method == "POST":
         if request.form['username'] == "" or request.form['password'] == "":
             flash("Zwift credentials can't be empty.")
@@ -1310,8 +1316,10 @@ def profile(username):
                     online_sync.logout(session, refresh_token)
                     if request.form.get("zwift_upload") or request.form.get("zwift_click"):
                         encrypt_credentials(file, (username, password))
-                    save_option(request.form.get("zwift_upload"), upload)
-                    save_option(request.form.get("zwift_click"), click)
+                    save_user(CONFIG_PATHS, 'uploads.zwift.enabled', bool(request.form.get("zwift_upload")),
+                              current_user.player_id if MULTIPLAYER else None)
+                    save_user(CONFIG_PATHS, 'devices.zwift_click.enabled', bool(request.form.get('zwift_click')),
+                              current_user.player_id if MULTIPLAYER else None)
                 except Exception as exc:
                     logger.warning('Zwift profile: %s' % repr(exc))
                     flash("Error downloading profile.")
@@ -1321,7 +1329,7 @@ def profile(username):
                 flash("Invalid username or password.")
                 return render_template("profile.html", username=current_user.username)
         return redirect(url_for('settings', username=current_user.username))
-    return render_template("profile.html", username=current_user.username, uname=cred[0], passw=cred[1], upload=os.path.isfile(upload), click=os.path.isfile(click))
+    return render_template("profile.html", username=current_user.username, uname=cred[0], passw=cred[1], upload=rider_settings(current_user.player_id)['uploads']['zwift']['enabled'], click=rider_settings(current_user.player_id)['devices']['zwift_click']['enabled'])
 
 
 @app.route("/garmin/<username>/", methods=["GET", "POST"])
@@ -1405,7 +1413,7 @@ def user_home(username):
         sync_intervals_workout_for_player(current_user.player_id)
     elif provider == 'trainingpeaks':
         sync_trainingpeaks_workout_for_player(current_user.player_id)
-    return render_template("user_home.html", username=current_user.username, enable_ghosts=bool(current_user.enable_ghosts), climbs=CLIMBS,
+    return render_template("user_home.html", username=current_user.username, enable_ghosts=rider_ghosts(current_user.player_id), climbs=CLIMBS,
         online=get_online(), is_admin=current_user.is_admin, restarting=restarting, restarting_in_minutes=restarting_in_minutes,
         active_workout_provider=provider, workout_sync_status=current_workout_sync_status(current_user.player_id))
 
@@ -1958,7 +1966,7 @@ def api_users_login():
     if 'android' in request.headers.get('User-Agent', '').lower():
         sync_workout_at_game_login(player_id)
     global_relay[player_id] = Relay(req.key)
-    ghosts_enabled[player_id] = current_user.enable_ghosts
+    ghosts_enabled[player_id] = rider_ghosts(player_id)
 
     response = login_pb2.LoginResponse()
     response.session_state = 'abc'
@@ -2382,11 +2390,11 @@ def update_entitlements(profile):
     e.type = profile_pb2.ProfileEntitlement.EntitlementType.RIDE
     e.id = -1
     e.status = profile_pb2.ProfileEntitlement.ProfileEntitlementStatus.ACTIVE
-    if os.path.isfile('%s/unlock_entitlements.txt' % STORAGE_DIR) or os.path.isfile('%s/unlock_all_equipment.txt' % STORAGE_DIR):
+    if SETTINGS['equipment']['unlock_entitlements'] or SETTINGS['equipment']['unlock_all']:
         with open('%s/data/entitlements.txt' % SCRIPT_DIR) as f:
             ent = json.load(f)
         entitlements = list(range(ent['first'], ent['last'] + 1))
-        if os.path.isfile('%s/unlock_all_equipment.txt' % STORAGE_DIR):
+        if SETTINGS['equipment']['unlock_all']:
             entitlements.extend(list(range(1, ent['first'])))
         for entitlement in entitlements:
             if not any(e.id == entitlement for e in profile.entitlements):
@@ -2999,7 +3007,7 @@ def get_zwift_online_tokens(player_id):
 
 def zwift_upload(player_id, activity):
     tokens = get_zwift_online_tokens(player_id)
-    if tokens['access_token'] and os.path.isfile("%s/%s/zwift_upload.txt" % (STORAGE_DIR, player_id)):
+    if tokens['access_token'] and rider_settings(player_id)['uploads']['zwift']['enabled']:
         with requests.session() as session:
             try:
                 activity.player_id = online_sync.get_player_id(session, tokens['access_token'])
@@ -3108,7 +3116,7 @@ def api_profiles_activities_id(player_id, activity_id):
 
     create_power_curve(player_id, BytesIO(activity.fit))
     save_fit(player_id, '%s - %s' % (activity_id, secure_filename(activity.fit_filename)), activity.fit)
-    if current_user.enable_ghosts:
+    if rider_ghosts(current_user.player_id):
         save_ghost(player_id, secure_filename(activity.name))
     if activity.sport == profile_pb2.Sport.CYCLING and activity.distanceInMeters >= 2000:
         update_streaks(player_id, activity)
@@ -4809,7 +4817,7 @@ def api_fitness_fitness_goals_history():
 @login_required
 def api_d_lock_service_device_authenticate():
     tokens = get_zwift_online_tokens(current_user.player_id)
-    if tokens['access_token'] and os.path.isfile("%s/%s/zwift_click.txt" % (STORAGE_DIR, current_user.player_id)):
+    if tokens['access_token'] and rider_settings(current_user.player_id)['devices']['zwift_click']['enabled']:
         headers = dict(request.headers)
         headers['Authorization'] = "Bearer %s" % tokens['access_token']
         with requests.session() as session:
@@ -5038,7 +5046,7 @@ def launch_zwift():
         cookie = encode_cookie(str(current_user.player_id))
         return redirect("http://zwift/?code=zwift_refresh_token%s" % fake_refresh_token_with_session_cookie(cookie), 302)
     # Zwift client has switched to calling https://launcher.zwift.com/launcher/ride
-    if request.path != "/ride" and not os.path.exists(AUTOLAUNCH_FILE):
+    if request.path != "/ride" and not SETTINGS['launcher']['auto_launch']:
         if MULTIPLAYER:
             return redirect(url_for('login'))
         else:
@@ -5118,14 +5126,6 @@ def auth_realms_zwift_protocol_openid_connect_logout():
     session.clear()
     return '', 204
 
-def save_option(option, file):
-    if option:
-        if not os.path.exists(file):
-            f = open(file, 'w')
-            f.close()
-    elif os.path.exists(file):
-        os.remove(file)
-
 @app.route("/start-zwift" , methods=['POST'])
 @login_required
 def start_zwift():
@@ -5133,12 +5133,8 @@ def start_zwift():
         if session.get('family_player_id') != current_user.player_id:
             return redirect(url_for('login'))
         validate_family_csrf()
-    if MULTIPLAYER:
-        current_user.enable_ghosts = 'enableghosts' in request.form.keys()
-        db.session.commit()
-    else:
-        AnonUser.enable_ghosts = 'enableghosts' in request.form.keys()
-        save_option(AnonUser.enable_ghosts, ENABLEGHOSTS_FILE)
+    save_user(CONFIG_PATHS, 'ghosts.enabled', 'enableghosts' in request.form,
+              current_user.player_id if MULTIPLAYER else None)
     selected_map = request.form['map']
     if selected_map != 'CALENDAR':
         # We have no identifying information when Zwift makes MapSchedule request except for the client's IP.
@@ -5159,7 +5155,17 @@ class CleanWSGIServer(WSGIServer):
             logger.warning('WSGIServer: connection reset by client (missing certificate in cacert.pem?)')
 
 
-def run_standalone(passed_online, passed_global_relay, passed_global_pace_partners, passed_global_bots, passed_global_ghosts, passed_regroup_ghosts, passed_discord):
+class NullDiscord:
+    announce = False
+
+    def send_message(self, *args, **kwargs):
+        pass
+
+    def change_presence(self, n):
+        pass
+
+
+def run_standalone(passed_online, passed_global_relay, passed_global_pace_partners=None, passed_global_bots=None, passed_global_ghosts=None, passed_regroup_ghosts=None, passed_discord=None):
     global online
     global global_relay
     global global_pace_partners
@@ -5170,11 +5176,11 @@ def run_standalone(passed_online, passed_global_relay, passed_global_pace_partne
     global login_manager
     online = passed_online
     global_relay = passed_global_relay
-    global_pace_partners = passed_global_pace_partners
-    global_bots = passed_global_bots
-    global_ghosts = passed_global_ghosts
-    regroup_ghosts = passed_regroup_ghosts
-    discord = passed_discord
+    global_pace_partners = passed_global_pace_partners if passed_global_pace_partners is not None else {}
+    global_bots = passed_global_bots if passed_global_bots is not None else {}
+    global_ghosts = passed_global_ghosts if passed_global_ghosts is not None else {}
+    regroup_ghosts = passed_regroup_ghosts or (lambda *args: None)
+    discord = passed_discord or NullDiscord()
     login_manager = LoginManager()
     login_manager.login_view = 'login'
     login_manager.session_protection = None
@@ -5207,16 +5213,15 @@ def run_standalone(passed_online, passed_global_relay, passed_global_pace_partne
     remove_inactive_thread = threading.Thread(target=remove_inactive)
     remove_inactive_thread.start()
     logger.info("Server version %s is running." % ZWIFT_VER_CUR)
-    SERVER_HOST = os.environ.get('ZOFFLINE_SERVER_HOST', '0.0.0.0')
-    host = os.environ.get('ZOFFLINE_API_HOST', SERVER_HOST)
-    port = int(os.environ.get('ZOFFLINE_API_PORT', 443))
-    use_cert = os.environ.get('ZOFFLINE_API_USE_CERT', 'true').lower() == 'true'
+    SERVER_HOST = SETTINGS['network']['host'] or '0.0.0.0'
+    host, port = network(SETTINGS, 'api')
+    use_cert = SETTINGS['network']['api']['use_cert']
     if host != SERVER_HOST or port != 443 or not use_cert:
         logger.info("Listening on %s:%d using certificate: %s", host, port, use_cert)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     if use_cert:
         context.load_cert_chain(certfile='%s/cert-zwift-com.pem' % SSL_DIR, keyfile='%s/key-zwift-com.pem' % SSL_DIR)
-    server = CleanWSGIServer((host, port), app, log=logger, ssl_context=context)
+    server = CleanWSGIServer((host, port), app, log=logger, **({"ssl_context": context} if use_cert else {}))
     server.serve_forever()
 
 #    app.run(ssl_context=('%s/cert-zwift-com.pem' % SSL_DIR, '%s/key-zwift-com.pem' % SSL_DIR), port=443, threaded=True, host=SERVER_HOST) # debug=True, use_reload=False)

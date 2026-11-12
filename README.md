@@ -1,10 +1,46 @@
-# zoffline
+# zluggish
 
-zoffline enables the use of [Zwift](http://zwift.com) offline by acting as a partial implementation of a Zwift server. By default zoffline is only for a single player. See [Step 6: Enable Multiplayer](#step-6-optional-enable-multiplayer) for how to enable support for multiple users/profiles.
+Zluggish is a self-hosted, open source server implementation of [Zwift](http://zwift.com) that implements several features not available in the official app.
 
-zoffline also offers riding against ghosts (your previous rides). Enable this feature by checking "Enable ghosts" in zoffline's launcher. See [Extra features](#extra-features) for more details.
+This project builds on [zwift-offline](https://github.com/zoffline/zwift-offline) and [its fork](https://github.com/fatsbrown/zwift-offline).
 
-Additionally, zoffline's launcher allows selecting a specific map to ride on without mucking about with config files.
+If you are migrating from the legacy zwift-offline app, please read the migration docs below.
+
+## Features
+
+Zluggish gives you complete control over the server, including the following features:
+
+- **Offline play**: ride without having to communicate with Zwift servers
+- **Choose any map**: ride wherever you want without being constrained by the official schedule
+- **Your own ghosts**: ride alongside your previous efforts, regroup ghosts through chat, and customize their appearance
+- **Custom RoboPacers and pelotons**: build pacers from recorded rides and add configurable followers, with control over group size, equipment, formation, and rider strength.
+- **Saved-position bookmarks**: save named places during a ride, start another session from a bookmark, or return to one using in-game teleport.
+- **Intervals.icu planned workouts**: bring scheduled workouts into the launcher and sync completed activities back to Intervals.icu. Exported TrainingPeaks `.zwo` workouts can also be imported through a local folder.
+- **Local records and data**: keep profiles, activities, and recordings in storage you can back up and inspect, with optional all-time leaderboards for your server.
+- **Equipment and progression control**: customize equipment availability and Drop balances on your own server, without grinding through unlocks.
+
+Note that Zluggish is offline-only: there is no connection to Zwift's public multiplayer world. You cannot join riders on the official service, participate in its races, group rides, or club events, or compete on its global leaderboards. Local progression and records are separate from your official Zwift account. You can still ride with family or friends connected to your own Zluggish server using private multiplayer.
+
+## Requirements
+
+**Zluggish requires a technical setup**, so you have to be comfortable with that to use it.
+
+The **server** stores your progress and runs the ride services while the **client** is the device running the Zwift app and displaying the ride. In many cases the server and client can be on the same machine.
+
+### Server requirements
+
+- Windows, Linux and macOS are supported
+- Docker is the recommended deployment method
+
+### Client requirements
+
+Windows and macOS is recommended for the client, but Android is an advanced option that requires manual app patching.
+
+In addition, you must fulfill the [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB).
+
+Note that iPhone and iPad are not supported clients: iOS and iPados are too locked dowh.
+
+
 
 ## Install
 
@@ -17,7 +53,7 @@ There are four ways with which to install and run zoffline depending on your pla
 To install zoffline on Windows:
 
 * Download the latest zoffline release from https://github.com/fatsbrown/zwift-offline/releases/latest
-* If you are not running zoffline on the same PC that Zwift is running: create a ``server-ip.txt`` file in the ``storage`` directory containing the IP address of the PC running zoffline.
+* If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in `storage/config.jsonc` to the IP address of the PC running zoffline.
 * Run the downloaded zoffline.exe
   * Once run, zoffline will create a ``storage`` directory in the same folder it's in to store your Zwift progress.
 * Start Zwift with zoffline.exe running (__after completing step 2__ or running __configure_client__ script from https://github.com/oldnapalm/zoffline-helper/releases/latest)
@@ -35,7 +71,7 @@ To install zoffline on Linux, Windows, or macOS:
   * e.g., on Linux/Mac: ``pip3 install -r requirements.txt``
   * e.g., on Windows in command prompt: ``pip install -r requirements.txt``
     * You may need to use ``C:\Users\<username>\AppData\Local\Programs\Python\Python<version>\Scripts\pip.exe`` instead of just ``pip``
-* If you are not running zoffline on the same PC that Zwift is running: create a ``server-ip.txt`` file in the ``storage`` directory containing the IP address of the PC running zoffline.
+* If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in `storage/config.jsonc` to the IP address of the PC running zoffline.
 * Run standalone.py before starting Zwift
   * e.g., on Linux/Mac: ``sudo ./standalone.py``
     * sudo is needed because we're binding to the privileged ports 80 and 443.
@@ -58,7 +94,7 @@ zoffline can be installed on the same machine as Zwift or another local machine.
   * The path you pass to ``-v`` will likely need to be world readable and writable.
   * A list of valid ``<timezone>`` values (e.g. America/New_York) can be found [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
   * Adding ``--restart unless-stopped`` will make zoffline start on boot if you have Docker v1.9.0 or greater.
-* If you are not running zoffline on the same PC that Zwift is running: create a ``server-ip.txt`` file in the ``</path/to/host/storage>`` directory containing the IP address of the PC running zoffline.
+* If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in the mounted `config.jsonc` to the IP address of the PC running zoffline.
 * Start zoffline with:
   ``docker start zwift-offline``
 </details>
@@ -85,7 +121,7 @@ zoffline can be installed on the same machine as Zwift or another local machine.
           restart: unless-stopped
   ```
   * In the ``volumes`` tag replace ``./storage/`` before the ``:`` with the directory path you want to use as your local zoffline data store.
-* If you are not running zoffline on the same PC that Zwift is running: create a ``server-ip.txt`` file in the ``storage`` directory containing the IP address of the PC running zoffline.
+* If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in `storage/config.jsonc` to the IP address of the PC running zoffline.
 * Start zoffline with: ``docker-compose up -d``
 </details>
 
@@ -147,7 +183,7 @@ to generate your own certificates and do the same.
     ```
   * Turn off "Private DNS" in Android settings
   * Run "Virtual Hosts" and select the created `hosts.txt` file
-  * Optionally, instead of using the "Virtual Hosts" app, you can create a ``fake-dns.txt`` file in the ``storage`` directory and set the "DNS 1" of your phone Wi-Fi connection to the IP address of the PC running zoffline
+  * Optionally, instead of using the "Virtual Hosts" app, you can set `dns.enabled` to `true` in `storage/config.jsonc` and set the "DNS 1" of your phone Wi-Fi connection to the IP address of the PC running zoffline
   * Note: If you know what you're doing and have a capable enough router you can adjust your router to alter these DNS records instead of using the "Virtual Hosts" app or changing your phone DNS.
 * Patch after every installation or update:
   * Install/update Zwift from Google play, but do not start it yet.
@@ -267,7 +303,7 @@ To obtain your current profile:
   * Important: don't add ``cdn.zwift.com`` to ``hosts.txt``, Companion needs to download images from the official server
 * Turn off "Private DNS" in Android settings
 * Run "Virtual Hosts" and select the created ``hosts.txt`` file
-* Optionally, instead of using the "Virtual Hosts" app, you can create a ``fake-dns.txt`` file in the ``storage`` directory and set the "DNS 1" of your phone Wi-Fi connection to the IP address of the PC running zoffline
+* Optionally, instead of using the "Virtual Hosts" app, you can set `dns.enabled` to `true` in `storage/config.jsonc` and set the "DNS 1" of your phone Wi-Fi connection to the IP address of the PC running zoffline
 * Note: If you know what you're doing and have a capable enough router you can adjust your router to alter these DNS records instead of using the "Virtual Hosts" app or changing your phone DNS.
 
 </details>
@@ -278,12 +314,12 @@ To obtain your current profile:
 
 To enable support for multiple users perform the steps below:
 
-* Create a ``multiplayer.txt`` file in the ``storage`` directory.
-* If you are not running zoffline on the same PC that Zwift is running: create a ``server-ip.txt`` file in the ``storage`` directory containing the IP address of the PC running zoffline.
+* Set `server.multiplayer` to `true` in `storage/config.jsonc`.
+* If you are not running zoffline on the same PC that Zwift is running: set `server.advertised_ip` in `storage/config.jsonc` to the IP address of the PC running zoffline.
   * TCP ports 80, 443, 3025 and UDP port 3024 will need to be open on the PC running zoffline if it's running remotely.
 * Start Zwift and create an account.
   * This account will only exist on your zoffline server and has no relation with your actual Zwift account.
-* To enable the password reset feature: create a ``gmail_credentials.txt`` file in the ``storage`` directory containing the login credentials of a Gmail account.
+* To enable password resets, create a credentials file with Gmail login credentials and reference it through `mail.credentials_file` in server JSONC.
   * You need to access https://security.google.com/settings/security/apppasswords and create an app password to allow the login from the server.
   * Optionally, the third line can contain the host for the recovery URL (server IP will be used by default).
 
@@ -296,16 +332,16 @@ Family mode is an optional login screen for a trusted household using multiplaye
 To enable it:
 
 1. Back up your `storage` directory, including `zwift-offline.db`.
-2. Keep `storage/multiplayer.txt` and create an empty `storage/family_mode.txt`.
-3. Restart zoffline. Family mode requires multiplayer; the server will report an error and exit if its multiplayer flag is missing.
+2. Set `server.multiplayer` and `server.family_mode` to `true` in `storage/config.jsonc`.
+3. Restart zoffline. Family mode requires multiplayer; the server will report an error and exit if multiplayer is disabled.
 
-The option applies to the whole server. In family mode, remembered logins and `storage/auto_launch.txt` do not skip the rider picker, even if only one account exists. **Switch rider** returns to the list. Different devices can select different riders and ride concurrently.
+The option applies to the whole server. In family mode, remembered logins and `launcher.auto_launch` do not skip the rider picker, even if only one account exists. **Switch rider** returns to the list. Different devices can select different riders and ride concurrently.
 
 Use **Add family member** to create a rider with only a name. Duplicate names are allowed; each card shows its unique rider number. New family accounts have no administrator privileges. Existing accounts, passwords, player IDs, and privileges are preserved.
 
 Anyone who can reach this server can select any listed account, access its settings and configured integrations, and use its administrative privileges. Family mode is intended for a household where that access is acceptable.
 
-**Returning to password login or using Android:** Existing accounts keep their passwords. New family accounts receive a unique internal username and an unguessable password that is not displayed. While family mode is enabled, the server owner can select the rider, open **Settings**, note the username shown there (`family-…@local.invalid`), and use **Set login password** to assign a known password. No email reset setup is needed for this procedure. Do this for each new account that needs password login, then remove `storage/family_mode.txt` and restart to restore the normal launcher. If you already disabled family mode, temporarily enable it again to set those passwords.
+**Returning to password login or using Android:** Existing accounts keep their passwords. New family accounts receive a unique internal username and an unguessable password that is not displayed. While family mode is enabled, the server owner can select the rider, open **Settings**, note the username shown there (`family-…@local.invalid`), and use **Set login password** to assign a known password. No email reset setup is needed for this procedure. Do this for each new account that needs password login, then set `server.family_mode` to `false` and restart to restore the normal launcher. If you already disabled family mode, temporarily enable it again to set those passwords.
 
 Android uses a native login screen rather than the desktop picker. Existing Android credentials continue to work; a new family account needs the username and password set through the procedure above before it can log in on Android. Real Zwift credentials for imports/uploads and credentials or tokens for connected services are still required separately. Family mode does not share ghost recordings.
 
@@ -313,22 +349,43 @@ Android uses a native login screen rather than the desktop picker. Existing Andr
 
 To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST`` or use the script ``run_ipv6.bat``.
 
-### Extra features
+## Legacy configuration migration
+
+Zluggish uses JSONC configuration instead of the legacy zwift-offline settings files. **Migrate existing installations before starting the new server.**
+
+1. Stop the server and back up the entire `storage` directory, including `zwift-offline.db`.
+2. From the Zluggish project directory, install the management CLI in your Python environment:
+
+   ```sh
+   pip install -e .
+   ```
+
+3. Replace `/path/to/storage` below with your existing storage directory. Preview the proposed settings with `--dry-run` and review the output before running the migration and validation commands:
+
+   ```sh
+   zluggish --storage-dir "/path/to/storage" config migrate --dry-run
+   zluggish --storage-dir "/path/to/storage" config migrate --output "/path/to/storage/config.jsonc"
+   zluggish --storage-dir "/path/to/storage" config validate
+   ```
+
+4. Restart the server with the same storage directory. Rider preferences and bot settings are migrated too; credentials, activities, and recordings stay in place. If you choose a configuration file outside storage, set `ZLUGGISH_CONFIG` to its path in the server's environment before restarting.
+
+## Extra features
 
 <details><summary>Ghosts</summary>
 
 * Enable this feature by checking "Enable ghosts" in zoffline's launcher (if using Android, access ``https://<zoffline_ip>/user/zoffline/``, check "Enable ghosts" and click "Start Zwift" to save the option).
 * When you save an activity, the ghost will be saved in ``storage/<player_id>/ghosts/<world>/<route>``. Next time you ride the same route, the ghost will be loaded.
 * Type ``.regroup`` in chat to regroup the ghosts.
-* Equipment can be customized by creating a file ``ghost_profile.txt`` inside the ``storage`` folder. The script ``find_equip.py`` can be used to populate this file.
+* Equipment can be customized by creating a file ``ghost_profile.txt`` inside the ``storage`` folder. The script ``find_equip.py`` can populate this asset; set `ghosts.profile_file` to its path in server JSONC.
 </details>
 
 <details><summary>Bots</summary>
 
-* Create a file ``enable_bots.txt`` inside the ``storage`` folder to load ghosts as bots, they will keep riding around regardless of the route you are riding.
-* Optionally, ``enable_bots.txt`` can contain a multiplier value (be careful, if the resulting number of bots is too high, it may cause performance issues or not work at all).
+* Set `bots.enabled` to `true` in server JSONC to load ghosts as bots; they keep riding regardless of your route.
+* Set `bots.multiplier` to an integer from 1 to 100 to duplicate bots. Large numbers can affect performance.
 * Type ``.group`` in chat to group the bots, or ``.groupall`` to include duplicates (if using multiplier). Type ``.autogroup`` or ``.autogroupall`` to automatically group whenever you change roads. Type ``.stopautogroup`` to stop automatic grouping, or ``.disperse`` to randomize positions.
-* Names, nationalities and equipment can be customized by creating a file ``bot.txt`` inside the ``storage`` folder. The script ``get_pro_names.py`` can be used to populate this file.
+* Names, nationalities and equipment can be customized by creating a file ``bot.txt`` inside the ``storage`` folder. The script ``get_pro_names.py`` can populate this catalogue; set `bots.riders_file` to its path in server JSONC.
 * If you want some random bots, check [this repository](https://github.com/oldnapalm/zoffline-bots).
 </details>
 
@@ -346,8 +403,8 @@ To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST``
 
 * A peloton is one RoboPacer followed by a custom group of bots riding in formation around and behind it, so joining the pacer feels like riding in a real group.
 * Followers move up and back inside the group, drift laterally, stretch out on climbs (weaker riders lose some meters and come back on the flat), coast on descents and show realistic power (drafting), cadence and heart rate.
-* Quick way: ride next to a RoboPacer and type ``.peloton 20`` in chat (``.peloton`` shows the current size, ``.peloton off`` removes it). This writes ``storage/peloton.txt``.
-* Or create ``storage/peloton.txt`` manually. ``pacer`` is the RoboPacer folder name (inside ``storage/robopacers``) or its player ID. Every other field is optional:
+* Quick way: ride next to a RoboPacer and type ``.peloton 20`` in chat (``.peloton`` shows the current size, ``.peloton off`` removes it). This writes ``storage/peloton.jsonc``.
+* Or create ``storage/peloton.jsonc`` manually. ``pacer`` is the RoboPacer folder name (inside ``storage/robopacers``) or its player ID. Every other field is optional:
 
 ```json
 {
@@ -373,7 +430,7 @@ To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST``
 }
 ```
 
-* ``bots``: total followers (max 200). Riders not listed in ``riders`` get random names (from ``bot.txt`` if it exists) and random equipment.
+* ``bots``: total followers (max 200). Riders not listed in ``riders`` get random names (from the `bots.riders_file` catalogue when configured) and random equipment.
 * ``columns``: max width of the group (0 = automatic). ``row_gap``: meters between rows. ``lateral_spacing``: lateral distance between riders in ``roadPosition`` units (100000 = 1 meter, default 0.65 m). ``beside_pacer``: riders alongside the pacer.
 * ``dynamics``: 0 = rigid formation, 1 = normal, 2 = very lively. ``shuffle_interval``: average seconds between position changes. ``draft``: fraction of power used by a rider on a wheel. ``climb_stretch`` and ``max_drop``: how much the group stretches on climbs.
 * Each rider in ``riders`` accepts the same fields as ``bot.txt`` plus ``position`` (``front``, ``middle``, ``back`` or ``any``), ``strength`` (0.5 - 1.5), ``weight`` (kg), ``height`` (cm), ``cadence`` (rpm) and ``max_heart_rate``.
@@ -406,20 +463,20 @@ To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST``
 
 <details><summary>All-time leaderboards</summary>
 
-* To enable all-time leaderboards (override 60 minutes live results and 90 days personal records), create a file ``all_time_leaderboards.txt`` in the ``storage`` directory.
+* To enable all-time leaderboards (override 60 minutes live results and 90 days personal records), set `leaderboards.all_time` to `true` in server JSONC.
 * Jerseys are still valid for 60 minutes but will be granted only when a new all-time record is set.
 </details>
 
 <details><summary>Entitlements</summary>
 
-* To unlock entitlements (special equipment), create a file ``unlock_entitlements.txt`` in the ``storage`` directory.
-* To unlock all equipment, create a file ``unlock_all_equipment.txt`` instead.
+* To unlock entitlements (special equipment), set `equipment.unlock_entitlements` to `true` in server JSONC.
+* To unlock all equipment, set `equipment.unlock_all` to `true` instead.
 </details>
 
 <details><summary>CDN proxy</summary>
 
-* To obtain the official map schedule and update files from Zwift server: create a ``cdn-proxy.txt`` file in the ``storage`` directory. This can only work if you are running zoffline on a different machine than the Zwift client.
-* By default, zoffline will try to proxy using Google public DNS to resolve Zwift host names, this should work even if zoffline is running on the same machine as the Zwift client. To avoid it, create a ``disable_proxy.txt`` file in the ``storage`` directory.
+* To obtain the official map schedule and update files from Zwift server: set `proxy.mode` to `"enabled"` in server JSONC. This can only work if you are running zoffline on a different machine than the Zwift client.
+* By default, zoffline will try to proxy using Google public DNS to resolve Zwift host names, this should work even if zoffline is running on the same machine as the Zwift client. To avoid it, set `proxy.mode` to `"disabled"`. The default mode is `"auto"`.
 * If you want to serve update files from zoffline, run the script ``get_gameassets.py`` to download the game files.
 </details>
 
@@ -432,11 +489,8 @@ To enable support for IPv6 set the environment variable ``ZOFFLINE_SERVER_HOST``
   [discord]
   token = 
   webhook = 
-  channel = 
-  welcome_message = 
-  help_message = 
-  announce_players = 
   ```
+* Reference that credentials file in `integrations.discord.credentials_file`, set `integrations.discord.enabled` to `true`, and configure `channel`, `welcome_message`, `help_message`, and `announce_players` under `integrations.discord` in server JSONC.
 </details>
 
 ## Community Discord server and Strava club
@@ -490,11 +544,10 @@ If you get this error even though zoffline is up to date, rename the file ``Zwif
 </details>
 
 
-## Disclaimer
+## Legal notice
 
-Zwift is a trademark of Zwift, Inc., which is not affiliated with the maker of
-this project and does not endorse this project.
+Zluggish is an independent, community-developed project. It is **not affiliated with, endorsed by, sponsored by, or officially supported by Zwift, Inc.** Zwift is a trademark of Zwift, Inc. Other product and company names belong to their respective owners; references to them do not imply affiliation or endorsement.
 
-All product and company names are trademarks of their respective holders. Use of
-them does not imply any affiliation with or endorsement by them.
+Zluggish is licensed under the **GNU Affero General Public License, version 3 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full terms, including the warranty disclaimer. Third-party components retain their respective licenses and copyright notices. This license does not grant rights to Zwift's proprietary client, game assets, or trademarks.
 
+This project is based on [zwift-offline](https://github.com/zoffline/zwift-offline) and [fatsbrown's fork of zwift-offline](https://github.com/fatsbrown/zwift-offline). Credit for that foundation belongs to their authors and contributors.

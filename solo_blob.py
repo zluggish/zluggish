@@ -7,7 +7,7 @@ speed), sit wheel to wheel behind you to use the draft, mix and rotate:
 somebody comes up to your handlebars, pulls for a while, then drifts back
 through the group and somebody else takes over.
 
-Enable in storage/solo_blob.txt (JSON) or with the in-game chat commands:
+Enable in storage/solo_blob.jsonc (JSONC) or with the in-game chat commands:
   .blob <n>   start/keep a blob of n riders around you
   .blob       show status
   .blob new   same number of riders, new faces
@@ -35,12 +35,15 @@ import profile_pb2
 import udp_node_msgs_pb2
 
 import blob_gestures
+
+from zluggish_config.schema import SOLO_BLOB, SOLO_DEFAULTS as DEFAULT_CONFIG
+from zluggish_config.store import read_document, edit_document
 from peloton import (course_of, road_of, is_forward, clamp, lerp,
                      ROAD_POSITION_MIN, ROAD_POSITION_MAX, ROAD_POSITION_UNITS_PER_METER)
 
 SCRIPT_DIR = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.realpath(__file__))
 
-CONFIG_FILE_NAME = 'solo_blob.txt'
+CONFIG_FILE_NAME = 'solo_blob.jsonc'
 ROAD_POSITION_CENTER = 10000000      # roadPosition of the middle of the road (as in peloton.py)
 
 # equipment taken over from a bot.txt entry (the same list standalone.py uses for bots): the team kit,
@@ -127,81 +130,6 @@ FALL_BACK_RATE_M_PER_S = 0.7         # the old leader drifts back to the tail at
 LANE_SWAP_ZONE_M = 2.5               # nobody changes sides this close to your position
 DROP_SIDE_M = 1.3                    # sideways offset of the old leader while he drifts back
 
-DEFAULT_CONFIG = {
-    'enabled': False,
-    'riders': 8,
-    'row_gap': 1.8,                 # meters between rows (staggered, a bike is ~1.8 m long)
-    'tail_gap': 4.0,                # the group tries to stay within this many meters behind you
-    'lateral_spacing': 0.95,          # meters between riders side to side
-    'lead_gap': 1.6,                 # meters a lead rider sits in front of you
-    'lead_lateral': 0.8,             # meters the lead riders sit to the side of you (alternating)
-    'columns': 0,                    # max group width (0 = automatic)
-    'shuffle_interval': 25,          # average seconds between position changes
-    'rotate': True,                  # false = nobody takes the front on their own (gestures still work)
-    'pull_interval': 60,             # average seconds between front rotations
-    'lead_spread': 1,                # the number of riders in front changes by up to this many at once (0 = fixed)
-    'full_range': False,              # true = anything from nobody in front (you lead) to everybody in front (you are last)
-    'max_lead': 8,                 # meters: the whole group in front is squeezed into this distance ahead of you
-    'diag_interval': 0,             # seconds between diagnostic log lines (0 = off)
-    'latency_comp': 0,               # seconds your packets are old when sent (the group then rides that much
-                                     # further ahead of the last packet), or "auto" = use the measured
-                                     # packet_lag from the diag log line. Matters most at speed (descents).
-    'formation_interval': 45,        # average seconds between changes in the formation in front of you
-    'turn_interval': 1200,            # every this many seconds YOU take a turn at the front (0 = never)
-    'rotation_rate': 0.7,            # m/s the riders move up or back when the line rotates
-    'pull_duration': 18,             # seconds a pull lasts
-    'pass_time': 18,                 # seconds an overtaking rider needs to get past the leader
-    'climb_stretch': 1.0,            # how much the group stretches on climbs
-    'max_drop': 30,                  # max meters behind you a rider can sit
-    'hammer_time': 180,              # seconds the HAMMER gesture drives a hard pace
-    'toast_time': 120,               # seconds the TOAST gesture makes everyone ease off
-    'lead_time': 120,                # seconds the BELL gesture keeps you at the front
-    'wander_gap': 0.3,               # meters: riders behind you drift randomly this far along the road around
-                                     # their slot (0 = off, 0.6-0.9 looks like a real peloton)
-    'wander_lateral': 0.15,           # meters: the same sideways (0 = off, 0.25-0.35 is plenty)
-    'bot_gestures': True,            # riders of the group give hand signals now and then (elbow flick, toast, nice, bell, ride on)
-    'gesture_interval': 75,          # seconds between two random "Ride On" gestures of the group (0 = none)
-    'gesture_chance': 1.0,           # scales the chance of every other signal (0 = none, 2 = twice as often)
-    'wander_time': 7,                # seconds a drift takes to change direction (higher = slower, calmer)
-    'ragged_rows': False,            # true = rows behind you differ in width, spacing and stagger
-    'lateral_via': 'both',             # how the sideways offset reaches the game: 'xz' = world position only (the game
-                                     # flattens a wide group), 'both' = world position AND roadPosition (like the
-                                     # peloton option, recommended), 'road' = roadPosition only
-    'lateral_scale': 1.0,            # multiplies every sideways offset on the way out (a last resort if the game still
-                                     # shows the group narrower than it is)
-    'road_half_width': 3.0,          # meters: half the width of the drivable road around its centre (0 = off). Nobody is ever
-                                    # placed outside it: when you ride near an edge the whole group slides sideways (max 0.5 m/s)
-                                    # and every single rider is clamped to the road, also while he sidesteps another one.
-                                    # 3.0 fits a narrow bridge. Everything below about the axis needs this to be > 0
-    'road_limits': 'auto',           # 'auto' = the road centre line is a wall and the side you may ride on depends on your direction
-                                    # of travel (forward = + side, the other way = - side); the outer edge comes from real recorded
-                                    # rides (data/road_limits.txt, scripts/gen_road_limits.py), road_half_width is the fallback
-                                    # for roads that are not in the table. 'off' = the fixed zone below (road_axis_limit/side)
-    'max_road_shift': 4.0,          # (road_limits 'auto') meters: the most the whole group may slide sideways off you to stay on the road.
-                                    # Ride in the middle and the shift is 0; ride at an edge (or next to the invisible wall by the centre
-                                    # line) and the group slides just far enough that its outermost rider is in line with you.
-                                    # 0 = never slide: the group is squeezed on that side instead
-    'road_axis_limit': 1.5,         # (road_limits 'off' only) meters from the road centre (roadPosition 10,000,000) to the road AXIS (the centre line
-                                    # you must not cross), measured towards the side given by road_axis_side. Riders beyond it
-                                    # get pulled back by the game, which looks like an invisible wall, so the group keeps
-                                    # (this - 0.25 m) from it. 0 = no axis, that side ends at road_half_width like the other
-    'road_axis_side': -1,           # which side of the road centre the axis is on: -1 = lower roadPosition (default),
-                                    # +1 = higher roadPosition. Riders on that side of the group still veer towards the axis?
-                                    # then flip it
-    'only_kitted': True,            # true = draw the riders only from bot.txt entries that have a team kit
-                                    # (the others would ride in a random kit)
-    'scatter': True,                # true = riders behind you are scattered over the width of the road
-                                    # (blue-noise layout) instead of sitting in rows; ignores columns/tail_gap
-    'scatter_width': 3.0,           # meters: how wide the scattered group may spread
-    'scatter_gap': 1.75,            # meters along the road between riders of the same lane when scattered
-    'scatter_side': 1.0,            # meters: riders that sit level with each other are at least this far apart sideways
-                                    # (not shoulder to shoulder; anyone closer sideways is further apart along the road)
-    'scatter_beside': 1.0,          # meters sideways at which scattered riders may ride right beside you
-    'keep_apart_long': 1.75,        # meters along the road between the centres of two riders (their ellipse, with keep_apart)
-    'keep_apart': 0.85,             # meters of sideways clearance riders behind you keep from each other
-                                    # (0 = off, 0.8-0.9 = nobody rides through anybody: they go around or wait; a sidestep
-                                    # never goes past the road edge or axis, it goes the other way or waits instead)
-}
 
 SEP_LONG_M = 1.7                     # keep_apart: bike length plus a little air along the road
 KEEP_APART_PATIENCE_S = 5.0          # a rider blocked this long is let through (never a deadlock)
@@ -1673,20 +1601,15 @@ class SoloBlobManager:
     # ---------- config ----------
 
     def _read_config(self):
-        try:
-            with open(self.config_file) as f:
-                return json.load(f)
-        except Exception as exc:
-            self.logger.warning('[SoloBlob] bad config %s: %s' % (self.config_file, repr(exc)))
-            return {}
+        return read_document(self.config_file, SOLO_BLOB, {})
 
-    def _write_config(self, config):
-        try:
-            with open(self.config_file, 'w') as f:
-                json.dump(config, f, sort_keys=True)
-                f.write('\n')
-        except Exception as exc:
-            self.logger.warning('[SoloBlob] could not write config: %s' % repr(exc))
+    def _update_config(self, updates=None, toggle_record=False):
+        def change(document):
+            if toggle_record:
+                document['record'] = not document.get('record', False)
+            else:
+                document.update(updates)
+        return edit_document(self.config_file, SOLO_BLOB, change, initial={})
 
     def _config_mtime(self):
         try:
@@ -1696,10 +1619,15 @@ class SoloBlobManager:
 
     def load(self):
         with self.lock:
+            try:
+                config = self._read_config()
+            except (ValueError, OSError) as exc:
+                self.logger.warning('[SoloBlob] bad config %s: %s', self.config_file, exc)
+                self.config_mtime = self._config_mtime()
+                return  # Keep the last valid simulation running.
             self.blobs = {}
             if os.path.isfile(self.config_file):
                 self.config_mtime = self._config_mtime()
-                config = self._read_config()
                 if config.get('enabled'):
                     entry = dict(DEFAULT_CONFIG)
                     entry.update(config)
@@ -1800,7 +1728,7 @@ class SoloBlobManager:
     RECORD_INTERVAL_SECONDS = 0.5
 
     def _record(self, blob, riders):
-        """Debug aid ("record": true in solo_blob.txt): one JSON line per tick with everything
+        """Debug aid ("record": true in solo_blob.jsonc): one JSON line per tick with everything
         needed to judge the blob offline - the anchor packet, how its position/speed was
         extrapolated, grade, formation, timers and, per rider, the decision and where he
         really ended up relative to the extrapolated anchor ('rel_long' > 0 = ahead of you;
@@ -1900,9 +1828,7 @@ class SoloBlobManager:
                     return 'Blob active around another player.'
                 return 'Blob off. Start it with ".blob <n>" (e.g. ".blob 8").'
             if args == 'record':
-                config = self._read_config()
-                config['record'] = not config.get('record')
-                self._write_config(config)
+                config = self._update_config(toggle_record=True)
                 self.load()
                 return 'Recording %s (storage/%s).' % ('ON' if config['record'] else 'off', self.RECORD_FILE_NAME)
             if args in ('new', 'restart', 'reroll'):
@@ -1912,9 +1838,7 @@ class SoloBlobManager:
                 blob.reroll()
                 return 'New riders on the road.'
             if args == 'off':
-                config = self._read_config()      # keep every other setting: only switch the blob off
-                config['enabled'] = False
-                self._write_config(config)
+                self._update_config({'enabled': False})
                 self.load()
                 return 'Blob off.'
             if args.isdigit():
@@ -1923,9 +1847,7 @@ class SoloBlobManager:
                     return self.chat_command(player_id, 'off')
                 if count > MAX_RIDERS:
                     return 'Too many riders (max %d).' % MAX_RIDERS
-                config = self._read_config()      # keep every other setting (scatter, keep_apart...): change only these three
-                config.update({'enabled': True, 'player_id': player_id, 'riders': count})
-                self._write_config(config)
+                self._update_config({'enabled': True, 'player_id': player_id, 'riders': count})
                 self.load()
                 return 'Blob on: %d rider(s) around you.' % count
             return 'Usage: .blob <n>, .blob new, .blob off, .blob hammer|toast|attack|lead'

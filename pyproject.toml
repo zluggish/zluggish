@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zluggish"
+version = "0.1.0"
+description = "Zluggish configuration management CLI"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+dependencies = ["json-five==1.1.2", "jsonschema==4.26.0", "filelock>=3.16,<4"]
+
+[project.scripts]
+zluggish = "cli.__main__:main"
+
+[tool.setuptools]
+packages = ["cli", "zluggish_config"]
+
+[tool.setuptools.package-data]
+zluggish_config = ["schemas/*.json"]

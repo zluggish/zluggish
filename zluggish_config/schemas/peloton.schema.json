@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "pelotons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bots": {
+            "type": "integer",
+            "default": 20,
+            "minimum": 0,
+            "maximum": 200
+          },
+          "columns": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "row_gap": {
+            "type": "number",
+            "default": 2.2,
+            "exclusiveMinimum": 0
+          },
+          "lateral_spacing": {
+            "type": "number",
+            "default": 65000,
+            "exclusiveMinimum": 0
+          },
+          "beside_pacer": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 0
+          },
+          "dynamics": {
+            "type": "number",
+            "default": 1.0
+          },
+          "shuffle_interval": {
+            "type": "number",
+            "default": 30
+          },
+          "draft": {
+            "type": "number",
+            "default": 0.7
+          },
+          "climb_stretch": {
+            "type": "number",
+            "default": 1.0
+          },
+          "max_drop": {
+            "type": "number",
+            "default": 40
+          },
+          "pacer": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "riders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "country_code": {
+                  "type": "integer"
+                },
+                "bike_frame": {
+                  "type": "integer"
+                },
+                "bike_frame_colour": {
+                  "type": "integer"
+                },
+                "bike_wheel_front": {
+                  "type": "integer"
+                },
+                "bike_wheel_rear": {
+                  "type": "integer"
+                },
+                "glasses_type": {
+                  "type": "integer"
+                },
+                "ride_jersey": {
+                  "type": "integer"
+                },
+                "ride_helmet_type": {
+                  "type": "integer"
+                },
+                "ride_shoes_type": {
+                  "type": "integer"
+                },
+                "ride_socks_type": {
+                  "type": "integer"
+                },
+                "run_shirt_type": {
+                  "type": "integer"
+                },
+                "run_shorts_type": {
+                  "type": "integer"
+                },
+                "run_shoes_type": {
+                  "type": "integer"
+                },
+                "first_name": {
+                  "type": "string"
+                },
+                "last_name": {
+                  "type": "string"
+                },
+                "is_male": {
+                  "type": "boolean"
+                },
+                "position": {
+                  "enum": [
+                    "front",
+                    "middle",
+                    "back",
+                    "any"
+                  ]
+                },
+                "strength": {
+                  "type": "number"
+                },
+                "weight": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "cadence": {
+                  "type": "number"
+                },
+                "max_heart_rate": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            },
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "pacer"
+        ]
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}
