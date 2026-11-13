@@ -9,6 +9,7 @@ import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
+import { pythonFixtures } from '#tests/support/python';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
@@ -262,14 +263,26 @@ await test('existing Zluggish database is renamed without losing riders', async 
 await test('account migration publishes the renamed database and preserves riders', async (t) => {
   const f = runtimeFixture(t);
   const rider = await f.accounts.create('Migrated Rider', '', true);
+  const oldScrypt = await f.accounts.create('Scrypt Rider', '');
+  const currentRider = await f.accounts.create('Current Rider', 'current-password');
+  const currentHash = currentRider.pass_hash;
+  const passwordless = await f.accounts.create('Passwordless Rider', '');
+  f.accounts.db
+    .prepare('UPDATE user SET pass_hash=? WHERE player_id=?')
+    .run(pythonFixtures.sha256Hash, rider.player_id);
+  f.accounts.db
+    .prepare('UPDATE user SET pass_hash=? WHERE player_id=?')
+    .run(pythonFixtures.scryptHash, oldScrypt.player_id);
   f.accounts.close();
   const current = resolve(f.accounts.storage, 'zluggish.db');
   const legacy = resolve(f.accounts.storage, 'zwift-offline.db');
   renameSync(current, legacy);
+  assert.throws(() => new Accounts(f.accounts.storage), /upgrade required/);
   // SQLite backup work needs a live event loop on newer Node releases.
   const keepAlive = setInterval(() => {}, 1000);
 
   try {
+    await migrateAccounts(f.accounts.storage);
     await migrateAccounts(f.accounts.storage);
   } finally {
     clearInterval(keepAlive);
@@ -279,6 +292,20 @@ await test('account migration publishes the renamed database and preserves rider
   assert.ok(!existsSync(legacy));
   const reopened = new Accounts(f.accounts.storage);
   assert.equal(reopened.get(rider.player_id)?.first_name, 'Migrated');
+
+  for (const previous of [rider, oldScrypt]) {
+    assert.equal(reopened.get(previous.player_id)?.pass_hash, null);
+    assert.equal(reopened.get(previous.player_id)?.auth_version, previous.auth_version + 1);
+    assert.equal(reopened.identity(`${previous.player_id}:${previous.auth_version}`), null);
+  }
+
+  assert.equal(reopened.get(passwordless.player_id)?.auth_version, passwordless.auth_version);
+  assert.equal(reopened.get(currentRider.player_id)?.pass_hash, currentHash);
+  assert.equal(await reopened.verify(currentRider, 'current-password'), true);
+  await reopened.changePassword(rider.player_id, 'new-password');
+  const updated = reopened.get(rider.player_id);
+  assert.ok(updated);
+  assert.equal(await reopened.verify(updated, 'new-password'), true);
   reopened.close();
 });
 

@@ -50,6 +50,9 @@ export class Accounts {
           version.data.version !== 4 ||
           !columns.has('auth_version') ||
           !columns.has('official_player_id') ||
+          !!inspection
+            .prepare("SELECT 1 FROM user WHERE pass_hash IS NOT NULL AND pass_hash NOT LIKE '$argon2id$%' LIMIT 1")
+            .get() ||
           !inspection.prepare("SELECT 1 FROM sqlite_master WHERE name='account_state'").get()
         )
           throw new ConfigError('Account database upgrade required; run accounts migrate while stopped');
@@ -186,16 +189,7 @@ export class Accounts {
   }
 
   async verify(rider: Rider, password: string) {
-    const valid = await verifyPassword(rider.pass_hash, password);
-
-    if (valid && rider.pass_hash?.startsWith('sha256$')) {
-      const upgraded = await hashPassword(password);
-      this.db
-        .prepare('UPDATE user SET pass_hash=? WHERE player_id=? AND pass_hash=?')
-        .run(upgraded, rider.player_id, rider.pass_hash);
-    }
-
-    return valid;
+    return verifyPassword(rider.pass_hash, password);
   }
 
   async changePassword(id: number, password: string | null, admin = false) {

@@ -69,6 +69,11 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
     }
 
     db.exec(createSchemaSQL);
+    // Legacy passwords are intentionally discarded. Keep current hashes on reruns
+    // and revoke sessions belonging to riders whose password protection changed.
+    db.exec(
+      "UPDATE user SET pass_hash=NULL, auth_version=auth_version+1 WHERE pass_hash IS NOT NULL AND pass_hash NOT LIKE '$argon2id$%'",
+    );
     const users = db.prepare('SELECT player_id FROM user').all();
 
     const profiles = readdirSync(storage)
