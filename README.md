@@ -276,7 +276,7 @@ These instructions apply to legacy singleplayer and multiplayer installations. F
    pnpm --dir cli cli --storage-dir /path/to/storage config migrate --output /path/to/zluggish.config.ts
    ```
 
-   JSONC-only installations must recreate operator settings in `zluggish.config.ts` manually. Neither `storage/config.jsonc` nor the old JSONC example is loaded by this server. See the [typed config example](server/examples/zluggish.config.ts). Rider preference overrides are stored in `storage/settings.db`, not embedded in operator source.
+   JSONC-only installations must recreate operator settings in `zluggish.config.ts` manually. Neither `storage/config.jsonc` nor the old JSONC example is loaded by this server. See the [typed config example](examples/zluggish.config.ts). Rider preference overrides are stored in `storage/settings.db`, not embedded in operator source.
 
 4. Convert old accounts explicitly:
 
@@ -428,7 +428,7 @@ token = YOUR_BOT_TOKEN
 webhook = YOUR_CHANNEL_WEBHOOK_URL
 ```
 
-Then configure operator settings, using a path relative to the config file (this example assumes `server/zluggish.config.ts`):
+Then configure operator settings, using a path relative to the config file (this example assumes `examples/zluggish.config.ts`):
 
 ```ts
 import { defineConfig } from 'zluggish/config';

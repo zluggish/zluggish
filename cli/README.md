@@ -24,14 +24,14 @@ node cli/dist/src/bin.js --help
 The CLI build also builds the server. Run a command using the compiled entry point:
 
 ```sh
-node cli/dist/src/bin.js --config ./server/zluggish.config.ts config validate
+node cli/dist/src/bin.js --config ./examples/zluggish.config.ts config validate
 ```
 
 Alternatively, run the TypeScript entry point without compiling:
 
 ```sh
 pnpm --dir cli cli --help
-pnpm --dir cli cli --config ./server/zluggish.config.ts config validate
+pnpm --dir cli cli --config ./examples/zluggish.config.ts config validate
 ```
 
 ### Windows (PowerShell)
@@ -87,7 +87,7 @@ Then launch the CLI, appending any arguments from the command reference:
 
 ```sh
 docker compose -f docker/cli.compose.yml run --rm cli --help
-docker compose -f docker/cli.compose.yml run --rm cli --config /workspace/server/zluggish.config.ts config validate
+docker compose -f docker/cli.compose.yml run --rm cli --config /workspace/examples/zluggish.config.ts config validate
 docker compose -f docker/cli.compose.yml run --rm cli --storage-dir /workspace/storage accounts migrate
 ```
 
@@ -136,7 +136,7 @@ node cli/dist/src/bin.js config validate
 node cli/dist/src/bin.js config show
 node cli/dist/src/bin.js config typecheck
 node cli/dist/src/bin.js --storage-dir ./storage config migrate --dry-run
-node cli/dist/src/bin.js --storage-dir ./storage config migrate --output ./server/zluggish.config.ts --solo-player 42
+node cli/dist/src/bin.js --storage-dir ./storage config migrate --output ./storage/zluggish.config.ts --solo-player 42
 ```
 
 Run `config init` for a fresh setup or `config migrate` for legacy storage. Migration requires a new destination named `zluggish.config.ts`; do not create it with `config init` first. `--solo-player` selects the local legacy profile folder ID when solo ownership needs an explicit choice. It may differ from an imported official Zwift ID. Config migration does not migrate accounts; use `accounts migrate` separately.

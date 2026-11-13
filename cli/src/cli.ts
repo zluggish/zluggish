@@ -121,7 +121,7 @@ export async function run(argv: string[], output: (message: string) => void = co
 
     switch (action) {
       case 'init': {
-        writeDurable(selected, readFileSync(resolve(packageRoot(), 'examples/zluggish.config.ts'), 'utf8'));
+        writeDurable(selected, readFileSync(resolve(packageRoot(), '../examples/zluggish.config.ts'), 'utf8'));
         output(`Created ${selected}`);
 
         return 0;
