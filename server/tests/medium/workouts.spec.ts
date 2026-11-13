@@ -267,3 +267,51 @@ for (const sport of [undefined, 'CYCLING', 'cycling', 'RUNNING', 'running', 'ROW
     assert.equal(other.status, 404);
   });
 }
+
+await test('Intervals sync preserves interleaved exercise blocks and text events in downloaded assets', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  await browser.form(`/intervals/${f.rider.username}/`, { athlete_id: '123', api_key: 'test' });
+
+  const workout =
+    '<workout_file><name>A &amp; B</name><sportType>bike</sportType><uniqueId>old</uniqueId><workout>' +
+    '<SteadyState Duration="10" Power="1"><textevent timeoffset="0" message="First &amp; fast"/></SteadyState>' +
+    '<FreeRide Duration="20"/><SteadyState Duration="30" Power="0.5"/></workout></workout_file>';
+
+  t.mock.method(globalThis, 'fetch', (input: URL | string) =>
+    Promise.resolve(
+      String(input).endsWith('/download.zwo')
+        ? new Response(workout)
+        : Response.json([{ id: 42, start_date_local: `${day}T08:00:00` }]),
+    ),
+  );
+  await browser.form(`/intervals/${f.rider.username}/sync`);
+  const response = await f.request('/api/workout/schedule/list');
+  const [entry] = schedules.parse(await response.json());
+  assert.ok(entry);
+  const asset = await createCdn(f).request(new URL(entry.workoutUri).pathname);
+  const contents = await asset.text();
+  assert.match(contents, /Duration="10"[\s\S]*<FreeRide[\s\S]*Duration="30"/);
+  assert.match(contents, /message="First &amp; fast"/);
+  assert.equal(contents.match(/<uniqueId>/g)?.length, 1);
+  assert.ok(contents.includes(`<uniqueId>${entry.workoutId}</uniqueId>`));
+});
+
+await test('TrainingPeaks collisions reject the whole import and preserve existing workouts', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  const folder = resolve(f.config.storageDir, 'bridge');
+  mkdirSync(folder);
+  writeDurable(resolve(folder, 'Tempo A.zwo'), xml);
+  await browser.form(`/trainingpeaks/${f.rider.username}/`, { bridge_folder: folder });
+  await browser.form(`/trainingpeaks/${f.rider.username}/sync`);
+  const before = f.accounts.db.prepare('SELECT * FROM zfile').all();
+  writeDurable(resolve(folder, 'Tempo-A.zwo'), xml.replace('Medium Tempo', 'Different'));
+  const response = await browser.form(`/trainingpeaks/${f.rider.username}/sync`);
+  assert.match(await response.text(), /sync failed/);
+  assert.deepEqual(f.accounts.db.prepare('SELECT * FROM zfile').all(), before);
+  const list = await decode(await f.request('/api/zfiles/list?folder=customworkouts'), ZFilesProtoSchema);
+  const download = await f.request(`/api/zfiles/${list.zfiles[0]?.id}/download`);
+  assert.equal(await download.text(), xml);
+});

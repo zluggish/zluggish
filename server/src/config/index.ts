@@ -29,6 +29,9 @@ export function validateConfig(value: ConfigInput): ResolvedConfig {
   if (result.data.integrations.discord.enabled && !result.data.integrations.discord.credentialsFile)
     throw new ConfigError('integrations.discord.credentialsFile: required when enabled');
 
+  if (Boolean(result.data.tls.certFile) !== Boolean(result.data.tls.keyFile))
+    throw new ConfigError('tls.certFile and tls.keyFile: both required when configuring custom TLS');
+
   return result.data;
 }
 

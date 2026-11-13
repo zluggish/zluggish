@@ -2,7 +2,7 @@ import type { Activity } from '#src/protocol/generated/activity_pb';
 import { StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { writeDurable } from '#src/repositories/files.repository';
 import type { Profiles } from '#src/repositories/profile.repository';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { clone, create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -35,10 +35,15 @@ export function streaksFor(profiles: Profiles, id: number) {
 }
 
 export function updateStreaks(profiles: Profiles, id: number, activity: Activity) {
-  const streaks = streaksFor(profiles, id);
+  const streaks = advancedStreak(streaksFor(profiles, id), activity);
+  writeDurable(resolve(profiles.folder(id), 'streaks.bin'), toBinary(StreaksSchema, streaks), true);
+}
+
+export function advancedStreak(previous: ReturnType<typeof streaksFor>, activity: Activity) {
+  const streaks = clone(StreaksSchema, previous);
   const start = Date.parse(activity.startDate);
 
-  if (!Number.isFinite(start)) return;
+  if (!Number.isFinite(start)) return streaks;
 
   if (start > Number(streaks.weekEnd) + 604_800_000) {
     streaks.curStreak = 1;
@@ -59,5 +64,6 @@ export function updateStreaks(profiles: Profiles, id: number, activity: Activity
   streaks.maxStreakElevation = Math.max(streaks.maxStreakElevation, streaks.curStreakElevation);
   streaks.maxStreakCalories = Math.max(streaks.maxStreakCalories, streaks.curStreakCalories);
   streaks.weekEnd = BigInt(weekRange(start).end);
-  writeDurable(resolve(profiles.folder(id), 'streaks.bin'), toBinary(StreaksSchema, streaks), true);
+
+  return streaks;
 }

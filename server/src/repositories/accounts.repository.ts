@@ -1,3 +1,4 @@
+import { completionSchemaSQL } from '#src/repositories/completion.repository';
 import { ConfigError } from '#src/config/index';
 import { hashPassword, verifyPassword } from '#src/repositories/password.repository';
 import { createSchemaSQL } from '#src/repositories/schema.repository';
@@ -79,6 +80,8 @@ export class Accounts {
       this.db.exec(`BEGIN IMMEDIATE; ${createSchemaSQL}
         INSERT INTO version VALUES (4); INSERT INTO account_state VALUES (1, 0); COMMIT;`);
     }
+
+    this.db.exec(completionSchemaSQL);
   }
 
   list(): Rider[] {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
 import { mediumFixture, binary, decode } from '#tests/medium/support';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { PlayerProfileSchema, PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
 
 const profileJSON = z.object({
   id: z.number(),
@@ -146,4 +146,49 @@ await test('F13 unsafe integer scalar values are rejected in Companion JSON whil
   assert.equal(await json.text(), 'Invalid request');
   const profile = await decode(await f.request('/api/profiles/me'), PlayerProfileSchema);
   assert.equal(profile.currentActivityId, 9_007_199_254_740_992n);
+});
+
+await test('anonymous and other-rider profile projections retain appearance but never personal fields', async (t) => {
+  const f = await mediumFixture(t);
+  const profile = f.profiles.get(f.rider.player_id);
+  Object.assign(profile, {
+    email: 'secret@example.test',
+    dob: '01/01/1980',
+    privacyBits: 64n,
+    weightInGrams: 80_000,
+    ftp: 300,
+    bikeFrame: 123,
+    mixPanelDistinctId: 'secret-id',
+  });
+  profile.privateAttributes = [
+    { $typeName: 'Attribute', id: 1, numberValue: 0n, floatValue: 0, stringValue: 'secret' },
+  ];
+  f.profiles.save(f.rider.player_id, profile);
+
+  for (const headers of [{}, f.headers(f.other)]) {
+    const response = await f.app.request(`/api/profiles?id=${f.rider.player_id}`, { headers });
+    const body = await decode(response, PlayerProfilesSchema);
+    const other = body.profiles[0];
+    assert.ok(other);
+    assert.equal(other.email, '');
+    assert.equal(other.dob, '');
+    assert.equal(other.weightInGrams, 0);
+    assert.equal(other.age, 0);
+    assert.equal(other.ftp, 0);
+    assert.deepEqual(other.privateAttributes, []);
+    assert.equal(other.mixPanelDistinctId, '');
+    assert.equal(other.bikeFrame, 123);
+    assert.equal(other.firstName, f.rider.first_name);
+  }
+
+  const other = await f.request(`/api/profiles/${f.rider.player_id}`, {}, f.other);
+
+  const json = z
+    .object({ emailAddress: z.null(), dob: z.null(), weight: z.null(), age: z.literal(0) })
+    .parse(await other.json());
+
+  assert.equal(json.emailAddress, null);
+  const own = await decode(await f.request('/api/profiles/me'), PlayerProfileSchema);
+  assert.equal(own.email, 'secret@example.test');
+  assert.equal(own.weightInGrams, 80_000);
 });

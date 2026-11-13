@@ -2,6 +2,21 @@ import type { ActivityUploads } from '#src/repositories/uploads.repository';
 
 export class UploadsService {
   constructor(private readonly repository: ActivityUploads) {}
+  start() {
+    this.repository.start();
+  }
+  close() {
+    return this.repository.close();
+  }
+  drain() {
+    return this.repository.drain();
+  }
+  status(player: number) {
+    return this.repository.status(player);
+  }
+  retry(player: number) {
+    return this.repository.retry(player);
+  }
   run(...args: Parameters<ActivityUploads['run']>) {
     return this.repository.run(...args);
   }

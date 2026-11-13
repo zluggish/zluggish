@@ -415,15 +415,23 @@ export class Workouts {
 
       const identity = uuid.safeParse(old?.workout_id).success ? z.string().parse(old?.workout_id) : randomUUID();
 
-      const doc = parseXML(text);
-      const root = documentSchema.parse(doc.workout_file);
-      root.uniqueId = identity;
+      // Preserve interleaved exercise and text-event order while replacing only the root ID.
+      const ordered = z.array(documentSchema).parse(
+        new XMLParser({
+          preserveOrder: true,
+          ignoreAttributes: false,
+          processEntities: true,
+          parseTagValue: false,
+          parseAttributeValue: false,
+        }).parse(text),
+      );
 
-      const content = new XMLBuilder({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        format: true,
-      }).build({ workout_file: root });
+      const root = ordered.find((node) => 'workout_file' in node);
+
+      if (!root) throw new Error('Missing workout root');
+      const children = z.array(documentSchema).parse(root.workout_file);
+      root.workout_file = [...children.filter((node) => !('uniqueId' in node)), { uniqueId: [{ '#text': identity }] }];
+      const content = new XMLBuilder({ preserveOrder: true, ignoreAttributes: false }).build(ordered);
 
       const file = this.file(identity);
 
@@ -476,6 +484,7 @@ export class Workouts {
           .replaceAll(/^-|-$/g, '') || 'workout'
       }.zwo`;
 
+      if (imports.some((item) => item.filename === filename)) throw new Error(`Workout filenames collide: ${filename}`);
       imports.push({ filename, content });
     }
 

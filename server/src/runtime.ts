@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { createServices } from '#src/composition';
 import type { ResolvedConfig } from '#src/config/index';
 import { packageRoot } from '#src/config/load';
@@ -48,14 +49,16 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
 
     new ProfileImports(accounts, world).recover();
     const simulation = new Simulation(runtime);
+    runtime.services.activities.recover();
     simulation.start();
+    runtime.services.uploads.start();
 
     if (config.integrations.discord.enabled) {
       try {
         runtime.discord = startDiscord(runtime);
         world.presence = (id, joining) => runtime.discord?.online(id, joining);
       } catch {
-        console.warn('Discord configuration failed; local riding remains available');
+        log.warn('Discord configuration failed; local riding remains available');
       }
     }
 
@@ -63,6 +66,7 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
       runtime,
       close: async () => {
         simulation.close();
+        await runtime.services.uploads.close();
         await runtime.discord?.close();
         runtime.settings.close();
         runtime.accounts.close();

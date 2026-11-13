@@ -1,6 +1,7 @@
 import { defineConfig, validateConfig } from '#src/config/index';
-import { loadConfig, prepareContainerConfig } from '#src/config/load';
+import { loadConfig, packageRoot, prepareContainerConfig } from '#src/config/load';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -147,4 +148,120 @@ await test('filename is explicit, async factories rejected, and successive loads
   writeFileSync(path, 'export default { bots: { multiplier: 4 } }');
   const response2 = await loadConfig({ path });
   assert.equal(response2.config.bots.multiplier, 4);
+});
+
+await test('invalid real config files stop the server before creating runtime state', async (t) => {
+  const cases = [
+    ['missing file', null, /Missing .*zluggish\.config\.ts/],
+    ['empty file', '', /<root>|Cannot evaluate/],
+    ['missing default export', 'export const config = {};', /<root>|Cannot evaluate/],
+    ['undefined export', 'export default undefined;', /<root>/],
+    ['null export', 'export default null;', /<root>|Cannot evaluate/],
+    ['array export', 'export default [];', /<root>/],
+    ['invalid syntax', 'export default {', /Cannot evaluate/],
+    ['async factory', 'export default async () => ({});', /Async configuration/],
+    ['missing peloton ID', 'export default { pelotons: [{ pacer: 1 }] };', /pelotons\.0\.id/],
+    ['missing pacer', "export default { pelotons: [{ id: 'group' }] };", /pelotons\.0\.pacer/],
+    [
+      'missing Discord credentials',
+      'export default { integrations: { discord: { enabled: true } } };',
+      /integrations\.discord\.credentialsFile/,
+    ],
+    ['blank storage', "export default { storageDir: '' };", /storageDir/],
+    ['whitespace storage', "export default { storageDir: '   ' };", /storageDir/],
+    ['blank group ID', "export default { pelotons: [{ id: ' ', pacer: 1 }] };", /pelotons\.0\.id/],
+    ['blank pacer', "export default { pelotons: [{ id: 'group', pacer: '' }] };", /pelotons\.0\.pacer/],
+    ['invalid pacer ID', "export default { pelotons: [{ id: 'group', pacer: 0 }] };", /pelotons\.0\.pacer/],
+    ['blank domain', "export default { integrations: { garmin: { domain: '' } } };", /integrations\.garmin\.domain/],
+    [
+      'invalid domain',
+      "export default { integrations: { garmin: { domain: 'https://garmin.com' } } };",
+      /integrations\.garmin\.domain/,
+    ],
+    ['blank host', "export default { network: { host: ' ' } };", /network\.host/],
+    ['invalid IP', "export default { server: { advertisedIp: '999.0.0.1' } };", /server\.advertisedIp/],
+    ['unknown nested field', 'export default { network: { api: { prot: 443 } } };', /network\.api: unrecognized_keys/],
+    ['unknown field', 'export default { typo: true };', /<root>: unrecognized_keys/],
+    ['wrong boolean type', "export default { bots: { enabled: 'false' } };", /bots\.enabled/],
+    ['null section', 'export default { network: null };', /network/],
+    ['invalid port', 'export default { network: { api: { port: 65536 } } };', /network\.api\.port/],
+    ['fractional port', 'export default { network: { tcp: { port: 1.5 } } };', /network\.tcp\.port/],
+    ['nonfinite number', 'export default { soloBlob: { rowGap: Infinity } };', /soloBlob\.rowGap/],
+    ['invalid enum', "export default { proxy: { mode: 'yes' } };", /proxy\.mode/],
+    [
+      'duplicate groups',
+      "export default { pelotons: [{ id: 'x', pacer: 1 }, { id: 'x', pacer: 2 }] };",
+      /duplicate group ID/,
+    ],
+    ['missing resource', "export default { ghosts: { profileFile: './missing.txt' } };", /ghosts\.profileFile/],
+    ['directory resource', "export default { bots: { ridersFile: '.' } };", /bots\.ridersFile/],
+    ['whitespace resource', "export default { ghosts: { profileFile: ' ' } };", /ghosts\.profileFile/],
+    ['unpaired TLS', "export default { tls: { certFile: './cert.pem' } };", /tls\.certFile and tls\.keyFile/],
+    [
+      'invalid TLS contents',
+      "export default { tls: { certFile: './zluggish.config.ts', keyFile: './zluggish.config.ts' } };",
+      /tls: invalid certificate or private key/,
+    ],
+    ['missing TLS files', "export default { tls: { certFile: './cert.pem', keyFile: './key.pem' } };", /tls\.certFile/],
+  ] as const;
+
+  for (const [name, source, expected] of cases) {
+    await t.test(name, () => {
+      const root = fixture(t);
+      const path = resolve(root, 'zluggish.config.ts');
+      const storage = resolve(root, 'state');
+
+      if (source !== null) writeFileSync(path, source);
+
+      const result = spawnSync(
+        process.execPath,
+        ['--conditions=development', '--import', 'tsx', 'src/main.ts', '--config', path],
+        {
+          cwd: resolve(import.meta.dirname, '../..'),
+          env: { ...process.env, ZLUGGISH_STORAGE_DIR: storage, ZLUGGISH_CONTAINER_STORAGE_DIR: '' },
+          encoding: 'utf8',
+          timeout: 10_000,
+        },
+      );
+
+      assert.ifError(result.error);
+      assert.equal(result.signal, null);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, expected);
+      assert.doesNotMatch(result.stdout, /Zluggish server:/);
+      assert.equal(existsSync(storage), false, 'configuration must fail before runtime creates storage');
+      assert.deepEqual(readdirSync(root), source === null ? [] : ['zluggish.config.ts']);
+    });
+  }
+});
+
+await test('storage overrides and file paths are validated before path resolution', async (t) => {
+  const root = fixture(t);
+  const path = resolve(root, 'zluggish.config.ts');
+  writeFileSync(path, 'export default {}');
+
+  for (const storageDir of ['', ' ', '\0']) {
+    await assert.rejects(loadConfig({ path, storageDir }), /storageDir/);
+    await assert.rejects(loadConfig({ path, env: { ZLUGGISH_STORAGE_DIR: storageDir } }), /storageDir/);
+  }
+
+  const file = resolve(root, 'not-a-directory');
+  writeFileSync(file, 'state');
+  await assert.rejects(loadConfig({ path, storageDir: file }), /storageDir: expected a directory/);
+});
+
+await test('custom TLS files are resolved and validated without creating storage', async (t) => {
+  const root = fixture(t);
+  const path = resolve(root, 'zluggish.config.ts');
+  const assets = resolve(packageRoot(), '../assets/ssl');
+  writeFileSync(resolve(root, 'cert.pem'), readFileSync(resolve(assets, 'cert-zwift-com.pem')));
+  writeFileSync(resolve(root, 'key.pem'), readFileSync(resolve(assets, 'key-zwift-com.pem')));
+  writeFileSync(
+    path,
+    `export default { storageDir: './state', tls: { certFile: './cert.pem', keyFile: './key.pem' } }`,
+  );
+  const loaded = await loadConfig({ path });
+  assert.equal(loaded.config.tls.certFile, resolve(root, 'cert.pem'));
+  assert.equal(loaded.config.tls.keyFile, resolve(root, 'key.pem'));
+  assert.equal(existsSync(loaded.config.storageDir), false);
 });

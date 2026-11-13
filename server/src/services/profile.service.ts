@@ -6,7 +6,7 @@ import {
   ProfileEntitlementSchema,
 } from '#src/protocol/generated/profile_pb';
 import { readFileSync } from '#src/repositories/files.repository';
-import { companionProfile } from '#src/repositories/profile-json.repository';
+import { companionProfile, profileAge } from '#src/repositories/profile-json.repository';
 import type { Profiles } from '#src/repositories/profile.repository';
 import { create } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
@@ -30,6 +30,52 @@ export class ProfilesService {
     return this.repository.synthetic;
   }
 
+  forViewer(profile: ReturnType<typeof create<typeof PlayerProfileSchema>>, viewer?: number) {
+    if (viewer !== undefined && profile.id === BigInt(viewer)) return profile;
+
+    const publicProfile = create(PlayerProfileSchema, {
+      id: profile.id,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      isMale: profile.isMale,
+      countryCode: profile.countryCode,
+      playerType: profile.playerType,
+      largeAvatarUrl: profile.largeAvatarUrl,
+      privacyBits: profile.privacyBits,
+      bodyType: profile.bodyType,
+      hairType: profile.hairType,
+      hairColour: profile.hairColour,
+      facialHairType: profile.facialHairType,
+      facialHairColour: profile.facialHairColour,
+      rideHelmetType: profile.rideHelmetType,
+      glassesType: profile.glassesType,
+      rideShoesType: profile.rideShoesType,
+      rideSocksType: profile.rideSocksType,
+      rideSocksLength: profile.rideSocksLength,
+      rideGloves: profile.rideGloves,
+      rideJersey: profile.rideJersey,
+      bikeFrame: profile.bikeFrame,
+      bikeFrameColour: profile.bikeFrameColour,
+      bikeWheelFront: profile.bikeWheelFront,
+      bikeWheelRear: profile.bikeWheelRear,
+      runShirtType: profile.runShirtType,
+      runShortsType: profile.runShortsType,
+      runShortsLength: profile.runShortsLength,
+      runShoesType: profile.runShoesType,
+      runSocksType: profile.runSocksType,
+      runSocksLength: profile.runSocksLength,
+      runHelmetType: profile.runHelmetType,
+      runArmAccessory: profile.runArmAccessory,
+      achievementLevel: profile.achievementLevel,
+      runAchievementLevel: profile.runAchievementLevel,
+    });
+
+    if (profile.privacyBits & 4n) publicProfile.weightInGrams = profile.weightInGrams;
+
+    if (!(profile.privacyBits & 64n)) publicProfile.age = profileAge(profile);
+
+    return publicProfile;
+  }
   companionProfile(...args: Parameters<typeof companionProfile>) {
     return companionProfile(...args);
   }

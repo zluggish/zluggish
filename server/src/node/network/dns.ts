@@ -1,10 +1,11 @@
+import { log } from '#src/logging';
 import { createSocket, type RemoteInfo } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { decode, encode, RECURSION_DESIRED } from 'dns-packet';
 import type { Answer } from 'dns-packet';
 
-const redirected = new Set(['secure.zwift.com', 'us-or-rly101.zwift.com']);
+const redirected = new Set(['secure.zwift.com', 'us-or-rly101.zwift.com', 'cdn.zwift.com', 'launcher.zwift.com']);
 
 export function startDns(advertisedIp: string, host: string, port = 53) {
   const socket = createSocket(host.includes(':') ? 'udp6' : 'udp4');
@@ -78,7 +79,7 @@ export function startDns(advertisedIp: string, host: string, port = 53) {
   socket.on('message', (bytes, peer) => {
     void handleMessage(bytes, peer);
   });
-  socket.on('error', (error) => console.error('DNS listener:', error.message));
+  socket.on('error', (error) => log.error('DNS listener:', error.message));
   socket.bind(port, host);
 
   return {

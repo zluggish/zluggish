@@ -32,24 +32,30 @@ export async function fetchCdn(path: string): Promise<Response> {
       },
       (response) => {
         response.once('error', fail);
-        const headers = new Headers();
 
-        for (const [name, value] of Object.entries(response.headers)) {
-          if (['connection', 'transfer-encoding', 'keep-alive'].includes(name) || value === undefined) continue;
+        try {
+          const headers = new Headers();
 
-          if (Array.isArray(value)) for (const item of value) headers.append(name, item);
-          else headers.set(name, value);
-        }
+          for (const [name, value] of Object.entries(response.headers)) {
+            if (['connection', 'transfer-encoding', 'keep-alive'].includes(name) || value === undefined) continue;
 
-        const status = response.statusCode ?? 502;
+            if (Array.isArray(value)) for (const item of value) headers.append(name, item);
+            else headers.set(name, value);
+          }
 
-        if ([204, 205, 304].includes(status)) {
-          response.resume();
-          done(new Response(null, { status, headers }));
-        } else {
-          // SAFETY: Node returns a WHATWG byte stream; Node and DOM stream declarations differ in their BYOB overloads.
-          const body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
-          done(new Response(body, { status, headers }));
+          const status = response.statusCode ?? 502;
+
+          if ([204, 205, 304].includes(status)) {
+            response.resume();
+            done(new Response(null, { status, headers }));
+          } else {
+            // SAFETY: Node returns a WHATWG byte stream; Node and DOM stream declarations differ in their BYOB overloads.
+            const body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+            done(new Response(body, { status, headers }));
+          }
+        } catch (error) {
+          response.destroy();
+          fail(error);
         }
       },
     );

@@ -55,6 +55,12 @@ export class EventsService {
     return this.repository.listPrivateEvent().map((row) => storedSchema.parse(JSON.parse(z.string().parse(row.json))));
   }
   save(event: Meetup) {
+    const accepted = event.eventInvites.filter((invite) => invite.status === 'ACCEPTED');
+    event.acceptedTotalCount = accepted.length;
+    event.acceptedFolloweeCount = accepted.filter(
+      (invite) => invite.invitedProfile.id !== event.organizerProfileId,
+    ).length;
+    event.invitedTotalCount = event.eventInvites.length;
     this.repository.updatePrivateEvent(JSON.stringify(event), event.id);
   }
   broadcast(event: Meetup) {
@@ -241,6 +247,8 @@ export class EventsService {
     }
   }
   updateMeetup(event: Meetup, update: MeetupInput) {
+    update.invitedProfileIds = [...new Set(update.invitedProfileIds)].filter((id) => id !== event.organizerProfileId);
+
     for (const id of update.invitedProfileIds) if (!this.context.accounts.get(id)) throw new ApplicationError(400);
     const next = { ...event, ...update, updateDate: new Date().toISOString() };
     next.eventInvites = [
@@ -261,8 +269,22 @@ export class EventsService {
       this.save(next);
 
       for (const row of this.repository.listNotification(event.id)) {
+        if (!update.invitedProfileIds.includes(z.number().parse(row.player_id))) {
+          this.repository.deletePlayerNotification(event.id, z.number().parse(row.player_id));
+          continue;
+        }
+
         const notification = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(row.json)));
-        Object.assign(notification, { read: false, readDate: null, lastModified: next.updateDate });
+        Object.assign(notification, {
+          read: false,
+          readDate: null,
+          lastModified: next.updateDate,
+          argString0: JSON.stringify({
+            eventId: next.id,
+            eventStartDate: Math.floor(Date.parse(next.eventStart) / 1000),
+            otherInviteeCount: next.invitedProfileIds.length,
+          }),
+        });
         this.updateNotification(JSON.stringify(notification), z.number().parse(row.id));
       }
 

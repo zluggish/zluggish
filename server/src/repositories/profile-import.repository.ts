@@ -252,6 +252,12 @@ export class ProfileImports {
         if (!/^\.ts-import-[a-f0-9]{32}$/.test(entry.name)) continue;
         const folder = resolve(riderFolder, entry.name);
 
+        // No manifest can exist before preparation finishes; publishing always has one.
+        if (!existsSync(resolve(folder, 'manifest.json'))) {
+          rmSync(folder, { recursive: true });
+          continue;
+        }
+
         const manifest = manifestSchema.parse(JSON.parse(readFileSync(resolve(folder, 'manifest.json'), 'utf8')));
 
         if (String(manifest.playerId) !== name) throw new Error('Import journal rider mismatch');

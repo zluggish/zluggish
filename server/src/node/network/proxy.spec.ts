@@ -66,12 +66,22 @@ await test('CDN proxy cancels upstream reading when its response is cancelled', 
   assert.equal(response.destroyed, true);
 });
 
-await test('CDN proxy propagates upstream stream and connection failures', async (t) => {
-  const { response, req } = upstream(t);
+await test('CDN proxy propagates upstream stream failures', async (t) => {
+  const { response } = upstream(t);
   const result = await fetchCdn('/gameassets/Game.xml');
   const reading = result.arrayBuffer();
   response.destroy(new Error('stream failed'));
   await assert.rejects(reading, /stream failed/);
+});
+
+await test('CDN proxy rejects a connection failure without receiving a response', async (t) => {
+  const req = new UpstreamRequest();
+  t.mock.method(https, 'request', () => req);
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
   const connecting = fetchCdn('/gameassets/Game.xml');
   req.emit('error', new Error('connection failed'));
   await assert.rejects(connecting, /connection failed/);
@@ -83,4 +93,11 @@ await test('CDN proxy preserves a bodyless upstream response', async (t) => {
   response.push(null);
   assert.equal(result.status, 304);
   assert.equal(result.body, null);
+});
+
+await test('CDN proxy rejects malformed response headers without an uncaught callback error', async (t) => {
+  const { response } = upstream(t);
+  response.headers = { 'bad header': 'invalid' };
+  await assert.rejects(fetchCdn('/gameassets/Game.xml'), TypeError);
+  assert.equal(response.destroyed, true);
 });

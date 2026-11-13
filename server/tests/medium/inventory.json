@@ -2894,5 +2894,16 @@
     "status": 400,
     "contentType": "text/plain;charset=UTF-8",
     "text": "The form expired. Reload and retry."
+  },
+  {
+    "endpoint": "POST /user/:username/",
+    "method": "POST",
+    "path": "/user/medium-rider/",
+    "audit": "Additional",
+    "anonymous": 401,
+    "status": 400,
+    "contentType": "text/plain;charset=UTF-8",
+    "text": "The form expired. Reload and retry.",
+    "scenario": "Upload retry requires browser CSRF"
   }
 ]

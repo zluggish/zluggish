@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import type { RepositoryContext as Runtime } from '#src/context';
 import { sendMessage } from '#src/repositories/message.repository';
 import { ActivityType, Client, Events, GatewayIntentBits, WebhookClient } from 'discord.js';
@@ -40,7 +41,7 @@ export class DiscordBridge {
     void this.transport
       .send(content.slice(0, 2000), sender.slice(0, 80))
       .catch(() => {
-        console.warn('Discord delivery failed');
+        log.warn('Discord delivery failed');
       })
       .finally(() => {
         this.pending--;
@@ -108,10 +109,8 @@ export function startDiscord(runtime: Runtime) {
   );
   client.on(Events.GuildMemberAdd, (member) => bridge.welcome(member.displayName));
   client.on(Events.ClientReady, () => bridge.transport.presence(runtime.world.online.size));
-  client.on(Events.Error, () => console.warn('Discord connection failed'));
-  void client
-    .login(credentials.token)
-    .catch(() => console.warn('Discord login failed; local riding remains available'));
+  client.on(Events.Error, () => log.warn('Discord connection failed'));
+  void client.login(credentials.token).catch(() => log.warn('Discord login failed; local riding remains available'));
 
   return bridge;
 }

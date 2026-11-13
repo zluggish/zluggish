@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -8,9 +9,6 @@ import {
   ActivityMediaSaveResultSchema,
   ActivitySchema,
 } from '#src/protocol/generated/activity_pb';
-import { Sport } from '#src/protocol/generated/profile_pb';
-import { GhostSchema, WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { course, worldTime } from '#src/world/state';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -60,7 +58,9 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         ActivityListSchema,
         create(ActivityListSchema, {
           activities: (() => {
-            return service.recentActivities(id, user.player_id).map((row) => records.decode(ActivitySchema, row));
+            return service
+              .recentActivities(id, user.player_id)
+              .map((row) => service.forViewer(records.decode(ActivitySchema, row), user.player_id));
           })(),
         }),
       ),
@@ -88,74 +88,21 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const activity = parseProtobuf(ActivitySchema, bytes);
     activity.playerId = BigInt(user.player_id);
     activity.id = id;
-    records.update('activity', id, ActivitySchema, activity, ['fit']);
+
+    if (service.finalized(activity))
+      return c.body(JSON.stringify({ id: Number(id) }), 200, {
+        'Content-Type': 'text/html; charset=utf-8',
+      });
 
     if (c.req.query('upload-to-strava') === 'true') {
       if (activity.distanceInMeters < 1) service.deleteActivity(id, user.player_id);
       else {
-        const folder = runtime.services.profiles.folder(user.player_id);
-        runtime.services.files.write(
-          resolve(folder, 'fit', `${id} - ${filename(activity.fitFilename)}`),
-          activity.fit,
-          true,
-        );
-        runtime.services.files.write(resolve(folder, 'last_activity.bin'), bytes, true);
-
-        if (activity.sport === Sport.CYCLING && activity.distanceInMeters >= 2000) {
-          runtime.services.activities.updateStreaks(user.player_id, activity);
-          runtime.world.enqueue(
-            create(WorldAttributeSchema, {
-              serverRealm: 1n,
-              waType: WA_TYPE.PLAYER_FITNESS_METRICS_UPDATED,
-              worldTimeBorn: worldTime(),
-              worldTimeExpire: worldTime() + 60_000n,
-              timestamp: BigInt(Date.now()) * 1000n,
-            }),
-            [BigInt(user.player_id)],
-          );
-        }
-
-        try {
-          runtime.services.activities.savePowerCurve(user.player_id, activity.fit);
-        } catch {
-          console.warn(`Power curve unavailable for activity ${id}`);
-        }
-
-        const history = runtime.world.histories.get(BigInt(user.player_id)) ?? [];
-
-        const state = history.at(-1);
-
-        const ghosts = runtime.services.settings.resolveRiderSettings(
-          runtime.config.riderDefaults,
-          runtime.services.settings.read(user.player_id),
-        ).ghosts.enabled;
-
-        if (ghosts && state && history.length > 0)
-          runtime.services.files.write(
-            resolve(
-              folder,
-              'ghosts',
-              String(course(state)),
-              ...(state.route
-                ? [String(state.route)]
-                : [String((state.aux3 >>> 8) & 0xff_ff), ...(state.f19 & 4 ? [] : ['reverse'])]),
-              `${Date.now()}.bin`,
-            ),
-            toBinary(
-              GhostSchema,
-              create(GhostSchema, {
-                playerId: user.player_id,
-                states: history,
-              }),
-            ),
-            true,
-          );
-
-        void uploads.run(user.player_id, activity, service.photos(user.player_id, id));
+        service.finalize(activity);
+        void uploads.drain();
       }
 
       runtime.world.logout(BigInt(user.player_id));
-    }
+    } else records.update('activity', id, ActivitySchema, activity, ['fit']);
 
     return c.body(JSON.stringify({ id: Number(id) }), 200, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -168,7 +115,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const row = service.activityById(c.req.param('activityId'));
 
     if (!row) throw new HTTPException(404);
-    const activity = records.decode(ActivitySchema, row);
+    const activity = service.forViewer(records.decode(ActivitySchema, row), user.player_id);
 
     if (!service.visible(activity, user.player_id)) throw new HTTPException(404);
     const fitness = service.fitnessVisible(activity, user.player_id);
@@ -199,7 +146,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             true,
           );
         } catch {
-          console.warn(`Chart unavailable for activity ${activity.id}`);
+          log.warn(`Chart unavailable for activity ${activity.id}`);
         }
       }
 
@@ -245,7 +192,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
       const activities = service
         .activityFeed(id, id, before ?? null, before ?? null, type === 'preview' ? 1 : 0, user.player_id, limit)
-        .map((row) => records.decode(ActivitySchema, row));
+        .map((row) => service.forViewer(records.decode(ActivitySchema, row), user.player_id));
 
       return c.json(activities.map((activity) => service.companion(activity)));
     },

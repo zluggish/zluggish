@@ -1,12 +1,20 @@
+import { log } from '#src/logging';
+import { Completions } from '#src/repositories/completion.repository';
+import { ProtobufRows } from '#src/repositories/protobuf.repository';
+import { ActivityUploads } from '#src/repositories/uploads.repository';
+import { resolveRiderSettings } from '#src/repositories/settings.repository';
+import { GhostSchema, WorldAttributeSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
+import { course, worldTime } from '#src/world/state';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { type RepositoryContext } from '#src/context';
 import { ApplicationError } from '#src/errors';
-import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
+import { ActivityPrivacyType, Sport, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { FitnessPrivacy } from '#src/protocol/generated/activity_pb';
-import { type Activity } from '#src/protocol/generated/activity_pb';
+import { ActivitySchema, type Activity } from '#src/protocol/generated/activity_pb';
 import { ActivitiesRepository } from '#src/repositories/activities.repository';
-import { existsSync, readdirSync, rmSync } from '#src/repositories/files.repository';
+import { existsSync, readdirSync, rmSync, writeDurable } from '#src/repositories/files.repository';
 import { activityChart, savePowerCurve } from '#src/repositories/fit.repository';
-import { updateStreaks } from '#src/repositories/streak.repository';
+import { advancedStreak, streaksFor, updateStreaks } from '#src/repositories/streak.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -15,6 +23,98 @@ export class ActivitiesService {
     private readonly repository: ActivitiesRepository,
     private readonly context: RepositoryContext,
   ) {}
+
+  finalized(activity: Activity) {
+    const saved = new Completions(this.context.accounts.db).get(activity.id);
+
+    if (!saved) return false;
+
+    if (!Buffer.from(saved.payload).equals(Buffer.from(toBinary(ActivitySchema, activity))))
+      throw new ApplicationError(409, 'Completed activities cannot be replaced.');
+
+    return saved.done !== 0;
+  }
+
+  recover() {
+    for (const row of new Completions(this.context.accounts.db).unfinished())
+      this.finalize(fromBinary(ActivitySchema, row.payload));
+  }
+
+  finalize(activity: Activity) {
+    if (this.finalized(activity)) return;
+    const player = Number(activity.playerId);
+    const journal = new Completions(this.context.accounts.db);
+    const folder = this.context.profiles.folder(player);
+
+    if (!journal.get(activity.id)) {
+      // Finish earlier writes before deriving another snapshot of this rider's progression.
+      for (const pending of journal.unfinished())
+        if (pending.player_id === player) this.finalize(fromBinary(ActivitySchema, pending.payload));
+
+      const streak =
+        activity.sport === Sport.CYCLING && activity.distanceInMeters >= 2000
+          ? toBinary(StreaksSchema, advancedStreak(streaksFor(this.context.profiles, player), activity))
+          : null;
+
+      journal.prepare(activity.id, player, toBinary(ActivitySchema, activity), streak);
+    }
+
+    const saved = journal.get(activity.id);
+
+    if (!saved) throw new Error('Missing activity completion journal');
+
+    const name =
+      activity.fitFilename
+        .normalize('NFKD')
+        .replaceAll(/[^\w. -]/g, '_')
+        .replace(/^\.+/, '') || 'activity.fit';
+
+    writeDurable(resolve(folder, 'fit', `${activity.id} - ${name}`), activity.fit, true);
+    writeDurable(resolve(folder, 'last_activity.bin'), saved.payload, true);
+
+    if (saved.streak) writeDurable(resolve(folder, 'streaks.bin'), saved.streak, true);
+    const history = this.context.world.histories.get(activity.playerId) ?? [];
+    const state = history.at(-1);
+
+    if (
+      state &&
+      resolveRiderSettings(this.context.config.riderDefaults, this.context.settings.read(player)).ghosts.enabled
+    )
+      writeDurable(
+        resolve(
+          folder,
+          'ghosts',
+          String(course(state)),
+          ...(state.route
+            ? [String(state.route)]
+            : [String((state.aux3 >>> 8) & 0xff_ff), ...(state.f19 & 4 ? [] : ['reverse'])]),
+          `activity-${activity.id}.bin`,
+        ),
+        toBinary(GhostSchema, create(GhostSchema, { playerId: player, states: history })),
+        true,
+      );
+    journal.complete(activity.id, new ActivityUploads(this.context).configured(player), () => {
+      new ProtobufRows(this.context.accounts.db).update('activity', activity.id, ActivitySchema, activity, ['fit']);
+
+      try {
+        this.savePowerCurve(player, activity.fit);
+      } catch {
+        log.warn(`Power curve unavailable for activity ${activity.id}`);
+      }
+    });
+
+    if (saved.streak)
+      this.context.world.enqueue(
+        create(WorldAttributeSchema, {
+          serverRealm: 1n,
+          waType: WA_TYPE.PLAYER_FITNESS_METRICS_UPDATED,
+          worldTimeBorn: worldTime(),
+          worldTimeExpire: worldTime() + 60_000n,
+          timestamp: BigInt(Date.now()) * 1000n,
+        }),
+        [activity.playerId],
+      );
+  }
 
   findActivity(...values: Parameters<ActivitiesRepository['findActivity']>) {
     return this.repository.findActivity(...values);
@@ -50,6 +150,28 @@ export class ActivitiesService {
       this.visible(activity, viewer) &&
       (activity.playerId === BigInt(viewer) || activity.fitnessPrivacy !== FitnessPrivacy.HIDE_SENSITIVE_DATA)
     );
+  }
+  forViewer(activity: Activity, viewer: number) {
+    if (!this.visible(activity, viewer)) throw new ApplicationError(404);
+
+    if (this.fitnessVisible(activity, viewer)) return activity;
+
+    // Construct a public summary: unknown/future protobuf fields must not leak either.
+    return create(ActivitySchema, {
+      id: activity.id,
+      playerId: activity.playerId,
+      courseId: activity.courseId,
+      name: activity.name,
+      startDate: activity.startDate,
+      endDate: activity.endDate,
+      distanceInMeters: activity.distanceInMeters,
+      totalElevation: activity.totalElevation,
+      sport: activity.sport,
+      date: activity.date,
+      privacy: activity.privacy,
+      fitnessPrivacy: activity.fitnessPrivacy,
+      movingTimeInMs: activity.movingTimeInMs,
+    });
   }
   findActivityFile(...values: Parameters<ActivitiesRepository['findActivityFile']>) {
     return this.repository.findActivityFile(...values);

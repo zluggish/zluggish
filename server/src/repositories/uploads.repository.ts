@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import type { RepositoryContext as Runtime } from '#src/context';
 import type { Activity } from '#src/protocol/generated/activity_pb';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
@@ -45,8 +46,168 @@ export function pairedEvent(
 export class ActivityUploads {
   constructor(
     readonly runtime: Runtime,
-    readonly warn: (message: string) => void = console.warn,
+    readonly warn: (message: string) => void = log.warn,
   ) {}
+
+  private pending: Promise<void> | null = null;
+  private stopped = false;
+  private timer: NodeJS.Timeout | null = null;
+
+  configured(player: number) {
+    const settings = resolveRiderSettings(this.runtime.config.riderDefaults, this.runtime.settings.read(player));
+    const providers = [];
+
+    if (
+      existsSync(
+        this.credentialFile(
+          player,
+          settings.uploads.strava.method === 'free' ? 'strava4_session.txt' : 'strava_token.txt',
+        ),
+      )
+    )
+      providers.push(settings.uploads.strava.method === 'free' ? 'freeStrava' : 'strava');
+
+    if (existsSync(this.credentialFile(player, 'garth/oauth1_token.json'))) providers.push('garmin');
+
+    if (existsSync(this.credentialFile(player, 'runalyze_token.txt'))) providers.push('runalyze');
+    const connections = new Connections(this.runtime.config.storageDir);
+
+    if (existsSync(connections.file(player, 'intervals'))) providers.push('intervals');
+
+    if (settings.uploads.zwift.enabled && existsSync(connections.file(player, 'zwift'))) providers.push('zwift');
+
+    return providers;
+  }
+  status(player: number) {
+    return this.runtime.accounts.db
+      .prepare(
+        `SELECT u.activity_id,u.provider,u.state FROM activity_upload u
+      JOIN activity_completion c ON c.activity_id=u.activity_id WHERE c.player_id=? ORDER BY u.activity_id DESC LIMIT 100`,
+      )
+      .all(player)
+      .map((row) => z.object({ activity_id: z.number(), provider: z.string(), state: z.string() }).parse(row));
+  }
+  retry(player: number) {
+    this.runtime.accounts.db
+      .prepare(
+        `UPDATE activity_upload SET state='pending' WHERE state='failed' AND activity_id IN
+      (SELECT activity_id FROM activity_completion WHERE player_id=?)`,
+      )
+      .run(player);
+
+    return this.drain();
+  }
+  start() {
+    // A crash after sending but before acknowledgement is ambiguous: require an explicit retry.
+    this.runtime.accounts.db.exec("UPDATE activity_upload SET state='failed' WHERE state='sending'");
+    this.timer = setInterval(() => {
+      void this.drain();
+    }, 5000);
+    this.timer.unref();
+    void this.drain();
+  }
+  async close() {
+    this.stopped = true;
+
+    if (this.timer) clearInterval(this.timer);
+    await this.pending;
+  }
+  drain() {
+    if (this.pending) return this.pending;
+
+    if (this.stopped) return Promise.resolve();
+    this.pending = this.deliver()
+      .catch(() => this.warn('Upload queue unavailable; pending jobs retained'))
+      .finally(() => {
+        this.pending = null;
+      });
+
+    return this.pending;
+  }
+  private async deliver() {
+    const db = this.runtime.accounts.db;
+
+    const jobs = db
+      .prepare(
+        `SELECT u.activity_id,u.provider FROM activity_upload u
+      JOIN activity_completion c ON c.activity_id=u.activity_id WHERE u.state='pending' AND c.done=1
+      ORDER BY u.activity_id,u.provider LIMIT 10`,
+      )
+      .all();
+
+    for (const candidate of jobs) {
+      if (this.stopped) break;
+
+      const key = z.object({ activity_id: z.number(), provider: z.string() }).parse(candidate);
+
+      // Read each payload only when it is ready to send; another request may delete a queued job.
+      const row = db
+        .prepare(
+          `SELECT u.activity_id,u.provider,c.player_id,c.payload FROM activity_upload u
+        JOIN activity_completion c ON c.activity_id=u.activity_id
+        WHERE u.activity_id=? AND u.provider=? AND u.state='pending' AND c.done=1`,
+        )
+        .get(key.activity_id, key.provider);
+
+      if (!row) continue;
+
+      const job = z
+        .object({
+          activity_id: z.number(),
+          provider: z.enum(['strava', 'freeStrava', 'garmin', 'runalyze', 'intervals', 'zwift']),
+          player_id: z.number(),
+          payload: z.instanceof(Uint8Array),
+        })
+        .parse(row);
+
+      db.prepare("UPDATE activity_upload SET state='sending' WHERE activity_id=? AND provider=?").run(
+        job.activity_id,
+        job.provider,
+      );
+
+      try {
+        const activity = fromBinary(ActivitySchema, job.payload);
+
+        // Resolve credentials at delivery, so revoked connections cannot be used by queued work.
+        if (!this.configured(job.player_id).includes(job.provider)) {
+          db.prepare("UPDATE activity_upload SET state='cancelled' WHERE activity_id=? AND provider=?").run(
+            job.activity_id,
+            job.provider,
+          );
+          continue;
+        }
+
+        if (job.provider === 'freeStrava') {
+          const photos = [
+            ...db
+              .prepare('SELECT id FROM activity_image WHERE activity_id=? AND player_id=?')
+              .all(job.activity_id, job.player_id)
+              .map((photo) => resolve(this.folder(job.player_id), 'images', `${photo.id}.jpg`)),
+            ...db
+              .prepare('SELECT id,content_type FROM activity_media WHERE activity_id=? AND player_id=?')
+              .all(job.activity_id, job.player_id)
+              .map((photo) =>
+                resolve(
+                  this.folder(job.player_id),
+                  'medias',
+                  `${photo.id}.${String(photo.content_type).includes('quicktime') ? 'mov' : 'mp4'}`,
+                ),
+              ),
+          ].filter((file) => existsSync(file));
+
+          await this.freeStrava(job.player_id, activity, photos);
+        } else await this[job.provider](job.player_id, activity);
+        db.prepare(
+          "UPDATE activity_upload SET state='sent' WHERE activity_id=? AND provider=? AND state='sending'",
+        ).run(job.activity_id, job.provider);
+      } catch {
+        db.prepare(
+          "UPDATE activity_upload SET state='failed' WHERE activity_id=? AND provider=? AND state='sending'",
+        ).run(job.activity_id, job.provider);
+        this.warn(`${job.provider} upload failed for activity ${job.activity_id}; retry from rider home`);
+      }
+    }
+  }
 
   private folder(player: number) {
     return this.runtime.profiles.folder(player);

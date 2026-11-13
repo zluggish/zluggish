@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { EconomyConfigSchema, LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import type { ImportFiles } from '#src/repositories/profile-import.repository';
 import { officialHeaders, officialRelay, officialTokens } from '#src/repositories/zwift.repository';
@@ -63,7 +64,7 @@ export async function downloadOfficialData(
           signal: AbortSignal.timeout(5000),
         });
       } catch {
-        console.warn('Official import session logout failed');
+        log.warn('Official import session logout failed');
       }
     }
   }

@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { clone, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { existsSync, readFileSync, readdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
@@ -14,7 +15,7 @@ import { clamp, Random } from '#src/world/geometry';
 import { Blob } from '#src/world/blob';
 import { Peloton } from '#src/world/peloton';
 import type { ReplayRider } from '#src/world/peloton';
-import { RiderPool } from '#src/world/riders';
+import { RiderPool, ghostAppearanceSchema } from '#src/world/riders';
 import { GestureDirector, gestureUpdate } from '#src/world/gestures';
 
 interface GhostPlayback {
@@ -58,6 +59,7 @@ export class Simulation {
   readonly bookmarks = new Map<bigint, Map<bigint, { state: PlayerState; name: string }>>();
   readonly lastGesture = new Map<bigint, { action: number; time: number }>();
   readonly pool: RiderPool;
+  readonly ghostAppearance: z.infer<typeof ghostAppearanceSchema>;
   readonly starts: Record<string, { road: number; time: number }>;
   readonly rng = new Random();
   timer: NodeJS.Timeout | null = null;
@@ -73,6 +75,9 @@ export class Simulation {
     readonly runtime: Runtime,
     readonly now: () => number = () => performance.now() / 1000,
   ) {
+    this.ghostAppearance = ghostAppearanceSchema.parse(
+      runtime.config.ghosts.profileFile ? JSON.parse(readFileSync(runtime.config.ghosts.profileFile, 'utf8')) : {},
+    );
     this.pool = new RiderPool(runtime.assets, runtime.config.bots.ridersFile);
     this.starts = z
       .record(z.string(), z.object({ road: z.number(), time: z.number() }))
@@ -115,7 +120,7 @@ export class Simulation {
             folder: basename(resolve(file, '..')),
           });
       } catch {
-        console.warn(`Skipping invalid RoboPacer: ${basename(resolve(file, '..'))}`);
+        log.warn(`Skipping invalid RoboPacer: ${basename(resolve(file, '..'))}`);
       }
     }
 
@@ -145,7 +150,7 @@ export class Simulation {
 
             index++;
           } catch {
-            console.warn(`Skipping invalid bot recording: ${basename(file)}`);
+            log.warn(`Skipping invalid bot recording: ${basename(file)}`);
           }
         }
       }
@@ -315,9 +320,10 @@ export class Simulation {
               profile.firstName = '';
               profile.lastName = 'Ghost';
               profile.countryCode = 0;
+              this.pool.customizeGhost(profile, this.ghostAppearance);
               this.runtime.profiles.synthetic.set(ghostId, profile);
             } catch {
-              console.warn('Skipping an invalid ghost recording');
+              log.warn('Skipping an invalid ghost recording');
             }
           }
         }
@@ -388,7 +394,7 @@ export class Simulation {
         state.id = 9_000_000n + (id % 1000n) * 1000n + BigInt(bookmarks.size + 1);
         bookmarks.set(state.id, { state, name: basename(file, '.bin') });
       } catch {
-        console.warn('Skipping an invalid bookmark');
+        log.warn('Skipping an invalid bookmark');
       }
     }
 

@@ -1,6 +1,7 @@
-import { constants, copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve, isAbsolute, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSecureContext } from 'node:tls';
 import { createJiti } from 'jiti';
 import { z } from 'zod';
 import { configSchema } from '#src/config/schema';
@@ -102,7 +103,10 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
 
     if (!parsed.success) throw validationError(parsed.error);
 
-    config = parsed.data;
+    config = validateConfig({
+      ...parsed.data,
+      storageDir: options.storageDir ?? env.ZLUGGISH_STORAGE_DIR ?? parsed.data.storageDir,
+    });
   } catch (error) {
     if (error instanceof ConfigError) throw error;
 
@@ -145,8 +149,33 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
     ['ghosts.profileFile', resolved.ghosts.profileFile],
     ['bots.ridersFile', resolved.bots.ridersFile],
     ['integrations.discord.credentialsFile', resolved.integrations.discord.credentialsFile],
+    ['tls.certFile', resolved.tls.certFile],
+    ['tls.keyFile', resolved.tls.keyFile],
   ]) {
-    if (resource && !existsSync(resource)) throw new ConfigError(`${field}: referenced file missing`);
+    if (!resource) continue;
+
+    try {
+      if (!statSync(resource).isFile()) throw new ConfigError(`${field}: expected a readable regular file`);
+      accessSync(resource, constants.R_OK);
+    } catch (error) {
+      if (error instanceof ConfigError) throw error;
+
+      throw new ConfigError(`${field}: referenced file missing or unreadable`);
+    }
+  }
+
+  if (existsSync(resolved.storageDir) && !statSync(resolved.storageDir).isDirectory())
+    throw new ConfigError('storageDir: expected a directory');
+
+  if (resolved.tls.certFile && resolved.tls.keyFile) {
+    try {
+      createSecureContext({
+        cert: readFileSync(resolved.tls.certFile),
+        key: readFileSync(resolved.tls.keyFile),
+      });
+    } catch {
+      throw new ConfigError('tls: invalid certificate or private key');
+    }
   }
 
   return { path, config: resolved };

@@ -1,3 +1,11 @@
+import {
+  FitnessPrivacy,
+  ActivitySchema,
+  ActivityListSchema,
+  ActivityImageSchema,
+  ActivityMediaSaveRequestSchema,
+  ActivityMediaSaveResultSchema,
+} from '#src/protocol/generated/activity_pb';
 import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
 import { writeDurable } from '#src/repositories/files.repository';
 import { z } from 'zod';
@@ -6,13 +14,6 @@ import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mediumFixture, binary, decode } from '#tests/medium/support';
-import {
-  ActivitySchema,
-  ActivityListSchema,
-  ActivityImageSchema,
-  ActivityMediaSaveRequestSchema,
-  ActivityMediaSaveResultSchema,
-} from '#src/protocol/generated/activity_pb';
 import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
 import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
 
@@ -383,3 +384,58 @@ for (const discard of [false, true])
     const chart = await f.request(`/api/activities/${id}/file/${chartId}`);
     assert.equal(chart.status, 404);
   });
+
+await test('hidden fitness is redacted in protobuf lists, detail, feeds and charts for another rider', async (t) => {
+  const f = await mediumFixture(t);
+  const base = `/api/profiles/${f.rider.player_id}/activities`;
+
+  const created = await f.request(base, {
+    method: 'POST',
+    ...binary(ActivitySchema, {
+      playerId: BigInt(f.rider.player_id),
+      courseId: 6n,
+      name: 'Private sensors',
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      distanceInMeters: 3000,
+      fitnessPrivacy: FitnessPrivacy.HIDE_SENSITIVE_DATA,
+      avgHeartRate: 175,
+      avgWatts: 250,
+      normalizedPower: 260,
+      powerZones: [1, 2],
+      tss: 99,
+      calories: 400,
+      avgSpeed: 10,
+    }),
+  });
+
+  const { id } = z.object({ id: z.number() }).parse(await created.json());
+  const other = await decode(await f.request(base, {}, f.other), ActivityListSchema);
+  assert.equal(other.activities[0]?.avgHeartRate, 0);
+  assert.equal(other.activities[0]?.avgWatts, 0);
+  assert.equal(other.activities[0]?.normalizedPower, 0);
+  assert.deepEqual(other.activities[0]?.powerZones, []);
+  assert.equal(other.activities[0]?.distanceInMeters, 3000);
+  const own = await decode(await f.request(base), ActivityListSchema);
+  assert.equal(own.activities[0]?.avgHeartRate, 175);
+  const detail = await f.request(`/api/activities/${id}`, {}, f.other);
+  const json = z.record(z.string(), z.json()).parse(await detail.json());
+  assert.equal(json.avgHeartRate, undefined);
+  assert.equal(json.avgWatts, undefined);
+
+  for (const path of [
+    `/api/activity-feed-service-v2/feed/profile/${f.rider.player_id}`,
+    `/api/activity-feed/feed/?feedType=PROFILE&profile_id=${f.rider.player_id}`,
+  ]) {
+    const response = await f.request(path, {}, f.other);
+    assert.equal(response.status, 200);
+    const feed = z.array(z.record(z.string(), z.json())).parse(await response.json());
+    assert.equal(feed.length, 1);
+    assert.equal(feed[0]?.calories, 0);
+    assert.equal(feed[0]?.avgSpeedInMetersPerSecond, 0);
+    assert.equal(feed[0]?.avgWatts, undefined);
+  }
+
+  const chart = await f.request(`/api/activities/${id}/file/1`, {}, f.other);
+  assert.equal(chart.status, 404);
+});

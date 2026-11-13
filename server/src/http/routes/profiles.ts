@@ -139,7 +139,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     );
   });
   app.get('/api/profiles/:id', (c) => {
-    authenticated(c);
+    const viewer = authenticated(c);
 
     const id = z.coerce.number().int().positive().safe().parse(c.req.param('id'));
 
@@ -149,7 +149,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       !runtime.services.files.exists(resolve(runtime.services.profiles.folder(id), 'profile.bin'))
     )
       throw new HTTPException(404);
-    const profile = runtime.services.profiles.get(id);
+    const profile = runtime.services.profiles.forViewer(runtime.services.profiles.get(id), viewer.player_id);
 
     return c.json(
       runtime.services.profiles.companionProfile(

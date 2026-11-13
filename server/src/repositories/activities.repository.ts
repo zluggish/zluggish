@@ -23,7 +23,13 @@ export class ActivitiesRepository {
     this.db.exec('BEGIN IMMEDIATE');
 
     try {
-      for (const table of ['activity_file', 'activity_image', 'activity_media'])
+      for (const table of [
+        'activity_file',
+        'activity_image',
+        'activity_media',
+        'activity_upload',
+        'activity_completion',
+      ])
         this.db.prepare(`DELETE FROM ${table} WHERE activity_id=?`).run(id);
       this.deleteActivity(id, player);
       this.db.exec('COMMIT');

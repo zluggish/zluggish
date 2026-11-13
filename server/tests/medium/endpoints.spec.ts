@@ -25,7 +25,7 @@ const entries = z
 
 await test('audit inventory includes every legacy method/path and additional registration', () => {
   assert.equal(entries.filter((entry) => entry.audit !== 'Additional').length, 218);
-  assert.equal(entries.length, 253);
+  assert.equal(entries.length, 254);
   assert.equal(new Set(entries.map((entry) => entry.endpoint)).size, entries.length);
 });
 

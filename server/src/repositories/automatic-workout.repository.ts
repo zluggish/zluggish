@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import type { RepositoryContext as Runtime } from '#src/context';
 import { Workouts } from '#src/repositories/workout.repository';
 
@@ -10,7 +11,7 @@ export function syncWorkoutsAutomatically(runtime: Runtime, id: number, android 
   try {
     provider = workouts.provider(id);
   } catch {
-    console.warn(`Automatic workout provider unavailable for rider ${id}`);
+    log.warn(`Automatic workout provider unavailable for rider ${id}`);
 
     return Promise.resolve();
   }
@@ -27,7 +28,7 @@ export function syncWorkoutsAutomatically(runtime: Runtime, id: number, android 
     .sync(id, AbortSignal.timeout(5000))
     .then(() => {})
     .catch(() => {
-      console.warn(`Automatic workout sync failed for rider ${id}; retaining cached workouts`);
+      log.warn(`Automatic workout sync failed for rider ${id}; retaining cached workouts`);
     })
     .finally(() => {
       requests.delete(key);

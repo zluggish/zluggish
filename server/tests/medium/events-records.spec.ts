@@ -5,7 +5,11 @@ import { fromBinary } from '@bufbuild/protobuf';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mediumFixture, binary, decode } from '#tests/medium/support';
-import { PrivateEventProtoSchema, PlayerJoinedEventSchema } from '#src/protocol/generated/events_pb';
+import {
+  PrivateEventProtoSchema,
+  PlayerJoinedEventSchema,
+  PrivateEventFeedListProtoSchema,
+} from '#src/protocol/generated/events_pb';
 import {
   SegmentResultSchema,
   SegmentResultsSchema,
@@ -15,6 +19,91 @@ import { RaceResultEntrySaveRequestSchema, RaceResultSummarySchema } from '#src/
 import { AchievementsSchema } from '#src/protocol/generated/profile_pb';
 import { WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
 import { worldTime } from '#src/world/state';
+import { storedSchema, type MeetupInput } from '#src/contracts/meetup';
+
+const jsonRequest = (body: MeetupInput) => ({
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+await test('meetup rescheduling reconciles expired, retained, removed and newly added invitations', async (t) => {
+  const f = await mediumFixture(t);
+  const retained = await f.accounts.create('Retained Rider', '');
+  const added = await f.accounts.create('Added Rider', '');
+
+  const input: MeetupInput = {
+    description: '',
+    culling: false,
+    distanceInMeters: 10_000,
+    durationInSeconds: 0,
+    eventStart: new Date(Date.now() - 3_600_000).toISOString(),
+    invitedProfileIds: [f.other.player_id, retained.player_id, retained.player_id, f.rider.player_id],
+    laps: 1,
+    routeId: 123,
+    rubberbanding: true,
+    showResults: true,
+    sport: 'CYCLING',
+    workoutHash: 0,
+  };
+
+  const created = await f.request('/api/private_event', { method: 'POST', ...jsonRequest(input) });
+  assert.equal(created.status, 201);
+  const { id } = z.object({ id: z.number() }).parse(await created.json());
+  const path = `/api/private_event/${id}`;
+
+  const counts = async (accepted: number) => {
+    const response = await f.request(path, { headers: { Accept: 'application/json' } });
+    assert.equal(response.status, 200);
+    const event = storedSchema.parse(await response.json());
+    assert.equal(event.acceptedTotalCount, accepted);
+    assert.equal(event.acceptedFolloweeCount, accepted - 1);
+    assert.equal(event.invitedTotalCount, 3);
+  };
+
+  await counts(1);
+  const expired = await f.request('/api/notifications', {}, retained);
+  assert.deepEqual(await expired.json(), []);
+
+  for (let i = 0; i < 2; i++) {
+    const accepted = await f.request(`${path}/accept`, { method: 'PUT' }, retained);
+    assert.equal(accepted.status, 204);
+  }
+
+  await counts(2);
+  const eventStart = new Date(Date.now() + 3_600_000).toISOString();
+
+  const updated = await f.request(path, {
+    method: 'PUT',
+    ...jsonRequest({ ...input, eventStart, invitedProfileIds: [retained.player_id, added.player_id] }),
+  });
+
+  assert.equal(updated.status, 200);
+  await counts(2);
+  const removed = await f.request('/api/notifications', {}, f.other);
+  assert.deepEqual(await removed.json(), []);
+  assert.equal(f.services.events.notificationsForPlayer(f.other.player_id).length, 0);
+
+  for (const rider of [retained, added]) {
+    const notifications = await f.request('/api/notifications', {}, rider);
+    const entries = z.array(z.string()).parse(await notifications.json());
+    assert.equal(entries.length, 1);
+    const notification = z.object({ read: z.boolean(), argString0: z.string() }).parse(JSON.parse(entries[0]!));
+    assert.equal(notification.read, false);
+    assert.deepEqual(JSON.parse(notification.argString0), {
+      eventId: id,
+      eventStartDate: Math.trunc(Date.parse(eventStart) / 1000),
+      otherInviteeCount: 2,
+    });
+  }
+
+  const rejected = await f.request(`${path}/reject`, { method: 'PUT' }, retained);
+  assert.equal(rejected.status, 204);
+  await counts(1);
+  const feed = await decode(await f.request('/api/private_event/feed'), PrivateEventFeedListProtoSchema);
+  assert.equal(feed.pef[0]?.acceptedTotalCount, 1);
+  assert.equal(feed.pef[0]?.acceptedFolloweeCount, 0);
+  assert.equal(feed.pef[0]?.invitedTotalCount, 3);
+});
 
 {
   await test('F06/F09/F10 meetups persist invitations, reset notifications, broadcast signup and summarize race time', async (t) => {

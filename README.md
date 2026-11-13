@@ -497,8 +497,6 @@ mise run install
 mise run check
 ```
 
-Mise manages Node 24 and pnpm 10. Its configuration and tasks are in `cli/mise.toml`. The check task builds both packages, runs ESLint and anti-slop Oxlint rules, typechecks, runs server and CLI tests, and checks formatting. Use `mise run server-dev` for the development server, `mise run test` for tests, or `mise run format-fix` to format supported files. Generated protobuf codecs and bundled assets are excluded from lint/format checks. Unit tests live beside their implementation as `*.spec.ts`; integration workflows live in `server/tests/medium` or `cli/tests/medium`. Run `pnpm test:unit` or `pnpm test:medium` from `server` to select a suite; `pnpm test` runs both.
-
 For individual pnpm commands and lint provenance, see the [CLI/tooling guide](cli/README.md).
 
 ## Legal notice

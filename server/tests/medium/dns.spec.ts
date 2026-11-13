@@ -26,6 +26,8 @@ await test(
         questions: [
           { type: 'A', name: 'SECURE.ZWIFT.COM.' },
           { type: 'A', name: 'us-or-rly101.zwift.com' },
+          { type: 'A', name: 'cdn.zwift.com' },
+          { type: 'A', name: 'launcher.zwift.com' },
           { type: 'AAAA', name: 'secure.zwift.com' },
         ],
       }),
@@ -38,7 +40,7 @@ await test(
     assert.equal(response.type, 'response');
     assert.deepEqual(
       response.answers?.map((answer) => (answer.type === 'A' ? answer.data : null)),
-      ['192.0.2.42', '192.0.2.42'],
+      ['192.0.2.42', '192.0.2.42', '192.0.2.42', '192.0.2.42'],
     );
   },
 );

@@ -65,27 +65,16 @@ export function activityChart(bytes: Uint8Array) {
     const altitude = record.enhancedAltitude ?? record.altitude;
     const speed = record.enhancedSpeed ?? record.speed;
 
-    if (
-      record.power === undefined ||
-      record.cadence === undefined ||
-      record.heartRate === undefined ||
-      record.distance === undefined ||
-      speed === undefined ||
-      altitude === undefined ||
-      record.positionLat === undefined ||
-      record.positionLong === undefined
-    )
-      continue;
-    data.powerInWatts.push(Math.trunc(record.power));
-    data.cadencePerMin.push(Math.trunc(record.cadence));
-    data.heartRate.push(Math.trunc(record.heartRate));
-    data.distanceInCm.push(Math.trunc(record.distance * 100));
-    data.speedInCmPerSec.push(Math.trunc(speed * 100));
+    data.powerInWatts.push(Math.trunc(record.power ?? 0));
+    data.cadencePerMin.push(Math.trunc(record.cadence ?? 0));
+    data.heartRate.push(Math.trunc(record.heartRate ?? 0));
+    data.distanceInCm.push(Math.trunc((record.distance ?? 0) * 100));
+    data.speedInCmPerSec.push(Math.trunc((speed ?? 0) * 100));
     data.timeInSec.push(record.timestamp - start);
-    data.altitudeInCm.push(Math.trunc(altitude * 100));
+    data.altitudeInCm.push(Math.trunc((altitude ?? 0) * 100));
     data.latlng.push([
-      Number((record.positionLat / 11_930_465).toFixed(6)),
-      Number((record.positionLong / 11_930_465).toFixed(6)),
+      Number(((record.positionLat ?? 0) / 11_930_465).toFixed(6)),
+      Number(((record.positionLong ?? 0) / 11_930_465).toFixed(6)),
     ]);
   }
 
@@ -95,18 +84,17 @@ export function activityChart(bytes: Uint8Array) {
 export function savePowerCurve(accounts: Accounts, profiles: Profiles, playerId: number, bytes: Uint8Array) {
   const { records, timestamp } = decodeFit(bytes);
 
-  const power = records.flatMap((record) => (record.power === undefined ? [] : Math.trunc(record.power)));
+  const power = records.map((record) => Math.trunc(record.power ?? 0));
 
   const weight = profiles.get(playerId).weightInGrams / 1000;
 
   if (weight <= 0) return;
 
   for (const time of [5, 60, 300, 1200]) {
-    if (power.length <= time) continue;
+    if (power.length < time) continue;
     let sum = power.slice(0, time).reduce((total, value) => total + value, 0);
-    let best = 0;
+    let best = Math.floor(sum / time);
 
-    // Preserve the reference window contract, which starts after the initial window.
     for (let index = time; index < power.length; index++) {
       sum += (power[index] ?? 0) - (power[index - time] ?? 0);
       best = Math.max(best, Math.floor(sum / time));

@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import type { Socket } from 'node:net';
 import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
@@ -18,7 +19,7 @@ export function startRideListeners(runtime: Runtime) {
 
   const udp = createSocket((config.network.udp.host ?? host).includes(':') ? 'udp6' : 'udp4');
 
-  udp.on('error', (error) => console.error('UDP listener:', error.message));
+  udp.on('error', (error) => log.error('UDP listener:', error.message));
   udp.on('message', (data, address) => {
     try {
       const endpoint = `${address.address}:${address.port}`;
@@ -71,6 +72,7 @@ export function startRideListeners(runtime: Runtime) {
   udp.bind(config.network.udp.port, config.network.udp.host ?? host);
 
   const sockets = new Set<Socket>();
+  const active = new Map<bigint, Socket>();
 
   const tcp = createServer((socket) => {
     sockets.add(socket);
@@ -83,7 +85,7 @@ export function startRideListeners(runtime: Runtime) {
     const send = (payload: Uint8Array) => {
       const relay = playerId === null ? null : world.relays.get(playerId);
 
-      if (!relay || socket.destroyed) return;
+      if (!relay || socket.destroyed || playerId === null || active.get(playerId) !== socket) return;
 
       if (socket.writableLength > 1024 * 1024) {
         socket.destroy();
@@ -113,6 +115,8 @@ export function startRideListeners(runtime: Runtime) {
         for (const packet of framing.push(chunk)) {
           const first = playerId === null;
 
+          if (playerId !== null && active.get(playerId) !== socket) throw new Error('Superseded relay connection');
+
           if (playerId === null) {
             if (!((packet[0] ?? 0) & 4) || packet.length < 5) throw new Error('Missing relay identity');
 
@@ -137,7 +141,7 @@ export function startRideListeners(runtime: Runtime) {
             device: 1,
             channel: 3,
             connection: relay.tcpConnection,
-            sequence: relay.tcpRead,
+            sequence: first ? 0 : relay.tcpRead,
           });
 
           const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(2, -4));
@@ -146,6 +150,10 @@ export function startRideListeners(runtime: Runtime) {
           const hello = first || decoded.fields.connection !== undefined;
 
           if (hello) {
+            const previous = active.get(playerId);
+
+            if (previous && previous !== socket) previous.destroy();
+            active.set(playerId, socket);
             relay.tcpConnection = decoded.iv.connection;
             relay.tcpRead = 1;
             relay.tcpWrite = 0;
@@ -183,7 +191,7 @@ export function startRideListeners(runtime: Runtime) {
 
             if (!timer)
               timer = setInterval(() => {
-                if (playerId === null) return;
+                if (playerId === null || active.get(playerId) !== socket) return;
                 const updates = world.updates.get(playerId) ?? [];
                 const phone = world.phones.get(playerId);
 
@@ -240,6 +248,8 @@ export function startRideListeners(runtime: Runtime) {
     socket.on('error', () => {});
     socket.on('close', () => {
       sockets.delete(socket);
+
+      if (playerId !== null && active.get(playerId) === socket) active.delete(playerId);
 
       if (timer) clearInterval(timer);
     });

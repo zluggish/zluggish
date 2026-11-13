@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { ApplicationError } from '#src/errors';
 import { parseProtobuf } from '#src/http/protobuf';
 import { accountRoutes, authenticated } from '#src/http/routes/accounts';
@@ -41,7 +42,10 @@ export interface PublicMetadata {
 
 export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   const app = new Hono<RuntimeEnv>();
-  app.use('*', logger());
+  app.use(
+    '*',
+    logger((message) => log.info(message)),
+  );
   const variants = fromJsonString(FeatureResponseSchema, metadata.variants);
 
   const byName = new Map(variants.variants.map((variant) => [variant.name, variant]));
@@ -100,7 +104,7 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
             .variants)
             known.set(variant.name, variant);
         } catch {
-          console.warn(`Ignoring invalid variants override for ${rider.player_id}`);
+          log.warn(`Ignoring invalid variants override for ${rider.player_id}`);
         }
     }
 
@@ -144,7 +148,7 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
 
     if (error instanceof z.ZodError) return c.text('Invalid request', 400);
 
-    console.error(`Request failed: ${c.req.method} ${c.req.path}`, error);
+    log.error(`Request failed: ${c.req.method} ${c.req.path}`, error);
 
     return c.text('Request failed', 500);
   });

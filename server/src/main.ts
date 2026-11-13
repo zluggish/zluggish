@@ -1,3 +1,4 @@
+import { log, configureLogging } from '#src/logging';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -28,6 +29,8 @@ const { config } = await loadConfig(prepareContainerConfig(options));
 if (existsSync(resolve(config.storageDir, '.config-migration.json')))
   throw new ConfigError('Interrupted config migration; resume config migrate before starting');
 
+configureLogging(config.logging.level);
+
 const root = packageRoot();
 
 const assets = resolve(root, '../assets');
@@ -55,7 +58,7 @@ const ride = startRideListeners(owner.runtime);
 
 const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host) : null;
 
-console.log(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
+log.info(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
 
 let stopping = false;
 

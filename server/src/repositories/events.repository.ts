@@ -26,8 +26,11 @@ export class EventsRepository {
   deleteNotification(...values: SQLInputValue[]) {
     return this.db.prepare('DELETE FROM notification WHERE event_id=?').run(...values);
   }
+  deletePlayerNotification(event: number, player: number) {
+    this.db.prepare('DELETE FROM notification WHERE event_id=? AND player_id=?').run(event, player);
+  }
   listNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id,json FROM notification WHERE event_id=?').all(...values);
+    return this.db.prepare('SELECT id,player_id,json FROM notification WHERE event_id=?').all(...values);
   }
   notificationsForPlayer(...values: SQLInputValue[]) {
     return this.db.prepare('SELECT json FROM notification WHERE player_id=?').all(...values);

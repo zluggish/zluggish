@@ -245,9 +245,17 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     return c.redirect('/login/');
   });
 
-  app.get('/user/:username/', async (c) => {
+  app.on(['GET', 'POST'], '/user/:username/', async (c) => {
     const user = authenticated(c);
     const session = c.get('browser');
+
+    if (c.req.method === 'POST') {
+      await csrf(c, runtime);
+      void runtime.services.uploads.retry(user.player_id);
+
+      return c.redirect(`/user/${user.username}/`);
+    }
+
     await runtime.services.workouts.syncWorkoutsAutomatically(user.player_id);
 
     const climbs = z
@@ -270,6 +278,19 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             ><a href="/trainingpeaks/${user.username}/">TrainingPeaks</a
             ><a href="/power_curves/${user.username}/">Power curves</a>
           </nav>
+          <h2>Activity uploads</h2>
+          <ul>
+            ${runtime.services.uploads
+              .status(user.player_id)
+              .map((job) => html`<li>Activity ${job.activity_id}: ${job.provider} — ${job.state}</li>`)}
+          </ul>
+          <p>
+            Check the provider before retrying a failed upload: it may have received the activity before the connection
+            failed.
+          </p>
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="${session.csrf}" /><button>Retry failed uploads</button>
+          </form>
           <form method="post" action="/start-zwift">
             <input type="hidden" name="csrf_token" value="${session.csrf}" /><label
               >Map<select name="map">

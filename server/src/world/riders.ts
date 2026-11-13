@@ -2,10 +2,28 @@ import { create, mergeFromJson } from '@bufbuild/protobuf';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { PlayerProfileSchema, type PlayerProfile } from '#src/protocol/generated/profile_pb';
 import { Random } from '#src/world/geometry';
 
 type RiderSpec = Record<string, z.infer<ReturnType<typeof z.json>>>;
+
+export const ghostAppearanceSchema = z.strictObject({
+  is_male: z.boolean().optional(),
+  random_body: z.boolean().optional(),
+  country_code: z.number().int().nonnegative().optional(),
+  bike_frame: z.number().int().nonnegative().optional(),
+  bike_frame_colour: z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative().safe()]).optional(),
+  bike_wheel_front: z.number().int().nonnegative().optional(),
+  bike_wheel_rear: z.number().int().nonnegative().optional(),
+  glasses_type: z.number().int().nonnegative().optional(),
+  ride_jersey: z.number().int().nonnegative().optional(),
+  ride_helmet_type: z.number().int().nonnegative().optional(),
+  ride_shoes_type: z.number().int().nonnegative().optional(),
+  ride_socks_type: z.number().int().nonnegative().optional(),
+  run_shirt_type: z.number().int().nonnegative().optional(),
+  run_shorts_type: z.number().int().nonnegative().optional(),
+  run_shoes_type: z.number().int().nonnegative().optional(),
+});
 
 export class RiderPool {
   private nameIndex = 0;
@@ -44,6 +62,26 @@ export class RiderPool {
         };
       });
     }
+  }
+  customizeGhost(profile: PlayerProfile, appearance: z.infer<typeof ghostAppearanceSchema>) {
+    const { random_body: randomBody, ...equipment } = appearance;
+
+    if (randomBody) {
+      const body = this.profile(profile.id, appearance.is_male === undefined ? {} : { is_male: appearance.is_male });
+
+      // Merge through protobuf to keep the generated scalar types intact.
+      for (const field of [
+        'isMale',
+        'bodyType',
+        'hairType',
+        'hairColour',
+        'facialHairType',
+        'facialHairColour',
+      ] as const)
+        mergeFromJson(PlayerProfileSchema, profile, { [field]: body[field] });
+    }
+
+    mergeFromJson(PlayerProfileSchema, profile, JSON.parse(JSON.stringify(equipment)));
   }
   profile(
     id: bigint,

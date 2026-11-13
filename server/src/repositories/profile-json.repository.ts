@@ -31,7 +31,7 @@ function attributes(items: Attribute[]) {
   return result;
 }
 
-function profileAge(profile: PlayerProfile) {
+export function profileAge(profile: PlayerProfile) {
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(profile.dob);
 
   if (!match) return profile.age;

@@ -25,6 +25,13 @@ const listenerHost = z.string().refine((value) => {
   return labels.every((label) => /^[a-z\d_](?:[a-z\d_-]{0,61}[a-z\d_])?$/i.test(label));
 }, 'Expected a non-empty IP address or hostname');
 
+const nonEmptyString = z
+  .string()
+  .refine((value) => value.trim().length > 0 && !value.includes('\0'), 'Expected a non-empty string');
+
+// Empty optional paths select built-in resources or disable the feature.
+const optionalPath = z.union([z.literal(''), nonEmptyString]);
+
 export const riderSettingsSchema = z
   .strictObject({
     ghosts: z
@@ -65,10 +72,7 @@ export const riderSettingsSchema = z
       .strictObject({
         trainingpeaks: z
           .strictObject({
-            bridgeFolder: z
-              .string()
-              .refine((v) => !v.includes('\0'), 'Invalid string')
-              .default(''),
+            bridgeFolder: optionalPath.default(''),
           })
           .prefault({})
           .readonly(),
@@ -97,10 +101,7 @@ export const configSchema = z
       .strictObject({
         enabled: z.boolean().default(false),
         multiplier: z.number().int().safe().min(1).max(100).default(1),
-        ridersFile: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default(''),
+        ridersFile: optionalPath.default(''),
       })
       .prefault({})
       .readonly(),
@@ -131,10 +132,7 @@ export const configSchema = z
       .readonly(),
     ghosts: z
       .strictObject({
-        profileFile: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default(''),
+        profileFile: optionalPath.default(''),
       })
       .prefault({})
       .readonly(),
@@ -142,20 +140,14 @@ export const configSchema = z
       .strictObject({
         garmin: z
           .strictObject({
-            domain: z
-              .string()
-              .refine((v) => !v.includes('\0'), 'Invalid string')
-              .default('garmin.com'),
+            domain: listenerHost.default('garmin.com'),
           })
           .prefault({})
           .readonly(),
         discord: z
           .strictObject({
             enabled: z.boolean().default(false),
-            credentialsFile: z
-              .string()
-              .refine((v) => !v.includes('\0'), 'Invalid string')
-              .default(''),
+            credentialsFile: optionalPath.default(''),
             channel: z.union([z.string().regex(/^\d+$/), z.number().int().safe().min(0)]).default('0'),
             welcomeMessage: z
               .string()
@@ -214,20 +206,11 @@ export const configSchema = z
       .prefault({})
       .readonly(),
     riderDefaults: riderSettingsSchema,
-    storageDir: z
-      .string()
-      .refine((v) => !v.includes('\0'), 'Invalid string')
-      .default('../storage'),
+    storageDir: nonEmptyString.default('../storage'),
     tls: z
       .strictObject({
-        certFile: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default(''),
-        keyFile: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default(''),
+        certFile: optionalPath.default(''),
+        keyFile: optionalPath.default(''),
       })
       .prefault({})
       .readonly(),
@@ -245,7 +228,7 @@ export const configSchema = z
             draft: z.number().default(0.7),
             climbStretch: z.number().default(1),
             maxDrop: z.number().default(40),
-            pacer: z.union([z.number().int().safe(), z.string().refine((v) => !v.includes('\0'), 'Invalid string')]),
+            pacer: z.union([z.number().int().safe().min(1), nonEmptyString]),
             enabled: z.boolean().default(true),
             riders: z
               .array(
@@ -285,10 +268,7 @@ export const configSchema = z
               )
               .default([])
               .readonly(),
-            id: z
-              .string()
-              .min(1)
-              .refine((v) => !v.includes('\0'), 'Invalid string'),
+            id: nonEmptyString,
           })
           .readonly(),
       )
@@ -356,7 +336,6 @@ export const configSchema = z
       .prefault({})
       .readonly(),
   })
-  .prefault({})
   .readonly();
 
 export type ConfigInput = z.input<typeof configSchema>;

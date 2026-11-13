@@ -1,3 +1,4 @@
+import { log } from '#src/logging';
 import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { RestartScheduler } from '#src/node/lifecycle/restart';
@@ -441,7 +442,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
               runtime.services.files.read(resolve(fit, name)),
             );
           } catch {
-            console.warn(`Power curve unavailable for ${name}`);
+            log.warn(`Power curve unavailable for ${name}`);
           }
 
       return c.redirect(`/settings/${rider.username}/`);

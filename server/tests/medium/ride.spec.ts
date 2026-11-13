@@ -9,6 +9,8 @@ import {
   ClientToServerSchema,
   PlayerStateSchema,
   ServerToClientSchema,
+  WorldAttributeSchema,
+  WA_TYPE,
 } from '#src/protocol/generated/udp-node-msgs_pb';
 import { worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
@@ -21,6 +23,111 @@ import { createConnection } from 'node:net';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { z } from 'zod';
+
+await test(
+  'an authenticated TCP reconnect replaces the old socket and exclusively receives queued updates',
+  { timeout: 10_000 },
+  async (t) => {
+    const f = runtimeFixture(t);
+    const user = await f.accounts.create('Reconnect Rider', '');
+    const player = BigInt(user.player_id);
+    const key = Buffer.alloc(16, 8);
+    f.world.login(player, key);
+
+    const listeners = startRideListeners({
+      ...f,
+      config: {
+        ...f.config,
+        network: {
+          ...f.config.network,
+          host: '127.0.0.1',
+          tcp: { ...f.config.network.tcp, port: 0 },
+          udp: { ...f.config.network.udp, port: 0 },
+        },
+      },
+    });
+
+    t.after(() => listeners.close());
+
+    if (!listeners.tcp.listening) await once(listeners.tcp, 'listening');
+    const { port } = z.object({ port: z.number() }).parse(listeners.tcp.address());
+
+    const connect = async (connection: number) => {
+      const socket = createConnection({ host: '127.0.0.1', port });
+      t.after(() => socket.destroy());
+      await once(socket, 'connect');
+      const incoming = socket.iterator();
+      const framing = new FrameDecoder();
+      const queue: Buffer[] = [];
+      let sequence = 0;
+
+      const next = async () => {
+        while (queue.length === 0) {
+          const chunk = await incoming.next();
+          assert.equal(chunk.done, false);
+          queue.push(...framing.push(z.instanceof(Buffer).parse(chunk.value)));
+        }
+
+        const frame = queue.shift();
+        assert.ok(frame);
+
+        return fromBinary(
+          ServerToClientSchema,
+          decodeLegacyPacket(frame, key, { device: 1, channel: 4, connection, sequence: sequence++ }).payload.subarray(
+            0,
+            -4,
+          ),
+        );
+      };
+
+      const payload = toBinary(
+        ClientToServerSchema,
+        create(ClientToServerSchema, {
+          serverRealm: 1n,
+          playerId: player,
+          state: create(PlayerStateSchema),
+          lastUpdate: 0n,
+          lastPlayerUpdate: 0n,
+        }),
+      );
+
+      const hello = encodePacket(
+        Buffer.concat([Buffer.from([1, 0]), payload]),
+        key,
+        { device: 1, channel: 3, connection, sequence: 0 },
+        { relay: user.player_id, connection },
+      );
+
+      const length = Buffer.alloc(2);
+      length.writeUInt16BE(hello.length);
+      socket.write(Buffer.concat([length, hello]));
+      const handshake = await next();
+      assert.ok(handshake.udpConfig);
+
+      return { socket, next };
+    };
+
+    const old = await connect(7);
+    const closed = once(old.socket, 'close');
+    const replacement = await connect(8);
+    await closed;
+    f.world.enqueue(
+      create(WorldAttributeSchema, {
+        serverRealm: 1n,
+        waType: WA_TYPE.WAT_INV_W,
+        payload: Buffer.from('replacement only'),
+      }),
+      [player],
+    );
+    const update = await replacement.next();
+    assert.equal(update.updates.length, 1);
+    assert.equal(Buffer.from(update.updates[0]!.payload).toString(), 'replacement only');
+    assert.equal(f.world.updates.has(player), false);
+    // Closing the superseded socket must not remove ownership of the replacement.
+    const heartbeat = await replacement.next();
+    assert.equal(heartbeat.playerId, player);
+  },
+);
 
 // Port 0 is confined to this test adapter; operator configuration rejects it.
 await test(
