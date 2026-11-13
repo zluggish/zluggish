@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --conditions=development --import tsx --test tests/*.test.ts",
+    "test": "pnpm test:unit && pnpm test:medium",
     "dev": "node --conditions=development --import tsx src/main.ts",
     "start": "node dist/src/main.js",
     "format": "pnpm --dir ../cli format",
@@ -29,7 +29,9 @@
     "lint": "pnpm --dir ../cli lint",
     "lint:fix": "pnpm --dir ../cli lint:fix",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format",
-    "codegen": "buf generate && node scripts/normalize-generated.mjs"
+    "codegen": "buf generate && node scripts/normalize-generated.mjs",
+    "test:unit": "node --conditions=development --import tsx --test \"src/**/*.test.ts\"",
+    "test:medium": "node --conditions=development --import tsx --test tests/medium/*.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",

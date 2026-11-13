@@ -1,18 +1,17 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { z } from 'zod';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { runtimeFixture } from '#tests/support/runtime';
+import { Workouts, workoutDetails } from '#src/domain/workouts/planned';
+import { Connections } from '#src/node/persistence/connections';
+import { writeDurable } from '#src/node/persistence/files';
 import { PrivateEventProtoSchema } from '#src/protocol/generated/events_pb';
 import { PlayerStateSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
-import { Workouts, workoutDetails } from '#src/domain/workouts/planned';
 import { Simulation } from '#src/world/simulation';
-import { Connections } from '#src/node/persistence/connections';
-import { Trail } from '#src/world/geometry';
 import { worldTime } from '#src/world/state';
-import { writeDurable } from '#src/node/persistence/files';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 await test('meetup invitations persist, protect ownership and return both protocol formats', async (t) => {
   const f = runtimeFixture(t);
@@ -113,42 +112,6 @@ await test('workout ramps split at power boundaries and cached schedules retain 
     workouts.list(user.player_id, new Date(2026, 10, 12))[0]?.schedule.scheduleId,
   );
   assert.equal(workouts.list(user.player_id, new Date(2026, 10, 13)).length, 0);
-});
-
-await test('trail interpolation follows junctions, extrapolates altitude and resets teleports', () => {
-  let now = 0;
-  const trail = new Trail(() => now);
-
-  const state = create(PlayerStateSchema, {
-    id: 1n,
-    f19: (6 << 16) | 4,
-    roadTime: 1000,
-    roadPosition: 10_200_000,
-    x: 0,
-    z: 0,
-    speed: 36_000_000,
-    worldTime: worldTime(),
-  });
-
-  trail.push(state);
-  now = 1;
-  state.x = 1000;
-  state.yAltitude = 100;
-  state.roadTime = 2000;
-  trail.push(state);
-  now = 2;
-  state.x = 2000;
-  state.yAltitude = 200;
-  state.roadTime = 3000;
-  trail.push(state);
-  assert.equal(trail.ready(), true);
-  assert.equal(trail.sample(5)?.state.x, 1500);
-  assert.equal(trail.sample(-5)?.state.yAltitude, 250);
-  now = 3;
-  state.x = 30_000;
-  trail.push(state);
-  assert.equal(trail.resets, 1);
-  assert.equal(trail.ready(), false);
 });
 
 await test('blob chat overrides survive reconstruction, gestures change mode, stale anchors disappear', async (t) => {

@@ -92,8 +92,10 @@ export function goalRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       })
       .parse(row);
 
-    goal.actualDistance = totals.distance ?? 0;
-    goal.actualDuration = totals.duration ?? 0;
+    // Companion expects both fields to carry the selected goal metric.
+    const actual = (goal.type === 0 ? totals.distance : totals.duration) ?? 0;
+    goal.actualDistance = actual;
+    goal.actualDuration = actual;
   }
 
   app.on(['GET', 'POST'], '/api/profiles/:id/goals', async (c) => {

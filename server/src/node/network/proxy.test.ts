@@ -1,13 +1,13 @@
-import { test } from 'node:test';
-import type { TestContext } from 'node:test';
-import assert from 'node:assert/strict';
-import https from 'node:https';
-import type { RequestOptions } from 'node:https';
-import { IncomingMessage } from 'node:http';
-import { Socket } from 'node:net';
-import { EventEmitter } from 'node:events';
-import { syncBuiltinESMExports } from 'node:module';
 import { fetchCdn } from '#src/node/network/proxy';
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { IncomingMessage } from 'node:http';
+import type { RequestOptions } from 'node:https';
+import https from 'node:https';
+import { syncBuiltinESMExports } from 'node:module';
+import { Socket } from 'node:net';
+import type { TestContext } from 'node:test';
+import { test } from 'node:test';
 
 class UpstreamRequest extends EventEmitter {
   setTimeout() {

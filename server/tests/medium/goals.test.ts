@@ -1,10 +1,10 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { runtimeFixture } from '#tests/support/runtime';
 import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
-await test('weekly and monthly goals keep distance and duration in their own units', async (t) => {
+await test('weekly and monthly goals mirror the selected metric for legacy clients', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 12, 12) });
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Goal Rider', '', true);
@@ -45,8 +45,8 @@ await test('weekly and monthly goals keep distance and duration in their own uni
 
     assert.equal(response.status, 200);
     const goal = fromBinary(GoalSchema, new Uint8Array(await response.arrayBuffer()));
-    assert.equal(goal.actualDistance, periodicity === 0 ? 12_345 : 17_345);
-    assert.ok(Math.abs(goal.actualDuration - (periodicity === 0 ? 10 : 30)) < 0.001);
+    assert.ok(Math.abs(goal.actualDistance - (periodicity === 0 ? 12_345 : 30)) < 0.001);
+    assert.equal(goal.actualDuration, goal.actualDistance);
     assert.equal(
       goal.periodEndDate,
       BigInt(Date.parse(periodicity === 0 ? '2026-11-15T23:59:59Z' : '2026-11-30T23:59:59Z')),
@@ -56,9 +56,7 @@ await test('weekly and monthly goals keep distance and duration in their own uni
   const response = await f.app.request(`/api/profiles/${user.player_id}/goals`, { headers });
   assert.equal(response.status, 200);
   const saved = fromBinary(GoalsSchema, new Uint8Array(await response.arrayBuffer()));
-  assert.deepEqual(
-    saved.goals.map((goal) => goal.actualDistance),
-    [12_345, 17_345],
-  );
+  assert.equal(saved.goals[0]?.actualDistance, 12_345);
+  assert.ok(Math.abs((saved.goals[1]?.actualDistance ?? 0) - 30) < 0.001);
   assert.ok(saved.goals.every((goal) => goal.playerId === BigInt(user.player_id)));
 });

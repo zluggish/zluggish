@@ -1,3 +1,4 @@
+import { backfillRoutes } from '#src/domain/profiles/achievements';
 import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -310,6 +311,8 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       .max(1000)
       .parse(c.req.query('pageSize') ?? 100);
 
+    backfillRoutes(runtime, user.player_id);
+
     const rows = db
       .prepare(
         'SELECT route_hash, min(world_time) AS first, max(world_time) AS last FROM route_result WHERE player_id=? GROUP BY route_hash',
@@ -416,7 +419,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         eventSubgroupId: id,
         position: index + 1,
         eventId: id,
-        activityData: result.activityData,
+        activityData: result.activityData ? { ...result.activityData } : undefined,
         powerData: result.powerData,
         sensorData: result.sensorData,
         profileData: create(RaceResultEntryProfileDataSchema, {
@@ -426,11 +429,24 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           playerType: profile.playerType,
           firstName: profile.firstName,
           lastName: profile.lastName,
+          avatarUrl: existsSync(resolve(runtime.profiles.folder(playerId), 'avatarLarge.jpg'))
+            ? `https://us-or-rly101.zwift.com/download/${playerId}/avatarLarge.jpg`
+            : '',
         }),
       });
 
       if (entry.activityData) {
         entry.activityData.time = entry.activityData.worldTime + 1_414_016_074_397n;
+        const meetup = db.prepare('SELECT json FROM private_event WHERE id=?').get(id);
+
+        if (meetup) {
+          const { eventStart } = z
+            .object({ eventStart: z.iso.datetime() })
+            .parse(JSON.parse(z.string().parse(meetup.json)));
+
+          entry.activityData.elapsedMs = entry.activityData.time - BigInt(Date.parse(eventStart));
+        }
+
         entry.time = entry.activityData.time;
         entry.distanceToLeader = Number(entry.activityData.worldTime - (sorted[0]?.[1].activityData?.worldTime ?? 0n));
       }

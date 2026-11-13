@@ -12,28 +12,27 @@ import { authenticated, page, csrf } from '#src/http/routes/accounts';
 
 export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const workouts = new Workouts(runtime);
+
+  const selected = (id: number, sport = 'CYCLING') => (sport.toUpperCase() === 'CYCLING' ? workouts.list(id) : []);
+
   app.get('/api/workout/schedule/list', (c) => {
     const user = authenticated(c);
     c.header('Cache-Control', 'private, no-store');
 
-    return c.json(
-      c.req.query('sport')?.toUpperCase() === 'RUNNING'
-        ? []
-        : workouts.list(user.player_id).map((item) => item.schedule),
-    );
+    return c.json(selected(user.player_id, c.req.query('sport')).map((item) => item.schedule));
   });
   app.get('/api/head-unit-bff/game-home', (c) => {
     const user = authenticated(c);
     c.header('Cache-Control', 'private, no-store');
 
-    return c.json(workouts.list(user.player_id)[0]?.home ?? {});
+    return c.json(selected(user.player_id, c.req.query('sport'))[0]?.home ?? {});
   });
   app.get('/api/head-unit-bff/carousels/for-you', (c) => {
     const user = authenticated(c);
     c.header('Cache-Control', 'private, no-store');
 
     return c.json(
-      workouts.list(user.player_id).map((workout) => ({
+      selected(user.player_id, c.req.query('sport')).map((workout) => ({
         recommendationType: 'workout',
         workoutUUID: workout.id,
         workoutHash: null,
@@ -54,7 +53,7 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.get('/api/workout/workouts/:id', (c) => {
     const user = authenticated(c);
 
-    const workout = workouts.list(user.player_id).find((item) => item.id === c.req.param('id'));
+    const workout = selected(user.player_id, c.req.query('sport')).find((item) => item.id === c.req.param('id'));
 
     if (!workout) throw new HTTPException(404);
     c.header('Cache-Control', 'private, no-store');

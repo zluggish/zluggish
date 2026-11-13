@@ -213,6 +213,38 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     db.prepare('UPDATE notification SET json=? WHERE id=?').run(JSON.stringify(notification), notificationId);
   }
 
+  function announceSignup(playerId: number, id: bigint, joining: boolean) {
+    const payload = joining
+      ? toBinary(
+          PlayerJoinedEventSchema,
+          create(PlayerJoinedEventSchema, {
+            relId: id,
+            playerId: BigInt(playerId),
+          }),
+        )
+      : toBinary(
+          PlayerLeftEventSchema,
+          create(PlayerLeftEventSchema, {
+            relId: id,
+            playerId: BigInt(playerId),
+          }),
+        );
+
+    runtime.world.enqueue(
+      create(WorldAttributeSchema, {
+        serverRealm: 1n,
+        waType: joining ? WA_TYPE.WAT_JOIN_E : WA_TYPE.WAT_LEFT_E,
+        payload,
+        worldTimeBorn: worldTime(),
+        worldTimeExpire: worldTime() + 60_000n,
+        waF12: 1n,
+        timestamp: BigInt(Date.now()) * 1000n,
+        relId: BigInt(playerId),
+      }),
+      [...new Set([...runtime.world.online.keys(), BigInt(playerId)])],
+    );
+  }
+
   app.get('/api/event-feed', (c) =>
     c.json({
       data: eventsAt(runtime.assets, limit(c.req.query('limit')), c.req.query('sport')).map((event) => ({
@@ -238,35 +270,7 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const joining = c.req.method === 'POST';
     const id = BigInt(c.req.param('id'));
 
-    const payload = joining
-      ? toBinary(
-          PlayerJoinedEventSchema,
-          create(PlayerJoinedEventSchema, {
-            relId: id,
-            playerId: BigInt(user.player_id),
-          }),
-        )
-      : toBinary(
-          PlayerLeftEventSchema,
-          create(PlayerLeftEventSchema, {
-            relId: id,
-            playerId: BigInt(user.player_id),
-          }),
-        );
-
-    runtime.world.enqueue(
-      create(WorldAttributeSchema, {
-        serverRealm: 1n,
-        waType: joining ? WA_TYPE.WAT_JOIN_E : WA_TYPE.WAT_LEFT_E,
-        payload,
-        worldTimeBorn: worldTime(),
-        worldTimeExpire: worldTime() + 60_000n,
-        waF12: 1n,
-        timestamp: BigInt(Date.now()) * 1000n,
-        relId: BigInt(user.player_id),
-      }),
-      [...new Set([...runtime.world.online.keys(), BigInt(user.player_id)])],
-    );
+    announceSignup(user.player_id, id, joining);
 
     return c.json({ signedUp: joining });
   });
@@ -362,11 +366,12 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       throw error;
     }
 
+    announceSignup(user.player_id, BigInt(event.id), true);
     broadcast(event);
 
     return c.json({ id: event.id }, 201);
   });
-  app.on(['GET', 'PUT', 'DELETE'], '/api/private_event/:id', async (c) => {
+  app.on(['GET', 'PUT', 'DELETE'], '/api/private_event/:id{[0-9]+}', async (c) => {
     const user = authenticated(c);
     const event = read(c.req.param('id'));
 
@@ -443,14 +448,32 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             },
         ),
     ];
-    save(next);
+    db.exec('BEGIN IMMEDIATE');
 
-    for (const id of update.invitedProfileIds) if (!event.invitedProfileIds.includes(id)) notify(next, id);
+    try {
+      save(next);
+
+      for (const row of db.prepare('SELECT id,json FROM notification WHERE event_id=?').all(event.id)) {
+        const notification = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(row.json)));
+        Object.assign(notification, { read: false, readDate: null, lastModified: next.updateDate });
+        db.prepare('UPDATE notification SET json=? WHERE id=?').run(
+          JSON.stringify(notification),
+          z.number().parse(row.id),
+        );
+      }
+
+      for (const id of update.invitedProfileIds) if (!event.invitedProfileIds.includes(id)) notify(next, id);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+
     broadcast(next);
 
     return c.json({ id: event.id });
   });
-  app.put('/api/private_event/:id/:decision{accept|reject}', (c) => {
+  app.put('/api/private_event/:id{[0-9]+}/:decision{accept|reject}', (c) => {
     const user = authenticated(c);
     const event = read(c.req.param('id'));
 
@@ -500,7 +523,7 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     return c.body(null, 204);
   });
-  app.get('/relay/events/subgroups/:id/late-join', (c) => {
+  app.get('/relay/events/subgroups/:id{[0-9]+}/late-join', (c) => {
     const user = authenticated(c);
     const event = read(c.req.param('id'));
 

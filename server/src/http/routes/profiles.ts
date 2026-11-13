@@ -1,9 +1,9 @@
 import { parseProtobuf } from '#src/http/protobuf';
-import type { Hono } from 'hono';
+import type { Hono, Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { html } from 'hono/html';
 import { z } from 'zod';
-import { create, toBinary, merge } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import {
   PlayerProfileSchema,
   ProfileEntitlementsSchema,
@@ -16,7 +16,7 @@ import { companionProfile } from '#src/domain/profiles/json';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { page, authenticated, csrf } from '#src/http/routes/accounts';
-import { ProfileImports } from '#src/domain/profiles/imports';
+import { ProfileImports, importFilenameSchema } from '#src/domain/profiles/imports';
 import type { ImportFiles } from '#src/domain/profiles/imports';
 
 export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
@@ -61,12 +61,12 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const form = await csrf(c, runtime);
       const files: ImportFiles = {};
 
-      for (const name of ['profile.bin', 'achievements.bin', 'economy_config.txt']) {
+      for (const name of importFilenameSchema.options) {
         const upload = form[name];
 
-        if (!(upload instanceof File && upload.size > 0)) continue;
+        if (!(upload instanceof File && upload.name)) continue;
 
-        const key = z.enum(['profile.bin', 'achievements.bin', 'economy_config.txt']).parse(name);
+        const key = importFilenameSchema.parse(name);
 
         files[key] = new Uint8Array(await upload.arrayBuffer());
       }
@@ -85,6 +85,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       page(
         'Import profile data',
         html`<p>Your local rider ID and password remain unchanged.</p>
+          <p><a href="/zwift/${rider.username}/">Download from Zwift or manage connection</a></p>
           <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="${c.get('browser').csrf}" /><input
               type="hidden"
@@ -92,7 +93,9 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
               value="files"
             /><label>Profile<input type="file" name="profile.bin" /></label
             ><label>Achievements<input type="file" name="achievements.bin" /></label
-            ><label>Economy<input type="file" name="economy_config.txt" /></label><button>Review import</button>
+            ><label>Economy<input type="file" name="economy_config.txt" /></label
+            ><label>Game storage<input type="file" name="user_storage.bin" /></label
+            ><label>Streaks<input type="file" name="streaks.bin" /></label><button>Review import</button>
           </form>`,
       ),
     );
@@ -146,22 +149,21 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     );
   });
 
-  app.on('GET', ['/api/profiles/me', '/api/profiles/me/'], (c) => {
-    const user = authenticated(c);
-    const profile = runtime.profiles.get(user.player_id);
-    entitlements(profile);
+  function profileResponse(c: Context<RuntimeEnv>, id: number) {
+    const profile = entitlements(runtime.profiles.get(id));
 
     return c.req.header('Accept')?.includes('application/json')
-      ? c.json(
-          companionProfile(
-            profile,
-            existsSync(resolve(runtime.profiles.folder(Number(profile.id)), 'avatarLarge.jpg'))
-              ? `https://us-or-rly101.zwift.com/download/${profile.id}/avatarLarge.jpg`
-              : null,
-          ),
-        )
+      ? c.json(companionProfile(profile, avatar(id)))
       : c.body(toBinary(PlayerProfileSchema, profile));
-  });
+  }
+
+  function avatar(id: number) {
+    return existsSync(resolve(runtime.profiles.folder(id), 'avatarLarge.jpg'))
+      ? `https://us-or-rly101.zwift.com/download/${id}/avatarLarge.jpg`
+      : null;
+  }
+
+  app.on('GET', ['/api/profiles/me', '/api/profiles/me/'], (c) => profileResponse(c, authenticated(c).player_id));
   app.get('/api/profiles/me/entitlements', (c) => {
     const user = authenticated(c);
     const profile = entitlements(runtime.profiles.get(user.player_id));
@@ -180,6 +182,12 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const id = z.coerce.number().int().positive().safe().parse(c.req.param('id'));
 
+    if (
+      !runtime.accounts.get(id) &&
+      !runtime.profiles.synthetic.has(BigInt(id)) &&
+      !existsSync(resolve(runtime.profiles.folder(id), 'profile.bin'))
+    )
+      throw new HTTPException(404);
     const profile = runtime.profiles.get(id);
 
     return c.json(
@@ -231,22 +239,18 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (update.weight !== undefined) profile.weightInGrams = update.weight;
     runtime.profiles.save(user.player_id, profile);
 
-    return c.json(companionProfile(profile, null));
+    return profileResponse(c, user.player_id);
   });
   app.on(['PUT'], ['/api/profiles/:id', '/api/profiles/:id/in-game-fields'], async (c) => {
     const user = authenticated(c);
+
+    if (c.req.param('id') === '0') throw new HTTPException(400);
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
     const profile = parseProtobuf(PlayerProfileSchema, new Uint8Array(await c.req.arrayBuffer()));
 
-    if (c.req.path.endsWith('/in-game-fields')) {
-      const existing = runtime.profiles.get(user.player_id);
-      merge(PlayerProfileSchema, existing, profile);
-      runtime.profiles.save(user.player_id, existing);
-    } else {
-      runtime.profiles.save(user.player_id, profile);
-    }
+    runtime.profiles.save(user.player_id, profile);
 
     return c.body(null, 204);
   });

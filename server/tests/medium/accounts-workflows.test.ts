@@ -1,19 +1,19 @@
+import { migrateAccounts } from '#src/domain/accounts/migrate';
+import { Accounts } from '#src/domain/accounts/repository';
+import { ProfileImports } from '#src/domain/profiles/imports';
+import { createApp } from '#src/http/app';
+import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
+import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
-import { test } from 'node:test';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { test } from 'node:test';
 import { z } from 'zod';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { worldTime } from '#src/world/state';
-import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
-import { createApp } from '#src/http/app';
-import { Accounts } from '#src/domain/accounts/repository';
-import { migrateAccounts } from '#src/domain/accounts/migrate';
-import { ProfileImports } from '#src/domain/profiles/imports';
 
 function browser(app: ReturnType<typeof createApp>) {
   let cookie = '';

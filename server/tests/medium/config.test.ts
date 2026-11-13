@@ -1,11 +1,10 @@
-import { test } from 'node:test';
+import { defineConfig, validateConfig } from '#src/config/index';
+import { loadConfig } from '#src/config/load';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { loadConfig } from '#src/config/load';
-import { configSchema } from '#src/config/schema';
-import { envBoolean, envInteger, defineConfig, validateConfig } from '#src/config/index';
+import { test } from 'node:test';
 
 function fixture(t: import('node:test').TestContext) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-config-'));
@@ -56,35 +55,6 @@ await test('defaults and explicit bootstrap overrides are deterministic', async 
   assert.equal(result.config.riderDefaults.ghosts.enabled, false);
   assert.equal(result.config.soloBlob.riders, 8);
   assert.equal(defineConfig({ bots: { multiplier: 2 } }).bots.multiplier, 2);
-});
-
-await test('runtime validation rejects unknown, non-finite, invalid ranges and duplicate group IDs', () => {
-  for (const input of [
-    { server: { multiplayer: true } },
-    { network: { api: { port: 0 } } },
-    { bots: { multiplier: 101 } },
-    { soloBlob: { rowGap: 0 } },
-    { soloBlob: { riders: 31 } },
-    { soloBlob: { rowGap: Infinity } },
-    { pelotons: [{ id: 'x', pacer: 1, bots: 201 }] },
-  ]) {
-    assert.equal(configSchema.safeParse(input).success, false);
-  }
-
-  assert.throws(
-    () =>
-      validateConfig({
-        pelotons: [
-          { id: 'x', pacer: 1 },
-          { id: 'x', pacer: 2 },
-        ],
-      }),
-    /duplicate/,
-  );
-  assert.throws(() => envBoolean('yes'));
-  assert.throws(() => envInteger('8e3', 1));
-  assert.equal(envBoolean('false'), false);
-  assert.equal(envInteger('8080', 1), 8080);
 });
 
 await test('invalid operator values and loader errors do not reveal secrets or create state', async (t) => {

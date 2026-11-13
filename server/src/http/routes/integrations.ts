@@ -1,3 +1,5 @@
+import { ProfileImports } from '#src/domain/profiles/imports';
+import { downloadOfficialData } from '#src/node/integrations/profile-download';
 import type { GarminClient, MfaState } from 'garminconnect-js';
 import type { Context, Hono } from 'hono';
 import { html } from 'hono/html';
@@ -108,6 +110,108 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       ),
     );
   }
+
+  function zwiftPage(c: Env, rider: Rider, message = '') {
+    const connected = existsSync(connections.file(rider.player_id, 'zwift'));
+    const settings = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id));
+
+    return c.html(
+      page(
+        'Zwift connection',
+        html`
+          <p>${message}</p>
+          <p>${connected ? 'Credentials saved.' : 'Save your official Zwift credentials to connect.'}</p>
+          <form method="post">
+            ${token(c)}<input type="hidden" name="action" value="settings" />
+            <label>Username<input name="username" autocomplete="username" /></label>
+            <label
+              >Password<input
+                type="password"
+                name="password"
+                autocomplete="new-password"
+                placeholder="${connected ? 'Saved; leave blank to keep' : ''}"
+            /></label>
+            <label
+              ><input type="checkbox" name="upload" ${settings.uploads.zwift.enabled ? 'checked' : ''} />Upload
+              activities to Zwift</label
+            >
+            <label
+              ><input type="checkbox" name="click" ${settings.devices.zwiftClick.enabled ? 'checked' : ''} />Enable
+              Zwift Click authentication</label
+            >
+            <button>Save connection</button>
+          </form>
+          ${connected
+            ? html`<form method="post">
+                  ${token(c)}<input type="hidden" name="action" value="import" />
+                  <label><input type="checkbox" name="profile" />Download profile and economy</label>
+                  <label><input type="checkbox" name="achievements" />Download achievements</label>
+                  <button>Download and review import</button>
+                </form>
+                <form method="post" action="/delete/zwift_credentials.bin">
+                  ${token(c)}<button>Remove credentials</button>
+                </form>`
+            : ''}
+          <a href="/profile/${rider.username}/">Import local files</a>
+        `,
+      ),
+    );
+  }
+
+  app.on(['GET', 'POST'], '/zwift/:username/', async (c) => {
+    const rider = authenticated(c);
+
+    if (c.req.method === 'GET') return zwiftPage(c, rider);
+    const form = await csrf(c, runtime);
+
+    if (form.action === 'settings') {
+      const username = text.parse(form.username).trim();
+      const password = text.parse(form.password);
+
+      if (username || password) {
+        if (!username || !password) return zwiftPage(c, rider, 'Enter both username and password.');
+        connections.save(rider.player_id, 'zwift', [username, password]);
+      }
+
+      if (!existsSync(connections.file(rider.player_id, 'zwift')) && (form.upload || form.click))
+        return zwiftPage(c, rider, 'Save credentials before enabling uploads or Click.');
+      runtime.settings.save(rider.player_id, {
+        ...runtime.settings.read(rider.player_id),
+        'uploads.zwift.enabled': form.upload === 'on',
+        'devices.zwiftClick.enabled': form.click === 'on',
+      });
+
+      return zwiftPage(c, rider, 'Connection settings saved.');
+    }
+
+    if (form.action !== 'import') throw new HTTPException(400);
+    const credentials = connections.read(rider.player_id, 'zwift');
+
+    if (!credentials || (!form.profile && !form.achievements))
+      return zwiftPage(c, rider, 'Save credentials and choose at least one download.');
+
+    if (runtime.world.active(rider.player_id)) return zwiftPage(c, rider, 'Finish the active ride before importing.');
+
+    try {
+      const files = await downloadOfficialData(
+        credentials[0],
+        credentials[1],
+        form.profile === 'on',
+        form.achievements === 'on',
+      );
+
+      const imports = new ProfileImports(runtime.accounts, runtime.world);
+      const stage = imports.prepare(rider, files);
+      const browser = c.get('browser');
+
+      if (browser.pendingImport) imports.cancel(rider, browser.pendingImport);
+      browser.pendingImport = stage;
+
+      return c.redirect(`/profile/${rider.username}/confirm/`);
+    } catch {
+      return zwiftPage(c, rider, 'Download failed. Existing rider data was retained.');
+    }
+  });
 
   app.on(['GET', 'POST'], '/strava/:username/', async (c) => {
     const rider = authenticated(c);

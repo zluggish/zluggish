@@ -181,11 +181,26 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const user = authenticated(c);
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
-    writeDurable(
-      resolve(runtime.profiles.folder(user.player_id), 'avatarLarge.jpg'),
-      new Uint8Array(await c.req.arrayBuffer()),
-      true,
-    );
+    let image: Uint8Array;
+
+    if (c.req.header('Content-Type')?.toLowerCase().startsWith('multipart/form-data')) {
+      let form: FormData;
+
+      try {
+        form = await c.req.formData();
+      } catch {
+        throw new HTTPException(400);
+      }
+
+      const file = form.values().find((value) => value instanceof File);
+
+      if (!(file instanceof File)) throw new HTTPException(400);
+      image = new Uint8Array(await file.arrayBuffer());
+    } else image = new Uint8Array(await c.req.arrayBuffer());
+
+    if (image.length < 4 || image[0] !== 0xff || image[1] !== 0xd8 || image.at(-2) !== 0xff || image.at(-1) !== 0xd9)
+      throw new HTTPException(400);
+    writeDurable(resolve(runtime.profiles.folder(user.player_id), 'avatarLarge.jpg'), image, true);
 
     return c.body(null, 200);
   });

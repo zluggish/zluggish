@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const officialRelay = 'https://us-or-rly101.zwift.com';
 
-export async function officialLogin(username: string, password: string) {
+export async function officialTokens(username: string, password: string, signal = AbortSignal.timeout(30_000)) {
   const response = await fetch('https://secure.zwift.com/auth/realms/zwift/tokens/access/codes', {
     method: 'POST',
     headers: {
@@ -15,12 +15,18 @@ export async function officialLogin(username: string, password: string) {
       password,
       grant_type: 'password',
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal,
   });
 
   if (!response.ok) throw new Error('Zwift login was rejected');
 
-  return z.object({ access_token: z.string() }).parse(await response.json()).access_token;
+  return z.object({ access_token: z.string(), refresh_token: z.string().optional() }).parse(await response.json());
+}
+
+export async function officialLogin(username: string, password: string) {
+  const tokens = await officialTokens(username, password);
+
+  return tokens.access_token;
 }
 
 export const officialHeaders = (token: string) => ({

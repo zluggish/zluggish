@@ -1,3 +1,6 @@
+import { syncWorkoutsAutomatically } from '#src/domain/workouts/automatic';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Hono, Context } from 'hono';
 import { html } from 'hono/html';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
@@ -238,9 +241,14 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     return c.redirect('/login/');
   });
 
-  app.get('/user/:username/', (c) => {
+  app.get('/user/:username/', async (c) => {
     const user = authenticated(c);
     const session = c.get('browser');
+    await syncWorkoutsAutomatically(runtime, user.player_id);
+
+    const climbs = z
+      .array(z.object({ name: z.string(), road: z.string() }))
+      .parse(JSON.parse(readFileSync(resolve(runtime.assets, 'data/climbs.txt'), 'utf8')));
 
     const settings = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(user.player_id));
 
@@ -248,9 +256,10 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       page(
         `${user.first_name} ${user.last_name}`,
         html`<nav>
-            <a href="/profile/${user.username}/">Profile</a><a href="/reset/${user.username}/">Password</a
-            ><a href="/settings/${user.username}/">Settings</a><a href="/strava/${user.username}/">Strava</a
-            ><a href="/garmin/${user.username}/">Garmin</a><a href="/intervals/${user.username}/">Intervals.icu</a
+            <a href="/profile/${user.username}/">Profile</a><a href="/zwift/${user.username}/">Zwift connection</a
+            ><a href="/reset/${user.username}/">Password</a><a href="/settings/${user.username}/">Settings</a
+            ><a href="/strava/${user.username}/">Strava</a><a href="/garmin/${user.username}/">Garmin</a
+            ><a href="/intervals/${user.username}/">Intervals.icu</a
             ><a href="/trainingpeaks/${user.username}/">TrainingPeaks</a
             ><a href="/power_curves/${user.username}/">Power curves</a>
           </nav>
@@ -271,7 +280,12 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
                   [17, 'Scotland'],
                 ].map(([id, name]) => html`<option value="${id}">${name}</option>`)}
               </select></label
-            ><input type="hidden" name="climb" value="CALENDAR" /><label
+            ><label
+              >Climb<select name="climb">
+                <option value="CALENDAR">Calendar</option>
+                ${climbs.map((climb) => html`<option value="${climb.road}">${climb.name}</option>`)}
+              </select></label
+            ><label
               ><input type="checkbox" name="enableghosts" ${settings.ghosts.enabled ? html`checked` : ''} />Enable
               ghosts</label
             ><button>Start Zwift</button>

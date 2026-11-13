@@ -1,15 +1,15 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { runtimeFixture } from '#tests/support/runtime';
+import { Sport } from '#src/protocol/generated/profile_pb';
 import {
   SegmentResultSchema,
-  SegmentRideStatsSchema,
   SegmentResultsSchema,
+  SegmentRideStatsSchema,
 } from '#src/protocol/generated/segment-result_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { Sport } from '#src/protocol/generated/profile_pb';
 import { worldTime } from '#src/world/state';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
 await test('segment records preserve sport and distinguish the latest effort from the fastest', async (t) => {
   const f = runtimeFixture(t);

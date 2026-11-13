@@ -1,11 +1,11 @@
-import { runtimeFixture } from '#tests/support/runtime';
+import { createApp } from '#src/http/app';
 import { writeDurable } from '#src/node/persistence/files';
+import { FeatureRequestSchema, FeatureResponseSchema } from '#src/protocol/generated/variants_pb';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { createApp } from '#src/http/app';
-import { FeatureRequestSchema, FeatureResponseSchema } from '#src/protocol/generated/variants_pb';
 
 const metadata = {
   gameInfo: '{"gameInfoHash":"abc"}',

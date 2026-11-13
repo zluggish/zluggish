@@ -134,7 +134,15 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       toBinary(
         ActivityListSchema,
         create(ActivityListSchema, {
-          activities: records.select('activity', ActivitySchema, id),
+          activities: (() => {
+            const query = db.prepare(
+              "SELECT * FROM activity WHERE player_id=? AND date > date('now', '-1 month') ORDER BY id",
+            );
+
+            query.setReadBigInts(true);
+
+            return query.all(id).map((row) => records.decode(ActivitySchema, row));
+          })(),
         }),
       ),
     );

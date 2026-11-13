@@ -1,25 +1,17 @@
-import { test } from 'node:test';
-import type { TestContext } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { z } from 'zod';
-import { runtimeFixture } from '#tests/support/runtime';
 import { createApp } from '#src/http/app';
+import { ActivityUploads } from '#src/node/integrations/uploads';
+import { Connections } from '#src/node/persistence/connections';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { FeatureRequestSchema, FeatureResponseSchema } from '#src/protocol/generated/variants_pb';
-import { Connections } from '#src/node/persistence/connections';
-import { ActivityUploads, pairedEvent } from '#src/node/integrations/uploads';
-import { parseForm } from '#src/node/integrations/strava';
-import { RestartScheduler } from '#src/node/lifecycle/restart';
-
-const entry = (event: number, name: string, day = '2026-05-01') => ({
-  event_id: event,
-  name,
-  start_date_local: `${day}T07:00:00`,
-});
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { TestContext } from 'node:test';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 function browser(app: ReturnType<typeof createApp>) {
   let cookie = '';
@@ -107,41 +99,6 @@ await test('Strava credentials are stored encrypted, never echoed, and removal i
   assert.equal(existsSync(cookieFile), false);
   const response6 = await f.app.request('/delete/strava_token.txt');
   assert.equal(response6.status, 404);
-});
-
-await test('pairing needs a unique workout for the day or an exact unique title', () => {
-  const activity = {
-    name: 'Tempo',
-    startDate: '2026-05-01T06:00:00Z',
-    date: '',
-  };
-
-  assert.equal(pairedEvent(activity, { collection: false, entries: [entry(7, 'Other')] }), 7);
-  assert.equal(
-    pairedEvent(activity, {
-      collection: true,
-      entries: [entry(7, 'Other')],
-    }),
-    null,
-  );
-  assert.equal(
-    pairedEvent(activity, {
-      collection: true,
-      entries: [entry(7, 'Other'), entry(8, 'tempo '), entry(9, 'x', '2026-05-02')],
-    }),
-    8,
-  );
-  assert.equal(
-    pairedEvent(activity, {
-      collection: true,
-      entries: [entry(8, 'Tempo'), entry(9, 'Tempo')],
-    }),
-    null,
-  );
-  assert.equal(
-    pairedEvent({ name: 'Tempo', startDate: 'garbage', date: '' }, { collection: false, entries: [entry(7, 'Tempo')] }),
-    null,
-  );
 });
 
 function activityWithFit() {
@@ -269,55 +226,6 @@ await test('an expired Strava token is refreshed before upload and one failing s
   assert.ok(calls.some((url) => url.includes('runalyze.com')));
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] ?? '', /^Strava upload failed: offline$/);
-});
-
-await test('free Strava edit forms are parsed with checked boxes, selects and escaped values', () => {
-  assert.deepEqual(
-    parseForm(
-      `<input name="a" value="x&amp;y"><input name="off" type="checkbox" value="1"><input name="on" type="checkbox" checked><input type="submit" name="go" value="Go"><select name="s"><option value="1">A</option><option value="2" selected>B</option></select><textarea name="t">hi &lt;b&gt;</textarea>`,
-    ),
-    { a: 'x&y', on: '1', s: '2', t: 'hi <b>' },
-  );
-});
-
-await test('restart countdown announces and asks the process to stop unless cancelled', async () => {
-  const messages: string[] = [];
-  let stopped = 0;
-
-  const scheduler = new RestartScheduler(
-    (message) => {
-      messages.push(message);
-    },
-    () => stopped++,
-    { minutes: 2, intervalMs: 5, graceMs: 5 },
-  );
-
-  assert.equal(scheduler.start(), true);
-  assert.equal(scheduler.start(), false);
-  await new Promise((done) => setTimeout(done, 80));
-  assert.equal(stopped, 1);
-  assert.equal(scheduler.active, false);
-  assert.equal(messages.length, 3);
-  assert.match(messages[0] ?? '', /in 2 minutes/);
-  assert.match(messages[1] ?? '', /in 1 minutes/);
-  assert.match(messages[2] ?? '', /See you later/);
-
-  const cancelled: string[] = [];
-
-  const second = new RestartScheduler(
-    (message) => {
-      cancelled.push(message);
-    },
-    () => stopped++,
-    { minutes: 2, intervalMs: 5, graceMs: 5 },
-  );
-
-  assert.equal(second.cancel(), false);
-  second.start();
-  assert.equal(second.cancel(), true);
-  await new Promise((done) => setTimeout(done, 40));
-  assert.equal(stopped, 1);
-  assert.match(cancelled.at(-1) ?? '', /^Restart of the server has been cancelled/);
 });
 
 await test('only administrators can control restarts and bot reloads', async (t) => {

@@ -66,7 +66,7 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
                 </form>`,
             )}
           <p>
-            <a href="/profile/${rider.username}/">Import or replace profile data</a>
+            <a href="/profile/${rider.username}/">Restore rider data or import a profile</a>
           </p>`,
       ),
     );

@@ -1,11 +1,11 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { create, fromBinary } from '@bufbuild/protobuf';
-import { DiscordBridge } from '#src/node/integrations/discord';
-import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { SocialPlayerActionSchema } from '#src/protocol/generated/tcp-node-msgs_pb';
 import { validateConfig } from '#src/config/index';
+import { DiscordBridge } from '#src/node/integrations/discord';
+import { SocialPlayerActionSchema } from '#src/protocol/generated/tcp-node-msgs_pb';
+import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
 await test('Discord bridges only configured human chat, handles commands and stops after close', async (t) => {
   const f = runtimeFixture(t);

@@ -1,26 +1,26 @@
-import { LoginRequestSchema } from '#src/protocol/generated/login_pb';
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import { createConnection } from 'node:net';
-import { createSocket } from 'node:dgram';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { z } from 'zod';
-import { runtimeFixture } from '#tests/support/runtime';
 import { validateConfig } from '#src/config/index';
+import { Accounts } from '#src/domain/accounts/repository';
+import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import { startRideListeners } from '#src/node/network/ride';
-import { encodePacket, decodeLegacyPacket, FrameDecoder } from '#src/node/network/packet';
+import { ActivitySchema } from '#src/protocol/generated/activity_pb';
+import { LoginRequestSchema } from '#src/protocol/generated/login_pb';
+import { StreaksSchema } from '#src/protocol/generated/profile_pb';
 import {
   ClientToServerSchema,
   PlayerStateSchema,
   ServerToClientSchema,
 } from '#src/protocol/generated/udp-node-msgs_pb';
-import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { worldTime } from '#src/world/state';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { createSocket } from 'node:dgram';
+import { once } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import { StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { Accounts } from '#src/domain/accounts/repository';
+import { createConnection } from 'node:net';
 import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 // Port 0 is confined to this test adapter; operator configuration rejects it.
 await test(
@@ -188,7 +188,7 @@ await test('activity create, save and restart preserve ownership, FIT bytes and 
     totalElevation: 25,
     calories: 50,
     fitFilename: 'synthetic.fit',
-    fit: readFileSync(new URL('fixtures/ride.fit', import.meta.url)),
+    fit: readFileSync(new URL('../fixtures/ride.fit', import.meta.url)),
   });
 
   const response = await f.app.request(`/api/profiles/${user.player_id}/activities`, {

@@ -1,10 +1,10 @@
-import { test } from 'node:test';
+import { startDns } from '#src/node/network/dns';
+import { decode, encode, RECURSION_DESIRED } from 'dns-packet';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { createSocket } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
-import { decode, encode, RECURSION_DESIRED } from 'dns-packet';
-import { startDns } from '#src/node/network/dns';
+import { once } from 'node:events';
+import { test } from 'node:test';
 
 await test(
   'DNS redirects Zwift hosts, filters address families and survives malformed packets',

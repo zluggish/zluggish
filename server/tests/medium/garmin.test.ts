@@ -1,9 +1,9 @@
-import { test } from 'node:test';
+import { garminClient, uploadGarmin } from '#src/node/integrations/garmin';
+import { runtimeFixture } from '#tests/support/runtime';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { garminClient, uploadGarmin } from '#src/node/integrations/garmin';
-import { runtimeFixture } from '#tests/support/runtime';
+import { test } from 'node:test';
 
 await test('Garmin imports FIT using existing garth tokens entirely through Node', async (t) => {
   const f = runtimeFixture(t);

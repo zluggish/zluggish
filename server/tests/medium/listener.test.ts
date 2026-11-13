@@ -1,14 +1,14 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { once } from 'node:events';
-import { request } from 'node:https';
-import { z } from 'zod';
-import { Hono } from 'hono';
-import { getConnInfo } from '@hono/node-server/conninfo';
-import { startHttp } from '#src/node/network/http';
 import { packageRoot } from '#src/config/load';
+import { startHttp } from '#src/node/network/http';
+import { getConnInfo } from '@hono/node-server/conninfo';
+import { Hono } from 'hono';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
+import { request } from 'node:https';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 // These integration tests intentionally bind loopback ephemeral ports only.
 await test('Node adapter serves HTTPS, binary bodies, forms, and actual peer addresses', async (t) => {

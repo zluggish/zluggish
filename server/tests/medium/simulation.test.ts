@@ -1,13 +1,13 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
-import { rmSync } from 'node:fs';
-import { create, toBinary } from '@bufbuild/protobuf';
-import { runtimeFixture } from '#tests/support/runtime';
-import { Simulation } from '#src/world/simulation';
+import { writeDurable } from '#src/node/persistence/files';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { writeDurable } from '#src/node/persistence/files';
+import { Simulation } from '#src/world/simulation';
+import { runtimeFixture } from '#tests/support/runtime';
+import { create, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
 
 await test('simulation playback stops, resumes and removes deleted pacers on reload', (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.UTC(2026, 10, 12) });

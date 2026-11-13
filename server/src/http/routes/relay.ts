@@ -1,3 +1,4 @@
+import { syncWorkoutsAutomatically } from '#src/domain/workouts/automatic';
 import { parseProtobuf } from '#src/http/protobuf';
 import { randomInt } from 'node:crypto';
 import { z } from 'zod';
@@ -37,6 +38,9 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (runtime.world.active(user.player_id)) throw new HTTPException(409);
 
     if (![16, 24, 32].includes(request.key.length)) throw new HTTPException(400);
+
+    if (c.req.header('User-Agent')?.toLowerCase().includes('android'))
+      await syncWorkoutsAutomatically(runtime, user.player_id, true);
     runtime.world.login(BigInt(user.player_id), request.key);
 
     const economyPath = resolve(runtime.profiles.folder(user.player_id), 'economy_config.txt');

@@ -172,11 +172,11 @@ the Zwift system tray icon and exit) and restart Zwift.
 
 ## Importing your official Zwift profile
 
-Create/select the destination local rider first, then use **Import Zwift profile** on rider home or **Settings → Zwift**. Download selected data with official credentials, or upload previously exported `profile.bin`, `achievements.bin` and `economy_config.txt` files. The former Python `get_profile.py` helper has been removed; use the built-in import form.
+Create/select the destination local rider first, then open **Profile** on rider home for file imports, or **Zwift connection** for official downloads. The file import form accepts `profile.bin`, `achievements.bin`, `economy_config.txt`, `user_storage.bin` and `streaks.bin`. The former Python `get_profile.py` helper has been removed; use the built-in import form.
 
 Review the source name/ID and destination rider before confirming. Selected profile/progression, achievement and economy files replace those categories with backups; unselected categories and local activities stay unchanged. Imported names update both the picker and in-game profile unless **Keep local name** is selected. Imports preserve the local numeric ID, login password, role and folder. Reimport replaces progress rather than merging it. Duplicate/unknown source warnings require confirmation. Finish active rides before importing.
 
-Official credentials do not become a local password and are not saved by importing. Uploads and Click authentication are separate opt-in connection settings. Importing does not fetch historical activities or enable ongoing synchronization. File imports do not prove official-account ownership.
+Official credentials do not become a local password. The **Zwift connection** page saves them encrypted for downloads and optional integrations; file imports need no official credentials. Uploads and Click authentication are separate opt-in connection settings. Importing does not fetch historical activities or enable ongoing synchronization. File imports do not prove official-account ownership.
 
 Do not copy files blindly into `storage/<local-player-id>` or a folder named after the official player ID. Use the rider-targeted import form so files are validated and IDs/names are normalized. Official downloads need access to Zwift services; client redirection may need to be disabled on the machine used for official login.
 
@@ -205,7 +205,7 @@ Existing `oauth1_token.json` and `oauth2_token.json` files from garth can remain
 
 <details><summary>Intervals.icu and planned workouts</summary>
 
-Open the selected rider's **Settings → Intervals** page. Copy the athlete ID and API key from [Intervals.icu settings](https://intervals.icu/settings), under Developer Settings, and save them there. Scheduled workouts appear in the launcher; completed activities can be uploaded and paired with their planned workout.
+Open the selected rider's **Settings → Intervals** page. Copy the athlete ID and API key from [Intervals.icu settings](https://intervals.icu/settings), under Developer Settings, and save them there. The selected provider refreshes automatically when opening rider home. Android game login also refreshes Intervals.icu when reusing saved login tokens. Automatic network refreshes have a five-second deadline and retain cached workouts on failure; the provider page also has a manual sync button. Cycling workouts appear in the launcher; completed activities can be uploaded and paired with their planned workout.
 
 Exported TrainingPeaks `.zwo` files can be imported through a local bridge folder. Configure the rider's TrainingPeaks settings or `workouts.trainingpeaks.bridgeFolder` preference; paths must be accessible to the server, including inside Docker when used.
 
@@ -213,7 +213,7 @@ Exported TrainingPeaks `.zwo` files can be imported through a local bridge folde
 
 <details><summary>Official Zwift uploads and Runalyze</summary>
 
-Official Zwift upload credentials and opt-in upload settings are separate from local passwords and profile import. Configure them for the selected rider in Settings. Click authentication is also a separate opt-in connection.
+Official Zwift upload credentials and opt-in upload settings are separate from local passwords and profile import. Open **Zwift connection** on rider home to save credentials and independently enable activity uploads or Click authentication.
 
 The Runalyze adapter reads the rider's existing `storage/<local-player-id>/runalyze_token.txt` file. Keep integration credentials private and preserve encryption keys when moving existing storage.
 
@@ -495,7 +495,7 @@ mise run install
 mise run check
 ```
 
-Mise manages Node 24 and pnpm 10. Its configuration and tasks are in `cli/mise.toml`. The check task builds both packages, runs ESLint and anti-slop Oxlint rules, typechecks, runs server and CLI tests, and checks formatting. Use `mise run server-dev` for the development server, `mise run test` for tests, or `mise run format-fix` to format supported files. Generated protobuf codecs and bundled assets are excluded from lint/format checks.
+Mise manages Node 24 and pnpm 10. Its configuration and tasks are in `cli/mise.toml`. The check task builds both packages, runs ESLint and anti-slop Oxlint rules, typechecks, runs server and CLI tests, and checks formatting. Use `mise run server-dev` for the development server, `mise run test` for tests, or `mise run format-fix` to format supported files. Generated protobuf codecs and bundled assets are excluded from lint/format checks. Unit tests live beside their implementation as `*.test.ts`; integration workflows live in `server/tests/medium` or `cli/tests/medium`. Run `pnpm test:unit` or `pnpm test:medium` from `server` to select a suite; `pnpm test` runs both.
 
 For individual pnpm commands and lint provenance, see the [CLI/tooling guide](cli/README.md).
 

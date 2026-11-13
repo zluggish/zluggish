@@ -162,6 +162,24 @@ function scheduleID(identity: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function publishFiles(files: ReadonlyMap<string, string | Uint8Array>, commit?: () => void) {
+  const previous = new Map<string, Buffer | null>();
+
+  try {
+    for (const [file, content] of files) {
+      previous.set(file, existsSync(file) ? readFileSync(file) : null);
+      writeDurable(file, content, true);
+    }
+
+    commit?.();
+  } catch (error) {
+    for (const [file, content] of previous)
+      if (content === null) rmSync(file, { force: true });
+      else writeDurable(file, content, true);
+    throw error;
+  }
+}
+
 export class Workouts {
   constructor(readonly runtime: Runtime) {}
   provider(id: number) {
@@ -325,10 +343,11 @@ export class Workouts {
       ? resolve(this.runtime.config.storageDir, 'tp-workouts/intervalsicu', `${id}.zwo`)
       : null;
   }
-  async sync(id: number) {
+  async sync(id: number, signal = AbortSignal.timeout(30_000)) {
+    signal.throwIfAborted();
     const provider = this.provider(id);
 
-    if (provider === 'trainingpeaks') return this.bridge(id);
+    if (provider === 'trainingpeaks') return this.bridge(id, signal);
 
     if (provider !== 'intervals-icu') return 'Configure a workout provider first.';
 
@@ -348,7 +367,7 @@ export class Workouts {
 
     const response = await fetch(
       `${base}/events?${new URLSearchParams({ oldest: today, newest: today, category: 'WORKOUT' })}`,
-      { headers, signal: AbortSignal.timeout(30_000) },
+      { headers, signal },
     );
 
     if (!response.ok) throw new Error('Intervals.icu sync failed');
@@ -378,16 +397,19 @@ export class Workouts {
     for (const event of selected) {
       const response = await fetch(`${base}/events/${event.id}/download.zwo`, {
         headers,
-        signal: AbortSignal.timeout(30_000),
+        signal,
       });
 
       if (!response.ok) throw new Error('Intervals.icu download failed');
       const text = await response.text();
-      parseXML(text);
+
+      if (!workoutDetails(text)) throw new Error('Invalid cycling workout');
       downloads.push({ event, text });
     }
 
     const previous = this.entries(id);
+
+    const pendingFiles = new Map<string, string>();
 
     const entries = downloads.map(({ event, text }) => {
       const old = previous.find((item) => String(item.event_id) === String(event.id));
@@ -407,7 +429,7 @@ export class Workouts {
       const file = this.file(identity);
 
       if (!file) throw new Error('Invalid workout identity');
-      writeDurable(file, z.string().parse(content), true);
+      pendingFiles.set(file, z.string().parse(content));
 
       return {
         ...event,
@@ -419,28 +441,31 @@ export class Workouts {
       };
     });
 
-    writeDurable(
-      resolve(this.runtime.profiles.folder(id), 'intervals_icu_workout.json'),
+    pendingFiles.set(
+      this.metadataFile(id),
       JSON.stringify({
         ...(entries[0] ?? { provider: 'intervals-icu' }),
         workouts: entries,
       }),
-      true,
     );
-    writeDurable(resolve(this.runtime.profiles.folder(id), 'active_workout_provider.txt'), 'intervals-icu', true);
+    pendingFiles.set(resolve(this.runtime.profiles.folder(id), 'active_workout_provider.txt'), 'intervals-icu');
+    signal.throwIfAborted();
+    // Publication is synchronous: no request can observe new metadata before all files exist.
+    publishFiles(pendingFiles);
 
     return `Synced ${entries.length} Intervals.icu workouts.`;
   }
-  bridge(id: number) {
+  bridge(id: number, signal = AbortSignal.timeout(30_000)) {
     const settings = resolveRiderSettings(this.runtime.config.riderDefaults, this.runtime.settings.read(id));
 
     const folder = settings.workouts.trainingpeaks.bridgeFolder;
 
     if (!folder || !existsSync(folder)) return 'TrainingPeaks bridge folder is missing.';
-    let count = 0;
+    const imports: { filename: string; content: Buffer }[] = [];
 
     for (const name of readdirSync(folder).sort()) {
       if (!name.toLowerCase().endsWith('.zwo') || !lstatSync(resolve(folder, name)).isFile()) continue;
+      signal.throwIfAborted();
       const content = readFileSync(resolve(folder, name));
       parseXML(content.toString('utf8'));
 
@@ -452,29 +477,43 @@ export class Workouts {
           .replaceAll(/^-|-$/g, '') || 'workout'
       }.zwo`;
 
-      const destination = resolve(this.runtime.profiles.folder(id), 'customworkouts', filename);
-
-      writeDurable(destination, content, true);
-      const timestamp = Math.floor(Date.now() / 1000);
-      const db = this.runtime.accounts.db;
-
-      const old = db
-        .prepare('SELECT id FROM zfile WHERE player_id=? AND folder=? AND filename=?')
-        .get(id, 'customworkouts', filename);
-
-      if (old) db.prepare('UPDATE zfile SET timestamp=? WHERE id=?').run(timestamp, z.number().parse(old.id));
-      else
-        db.prepare('INSERT INTO zfile (player_id,folder,filename,timestamp) VALUES (?,?,?,?)').run(
-          id,
-          'customworkouts',
-          filename,
-          timestamp,
-        );
-      count++;
+      imports.push({ filename, content });
     }
 
-    writeDurable(resolve(this.runtime.profiles.folder(id), 'active_workout_provider.txt'), 'trainingpeaks', true);
+    const pendingFiles = new Map<string, string | Uint8Array>();
 
-    return `Imported ${count} TrainingPeaks workouts.`;
+    for (const item of imports)
+      pendingFiles.set(resolve(this.runtime.profiles.folder(id), 'customworkouts', item.filename), item.content);
+    pendingFiles.set(resolve(this.runtime.profiles.folder(id), 'active_workout_provider.txt'), 'trainingpeaks');
+    signal.throwIfAborted();
+    const db = this.runtime.accounts.db;
+    const timestamp = Math.floor(Date.now() / 1000);
+    db.exec('BEGIN IMMEDIATE');
+
+    try {
+      for (const { filename } of imports) {
+        const old = db
+          .prepare('SELECT id FROM zfile WHERE player_id=? AND folder=? AND filename=?')
+          .get(id, 'customworkouts', filename);
+
+        if (old) db.prepare('UPDATE zfile SET timestamp=? WHERE id=?').run(timestamp, z.number().parse(old.id));
+        else
+          db.prepare('INSERT INTO zfile (player_id,folder,filename,timestamp) VALUES (?,?,?,?)').run(
+            id,
+            'customworkouts',
+            filename,
+            timestamp,
+          );
+      }
+
+      publishFiles(pendingFiles, () => {
+        db.exec('COMMIT');
+      });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return `Imported ${imports.length} TrainingPeaks workouts.`;
   }
 }

@@ -20,7 +20,7 @@
   "scripts": {
     "build": "pnpm --dir ../server build && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --conditions=development --import tsx --test tests/*.test.ts",
+    "test": "node --conditions=development --import tsx --test tests/medium/*.test.ts",
     "cli": "node --conditions=development --import tsx src/bin.ts",
     "lint:anti-slop": "cd .. && node cli/node_modules/oxlint/bin/oxlint --config cli/.oxlintrc.json cli/src cli/tests server/src server/tests",
     "lint:eslint": "cd .. && node cli/node_modules/eslint/bin/eslint.js --config cli/eslint.config.mjs \"cli/src/**/*.ts\" \"cli/tests/**/*.ts\" \"server/src/**/*.{ts,tsx}\" \"server/tests/**/*.ts\" --max-warnings 0",

@@ -1,14 +1,24 @@
-import { fromBinary, toBinary, clearField } from '@bufbuild/protobuf';
+import { fromBinary, toBinary, clearField, fromJsonString } from '@bufbuild/protobuf';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { PlayerProfileSchema, AchievementsSchema } from '#src/protocol/generated/profile_pb';
+import { PlayerProfileSchema, AchievementsSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
+import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
+import { EconomyConfigSchema } from '#src/protocol/generated/login_pb';
 import { writeDurable } from '#src/node/persistence/files';
 import type { Accounts, Rider } from '#src/domain/accounts/repository';
 import type { World } from '#src/world/state';
 
-const filenameSchema = z.enum(['profile.bin', 'achievements.bin', 'economy_config.txt']);
+export const importFilenameSchema = z.enum([
+  'profile.bin',
+  'achievements.bin',
+  'economy_config.txt',
+  'user_storage.bin',
+  'streaks.bin',
+]);
+
+const filenameSchema = importFilenameSchema;
 
 export type ImportFile = z.infer<typeof filenameSchema>;
 
@@ -48,24 +58,50 @@ export class ProfileImports {
     let profile = null;
     const names: ImportFile[] = [];
 
-    for (const name of ['profile.bin', 'achievements.bin', 'economy_config.txt']) {
+    for (const name of filenameSchema.options) {
       const key = filenameSchema.parse(name);
       const bytes = files[key];
 
       if (!bytes) continue;
 
-      if (bytes.length === 0 || bytes.length > 16 * 1024 * 1024) throw new Error('Invalid import size');
+      if (bytes.length > 16 * 1024 * 1024) throw new Error('Invalid import size');
 
-      if (key === 'profile.bin') {
-        profile = fromBinary(PlayerProfileSchema, bytes);
+      switch (key) {
+        case 'profile.bin': {
+          profile = fromBinary(PlayerProfileSchema, bytes);
 
-        if (!profile.id || !profile.firstName.trim()) throw new Error('Profile is missing its ID or name');
-      } else if (key === 'achievements.bin') {
-        if (fromBinary(AchievementsSchema, bytes).achievements.length === 0) throw new Error('Invalid achievements');
-      } else if (
-        Object.keys(z.record(z.string(), z.json()).parse(JSON.parse(Buffer.from(bytes).toString()))).length === 0
-      ) {
-        throw new Error('Economy configuration is empty');
+          if (!profile.id || !profile.firstName.trim()) throw new Error('Profile is missing its ID or name');
+
+          break;
+        }
+
+        case 'achievements.bin': {
+          toBinary(AchievementsSchema, fromBinary(AchievementsSchema, bytes));
+
+          break;
+        }
+
+        case 'user_storage.bin': {
+          toBinary(UserStorageSchema, fromBinary(UserStorageSchema, bytes));
+
+          break;
+        }
+
+        case 'streaks.bin': {
+          toBinary(StreaksSchema, fromBinary(StreaksSchema, bytes));
+
+          break;
+        }
+
+        default: {
+          if (
+            Object.keys(z.record(z.string(), z.json()).parse(JSON.parse(Buffer.from(bytes).toString()))).length === 0
+          ) {
+            throw new Error('Economy configuration is empty');
+          }
+
+          toBinary(EconomyConfigSchema, fromJsonString(EconomyConfigSchema, Buffer.from(bytes).toString()));
+        }
       }
 
       names.push(key);
