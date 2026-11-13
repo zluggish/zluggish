@@ -29,6 +29,7 @@ import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
+import { logger } from 'hono/logger';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -40,6 +41,7 @@ export interface PublicMetadata {
 
 export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   const app = new Hono<RuntimeEnv>();
+  app.use('*', logger());
   const variants = fromJsonString(FeatureResponseSchema, metadata.variants);
 
   const byName = new Map(variants.variants.map((variant) => [variant.name, variant]));
