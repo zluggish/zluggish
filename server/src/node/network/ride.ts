@@ -75,20 +75,25 @@ export function startRideListeners(runtime: Runtime) {
   const tcp = createServer((socket) => {
     sockets.add(socket);
     socket.setNoDelay(true);
-    socket.setTimeout(30_000, () => socket.destroy());
+    socket.setTimeout(30_000, () => {
+      console.warn(`Ride TCP timeout: rider=${playerId ?? 'unknown'}`);
+      socket.destroy();
+    });
     const framing = new FrameDecoder();
     let playerId: bigint | null = null;
     let timer: NodeJS.Timeout | null = null;
+    let phase = 'framing';
 
     const send = (payload: Uint8Array) => {
       const relay = playerId === null ? null : world.relays.get(playerId);
 
-      if (!relay || socket.destroyed) return;
+      if (!relay || socket.destroyed) return false;
 
       if (socket.writableLength > 1024 * 1024) {
+        console.warn(`Ride TCP backpressure limit: rider=${playerId ?? 'unknown'}`);
         socket.destroy();
 
-        return;
+        return false;
       }
 
       const packet = encodePacket(
@@ -106,14 +111,20 @@ export function startRideListeners(runtime: Runtime) {
       const length = Buffer.alloc(2);
       length.writeUInt16BE(packet.length);
       socket.write(Buffer.concat([length, packet]));
+
+      return true;
     };
 
     socket.on('data', (chunk) => {
       try {
+        phase = 'framing';
+
         for (const packet of framing.push(chunk)) {
           const first = playerId === null;
 
           if (playerId === null) {
+            phase = 'identity';
+
             if (!((packet[0] ?? 0) & 4) || packet.length < 5) throw new Error('Missing relay identity');
 
             playerId = BigInt(packet.readUInt32BE(1));
@@ -133,6 +144,8 @@ export function startRideListeners(runtime: Runtime) {
 
           if (!relay) throw new Error('Missing relay key');
 
+          phase = 'decode';
+
           const decoded = decodeLegacyPacket(packet, relay.key, {
             device: 1,
             channel: 3,
@@ -140,12 +153,14 @@ export function startRideListeners(runtime: Runtime) {
             sequence: relay.tcpRead,
           });
 
+          phase = 'parse';
           const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(2, -4));
 
           if (incoming.playerId !== playerId) throw new Error('Mismatched relay identity');
           const hello = first || decoded.fields.connection !== undefined;
 
           if (hello) {
+            phase = 'handshake';
             relay.tcpConnection = decoded.iv.connection;
             relay.tcpRead = 1;
             relay.tcpWrite = 0;
@@ -180,6 +195,9 @@ export function startRideListeners(runtime: Runtime) {
             });
 
             send(toBinary(ServerToClientSchema, response));
+            console.info(
+              `Ride TCP handshake: rider=${playerId} peer=${JSON.stringify(socket.remoteAddress ?? '')} pendingCompanion=${world.phones.has(playerId)}`,
+            );
 
             if (!timer)
               timer = setInterval(() => {
@@ -188,7 +206,10 @@ export function startRideListeners(runtime: Runtime) {
                 const phone = world.phones.get(playerId);
 
                 if (phone) {
-                  send(toBinary(ServerToClientSchema, phone));
+                  const sent = send(toBinary(ServerToClientSchema, phone));
+
+                  if (sent) console.info(`Companion registration written to ride TCP: rider=${playerId}`);
+                  else console.warn(`Companion registration discarded: ride TCP unavailable for rider=${playerId}`);
                   world.phones.delete(playerId);
                 }
 
@@ -234,11 +255,15 @@ export function startRideListeners(runtime: Runtime) {
           }
         }
       } catch {
+        console.warn(`Ride TCP processing failed: rider=${playerId ?? 'unknown'} phase=${phase}`);
         socket.destroy();
       }
     });
-    socket.on('error', () => {});
+    socket.on('error', (error) => {
+      console.warn(`Ride TCP socket error: rider=${playerId ?? 'unknown'} error=${JSON.stringify(error.message)}`);
+    });
     socket.on('close', () => {
+      console.info(`Ride TCP closed: rider=${playerId ?? 'unknown'}`);
       sockets.delete(socket);
 
       if (timer) clearInterval(timer);

@@ -30,7 +30,22 @@ await test(
     const f = runtimeFixture(t);
     const user = await f.accounts.create('Socket Rider', 'secret', true);
     const key = Buffer.alloc(16, 7);
+    const logs = t.mock.method(console, 'info', () => {});
+
     f.world.login(BigInt(user.player_id), key);
+
+    const secret = Buffer.from('pairing-test-secret').toString('base64');
+
+    const registration = await f.app.request('/relay/profiles/me/phone', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phoneAddress: '127.0.0.2', securePort: 21_588, secret }),
+    });
+
+    assert.equal(registration.status, 204);
 
     const config = validateConfig({
       storageDir: f.config.storageDir,
@@ -115,6 +130,31 @@ await test(
         group.relayAddresses.every((address) => address.port === udpPort),
       ),
     );
+    const [phoneBytes] = await once(socket, 'data');
+    const phoneFrame = new FrameDecoder().push(z.instanceof(Buffer).parse(phoneBytes))[0];
+
+    assert.ok(phoneFrame);
+
+    const phone = fromBinary(
+      ServerToClientSchema,
+      decodeLegacyPacket(phoneFrame, key, {
+        device: 1,
+        channel: 4,
+        connection: 7,
+        sequence: 1,
+      }).payload.subarray(0, -4),
+    );
+
+    assert.equal(phone.zcLocalIp, '127.0.0.2');
+    assert.equal(phone.zcLocalPort, 21_588);
+    assert.deepEqual(phone.zcKey, Buffer.from(secret, 'base64'));
+    const messages = logs.mock.calls.map((call) => call.arguments.join(' ')).join('\n');
+    assert.match(messages, /Companion registration queued:.*secure=true/);
+    assert.match(messages, /Ride TCP handshake:.*pendingCompanion=true/);
+    assert.match(messages, /Companion registration written to ride TCP/);
+    assert.doesNotMatch(messages, /pairing-test-secret/);
+    assert.equal(messages.includes(secret), false);
+
     assert.ok(existsSync(resolve(f.accounts.storage, String(user.player_id), 'encryption_key.bin')));
     const udp = createSocket('udp4');
     t.after(() => udp.close());
