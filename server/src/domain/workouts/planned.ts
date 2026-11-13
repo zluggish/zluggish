@@ -230,7 +230,6 @@ export class Workouts {
         }
       : { collection: false, entries: [storedEntrySchema.parse(raw)] };
   }
-  /** Removes one paired workout and its cached copy after its activity uploaded. */
   removeEvent(id: number, eventId: string | number) {
     const { entries } = this.stored(id);
 

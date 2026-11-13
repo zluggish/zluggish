@@ -31,7 +31,6 @@ export async function decode<S extends DescMessage>(response: Response, schema: 
   return fromBinary(schema, new Uint8Array(await response.arrayBuffer()));
 }
 
-/** Sign in through the browser routes so workflow tests exercise cookie rotation and CSRF. */
 export async function mediumBrowser(f: Awaited<ReturnType<typeof mediumFixture>>, rider = f.rider) {
   let cookie = '';
   let csrf = '';

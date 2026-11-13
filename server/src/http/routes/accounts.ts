@@ -388,8 +388,10 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const address = peerAddress(c);
 
     if (form.map && form.map !== 'CALENDAR') world.mapOverrides.set(address, z.string().parse(form.map));
+    else if (form.map === 'CALENDAR') world.mapOverrides.delete(address);
 
     if (form.climb && form.climb !== 'CALENDAR') world.climbOverrides.set(address, z.string().parse(form.climb));
+    else if (form.climb === 'CALENDAR') world.climbOverrides.delete(address);
 
     return c.redirect('/ride');
   });

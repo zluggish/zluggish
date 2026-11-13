@@ -220,7 +220,7 @@ export function fitnessRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       tss: goals.weekGoalTSS,
       calories: goals.weekGoalCalories,
       work: goals.weekGoalKjs,
-      distance: Math.trunc(goals.weekGoalDistanceKilometers) * 1000,
+      distance: Math.trunc(goals.weekGoalDistanceKilometers * 1000),
       movingTime: goals.weekGoalTimeMinutes * 60_000,
     });
 

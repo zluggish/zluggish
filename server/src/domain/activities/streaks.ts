@@ -42,6 +42,7 @@ export function updateStreaks(profiles: Profiles, id: number, activity: Activity
 
   if (start > Number(streaks.weekEnd) + 604_800_000) {
     streaks.curStreak = 1;
+    streaks.curStreakRide = BigInt(start);
     streaks.curStreakDistance = 0;
     streaks.curStreakElevation = 0;
     streaks.curStreakCalories = 0;

@@ -1,6 +1,5 @@
 const defaultOptions = { minutes: 10, intervalMs: 60_000, graceMs: 6000 };
 
-/** Announces a countdown to online riders, then asks the process to stop. */
 export class RestartScheduler {
   private minutes = 0;
   private interval: NodeJS.Timeout | null = null;

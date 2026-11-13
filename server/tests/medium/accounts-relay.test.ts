@@ -2,7 +2,7 @@ import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { create, toBinary, fromBinary } from '@bufbuild/protobuf';
-import { mediumFixture, binary, decode } from '#tests/medium/support';
+import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/support';
 import {
   LoginRequestSchema,
   LoginResponseSchema,
@@ -16,6 +16,35 @@ import {
   SaveStructuredEventResponseSchema,
 } from '#src/protocol/generated/structured_events_pb';
 import { worldTime } from '#src/world/state';
+
+await test('Calendar clears pending map and climb selections for the launching client', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  f.world.mapOverrides.set('other-client', '7');
+  f.world.climbOverrides.set('other-client', '10002');
+
+  const selected = await browser.form('/start-zwift', { map: '6', climb: '10001' });
+  assert.equal(selected.status, 302);
+  assert.equal(f.world.mapOverrides.get(''), '6');
+  assert.equal(f.world.climbOverrides.get(''), '10001');
+
+  const calendarMap = await browser.form('/start-zwift', { map: 'CALENDAR', climb: '10001' });
+  assert.equal(calendarMap.status, 302);
+  assert.equal(f.world.mapOverrides.has(''), false);
+  assert.equal(f.world.climbOverrides.get(''), '10001');
+
+  const calendarClimb = await browser.form('/start-zwift', { map: '7', climb: 'CALENDAR' });
+  assert.equal(calendarClimb.status, 302);
+  assert.equal(f.world.mapOverrides.get(''), '7');
+  assert.equal(f.world.climbOverrides.has(''), false);
+
+  const calendar = await browser.form('/start-zwift', { map: 'CALENDAR', climb: 'CALENDAR' });
+  assert.equal(calendar.status, 302);
+  assert.equal(f.world.mapOverrides.has(''), false);
+  assert.equal(f.world.climbOverrides.has(''), false);
+  assert.equal(f.world.mapOverrides.get('other-client'), '7');
+  assert.equal(f.world.climbOverrides.get('other-client'), '10002');
+});
 
 {
   await test('browser rider selection, CSRF settings/download, launch, switch and logout', async (t) => {

@@ -73,7 +73,6 @@ export class ActivityUploads {
       ['Zwift', () => (settings.uploads.zwift.enabled ? this.zwift(player, activity) : Promise.resolve())],
     ];
 
-    // One service failing must never lose the saved activity or block the others.
     for (const [service, step] of steps)
       try {
         await step();

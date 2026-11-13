@@ -7,7 +7,6 @@ type ProtobufMessage<Schema extends DescMessage> = ReturnType<typeof fromJsonStr
 
 type Table = 'activity' | 'goal' | 'segment_result' | 'route_result';
 
-/** The descriptor owns allowed columns and wire conversions; SQL values stay bound. */
 export class ProtobufRows {
   constructor(readonly db: DatabaseSync) {}
 

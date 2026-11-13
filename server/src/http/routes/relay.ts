@@ -179,7 +179,6 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const headers = new Headers(c.req.raw.headers);
     headers.set('Accept', 'application/json');
 
-    // The mobile aggregate is a composition of feeds that already own their formats.
     const read = async <T extends z.ZodType>(path: string, schema: T) => {
       const response = await app.request(path, { headers });
 

@@ -228,7 +228,6 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             true,
           );
 
-        // Uploads run detached so a slow service never holds the client.
         void uploads.run(user.player_id, activity, photos(user.player_id, id));
       }
 
