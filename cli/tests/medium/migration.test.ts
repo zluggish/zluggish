@@ -1,4 +1,4 @@
-import { Accounts } from 'zluggish/internal/domain/accounts/repository';
+import { Accounts } from 'zluggish/internal/repositories/accounts.repository';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,9 +19,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { spawn } from 'node:child_process';
 import { migrateConfig, migrationCandidate } from 'zluggish/internal/config/migrate';
 import { loadConfig, packageRoot } from 'zluggish/internal/config/load';
-import { SettingsStore, resolveRiderSettings } from 'zluggish/internal/node/persistence/settings';
+import { SettingsStore, resolveRiderSettings } from 'zluggish/internal/repositories/settings.repository';
 import { validateConfig } from 'zluggish/internal/config/index';
-import { acquireStorageLock } from 'zluggish/internal/node/persistence/lock';
+import { acquireStorageLock } from 'zluggish/internal/repositories/lock.repository';
 import { run } from '#cli/cli';
 
 function fixture(t: TestContext) {
@@ -179,7 +179,7 @@ await test('independent Node processes contend on the storage OS lock', async (t
       '--input-type=module',
       '-e',
       `
-    import { acquireStorageLock } from './src/node/persistence/lock.ts';
+    import { acquireStorageLock } from './src/repositories/lock.repository.ts';
     const release = await acquireStorageLock(process.argv[1]);
     process.stdin.on('end', async () => { await release(); });
     process.stdin.resume();

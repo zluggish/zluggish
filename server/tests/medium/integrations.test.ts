@@ -1,6 +1,6 @@
 import { createApp } from '#src/http/app';
-import { ActivityUploads } from '#src/node/integrations/uploads';
-import { Connections } from '#src/node/persistence/connections';
+import { ActivityUploads } from '#src/repositories/uploads.repository';
+import { Connections } from '#src/repositories/connections.repository';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { FeatureRequestSchema, FeatureResponseSchema } from '#src/protocol/generated/variants_pb';

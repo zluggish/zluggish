@@ -1,33 +1,30 @@
-import { syncWorkoutsAutomatically } from '#src/domain/workouts/automatic';
 import { parseProtobuf } from '#src/http/protobuf';
-import { randomInt } from 'node:crypto';
-import { z } from 'zod';
+import { authenticated, peerAddress } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { HashSeedsSchema } from '#src/protocol/generated/hash-seeds_pb';
-import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import type { Hono } from 'hono';
-import { HTTPException } from 'hono/http-exception';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
 import {
+  EconomyConfigSchema,
   LoginRequestSchema,
   LoginResponseSchema,
-  EconomyConfigSchema,
   RelaySessionRefreshResponseSchema,
 } from '#src/protocol/generated/login_pb';
-import { TcpConfigSchema, PerSessionInfoSchema } from '#src/protocol/generated/per-session-info_pb';
+import { PerSessionInfoSchema, TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
+import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
+import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import {
+  DropInPlayerSchema,
   DropInWorldListSchema,
   DropInWorldSchema,
-  DropInPlayerSchema,
   TeleportTargetsSchema,
 } from '#src/protocol/generated/world_pb';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated, peerAddress } from '#src/http/routes/accounts';
-import { writeDurable } from '#src/node/persistence/files';
-import { worldTime, course } from '#src/world/state';
+import { course, worldTime } from '#src/world/state';
+import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
+import type { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+import { randomInt } from 'node:crypto';
+import { resolve } from 'node:path';
+import { z } from 'zod';
 
 export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/users/login', async (c) => {
@@ -40,18 +37,21 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (![16, 24, 32].includes(request.key.length)) throw new HTTPException(400);
 
     if (c.req.header('User-Agent')?.toLowerCase().includes('android'))
-      await syncWorkoutsAutomatically(runtime, user.player_id, true);
+      await runtime.services.workouts.syncWorkoutsAutomatically(user.player_id, true);
     runtime.world.login(BigInt(user.player_id), request.key);
 
-    const economyPath = resolve(runtime.profiles.folder(user.player_id), 'economy_config.txt');
+    const economyPath = resolve(runtime.services.profiles.folder(user.player_id), 'economy_config.txt');
 
     const economy = fromJsonString(
       EconomyConfigSchema,
-      readFileSync(existsSync(economyPath) ? economyPath : resolve(runtime.assets, 'data/economy_config.txt'), 'utf8'),
+      runtime.services.files.read(
+        runtime.services.files.exists(economyPath) ? economyPath : resolve(runtime.assets, 'data/economy_config.txt'),
+        'utf8',
+      ),
     );
 
-    if (!existsSync(economyPath)) {
-      const profile = runtime.profiles.get(user.player_id);
+    if (!runtime.services.files.exists(economyPath)) {
+      const profile = runtime.services.profiles.get(user.player_id);
       const currentLevel = Math.floor(profile.achievementLevel / 100);
 
       const levels = economy.cyclingLevels.filter((level) => level.level >= currentLevel);
@@ -77,7 +77,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           if (level.level <= currentLevel) level.xp = Math.max(0, level.xp - offset);
       }
 
-      writeDurable(economyPath, toJsonString(EconomyConfigSchema, economy));
+      runtime.services.files.write(economyPath, toJsonString(EconomyConfigSchema, economy));
     }
 
     const peer = peerAddress(c);
@@ -326,7 +326,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           firstName: '',
           lastName: bookmark,
         })
-      : runtime.profiles.get(Number(state.id));
+      : runtime.services.profiles.get(Number(state.id));
 
     return create(DropInPlayerSchema, {
       id: state.id,
@@ -389,7 +389,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       currentDateTime: Math.floor(Date.now() / 1000),
       currentWorldTime: Number(worldTime()),
       friendsInWorld: [...runtime.world.online].map(([id, state]) => {
-        const profile = runtime.profiles.get(Number(id));
+        const profile = runtime.services.profiles.get(Number(id));
 
         return {
           playerId: Number(id),

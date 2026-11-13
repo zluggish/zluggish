@@ -1,6 +1,6 @@
-import { Workouts, workoutDetails } from '#src/domain/workouts/planned';
-import { Connections } from '#src/node/persistence/connections';
-import { writeDurable } from '#src/node/persistence/files';
+import { Workouts, workoutDetails } from '#src/repositories/workout.repository';
+import { Connections } from '#src/repositories/connections.repository';
+import { writeDurable } from '#src/repositories/files.repository';
 import { PrivateEventProtoSchema } from '#src/protocol/generated/events_pb';
 import { PlayerStateSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
 import { Simulation } from '#src/world/simulation';

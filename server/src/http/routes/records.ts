@@ -1,35 +1,31 @@
-import { backfillRoutes } from '#src/domain/profiles/achievements';
 import { parseProtobuf } from '#src/http/protobuf';
-import type { Hono } from 'hono';
-import { HTTPException } from 'hono/http-exception';
-import { create, clone, clearField, fromBinary, fromJsonString, toBinary } from '@bufbuild/protobuf';
-import { z } from 'zod';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { authenticated } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import type { RaceResultEntrySaveRequest } from '#src/protocol/generated/race-result_pb';
+import {
+  RaceResultEntryProfileDataSchema,
+  RaceResultEntrySaveRequestSchema,
+  RaceResultEntrySchema,
+  RaceResultSummarySchema,
+} from '#src/protocol/generated/race-result_pb';
+import {
+  LoadPlayerRouteCompletionAchievementsResponseSchema,
+  RouteCompletionAchievementUnlockRequestSchema,
+} from '#src/protocol/generated/route-completion-achievement_pb';
+import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
+import type { SegmentResult } from '#src/protocol/generated/segment-result_pb';
 import {
   SegmentResultSchema,
   SegmentResultsSchema,
   SegmentRideStatsSchema,
 } from '#src/protocol/generated/segment-result_pb';
-import type { SegmentResult } from '#src/protocol/generated/segment-result_pb';
-import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
-import {
-  LoadPlayerRouteCompletionAchievementsResponseSchema,
-  RouteCompletionAchievementUnlockRequestSchema,
-} from '#src/protocol/generated/route-completion-achievement_pb';
-import {
-  RaceResultEntrySaveRequestSchema,
-  RaceResultEntrySchema,
-  RaceResultSummarySchema,
-  RaceResultEntryProfileDataSchema,
-} from '#src/protocol/generated/race-result_pb';
-import type { RaceResultEntrySaveRequest } from '#src/protocol/generated/race-result_pb';
-import { WorldAttributeSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
-import { ProtobufRows } from '#src/node/persistence/protobuf';
-import { writeDurable } from '#src/node/persistence/files';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated } from '#src/http/routes/accounts';
+import { WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { course, worldTime } from '#src/world/state';
+import { clearField, clone, create, fromBinary, fromJsonString, toBinary } from '@bufbuild/protobuf';
+import type { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+import { resolve } from 'node:path';
+import { z } from 'zod';
 
 const timestamp = (value: number | null) => (value ? new Date(value + 1_414_016_075_000).toISOString() : '');
 
@@ -50,20 +46,11 @@ function resultJSON(result: SegmentResult, count: number) {
 }
 
 export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const db = runtime.accounts.db;
-  const records = new ProtobufRows(db);
+  const service = runtime.services.records;
+
+  const records = runtime.services.recordData;
 
   const races = new Map<bigint, { touched: number; riders: Map<number, RaceResultEntrySaveRequest> }>();
-
-  function mine(playerId: number, sport?: string, segment?: string) {
-    return records
-      .select('segment_result', SegmentResultSchema, BigInt(playerId))
-      .filter(
-        (result) =>
-          (sport === undefined || result.sport === (sport === 'RUNNING' ? 1 : 0)) &&
-          (segment === undefined || result.segmentId === BigInt(segment)),
-      );
-  }
 
   app.post('/api/segment-results', async (c) => {
     const user = authenticated(c);
@@ -105,11 +92,13 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const to = c.req.query('to');
 
     const results = fastest(
-      mine(user.player_id, undefined, segment).filter(
-        (item) =>
-          (!from || runtime.config.leaderboards.allTime || Date.parse(item.finishTimeStr) > Date.parse(from)) &&
-          (!to || Date.parse(item.finishTimeStr) < Date.parse(to)),
-      ),
+      service
+        .mine(user.player_id, undefined, segment)
+        .filter(
+          (item) =>
+            (!from || runtime.config.leaderboards.allTime || Date.parse(item.finishTimeStr) > Date.parse(from)) &&
+            (!to || Date.parse(item.finishTimeStr) < Date.parse(to)),
+        ),
     ).slice(0, 100);
 
     for (const result of results)
@@ -147,7 +136,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (!segment) throw new HTTPException(422);
 
-    const results = mine(user.player_id, c.req.param('sport'), segment);
+    const results = service.mine(user.player_id, c.req.param('sport'), segment);
     const best = fastest(results)[0];
     const latest = [...results].sort((a, b) => Number(b.worldTime - a.worldTime) || Number(b.id - a.id))[0];
 
@@ -178,7 +167,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         segmentIds: segments,
       },
       results: segments.flatMap((segment) => {
-        const results = fastest(mine(user.player_id, sport, segment));
+        const results = fastest(service.mine(user.player_id, sport, segment));
 
         return results[0] ? { label: segment, result: resultJSON(results[0], results.length) } : [];
       }),
@@ -189,7 +178,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const { sport, segment } = c.req.param();
     const quarters = new Map<string, SegmentResult[]>();
 
-    for (const result of mine(user.player_id, sport, segment)) {
+    for (const result of service.mine(user.player_id, sport, segment)) {
       const date = new Date(result.finishTimeStr);
       const key = `${date.getUTCFullYear()}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`;
       const entries = quarters.get(key) ?? [];
@@ -217,7 +206,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const user = authenticated(c);
     const { sport, segment, year, quarter } = c.req.param();
 
-    const results = mine(user.player_id, sport, segment).filter((result) => {
+    const results = service.mine(user.player_id, sport, segment).filter((result) => {
       const date = new Date(result.finishTimeStr);
 
       return (
@@ -247,12 +236,9 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     (c) => {
       const segment = c.req.path.split('/', 4)[3];
 
-      const query = db.prepare('SELECT * FROM segment_result ORDER BY elapsed_ms');
-
-      query.setReadBigInts(true);
       const best = new Map<string, SegmentResult>();
 
-      for (const row of query.all()) {
+      for (const row of service.segmentLeaderboard()) {
         const result = records.decode(SegmentResultSchema, row);
 
         if (
@@ -291,7 +277,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const id = records.insert('route_result', RouteResultSaveRequestSchema, result);
 
-    db.prepare('UPDATE route_result SET player_id=? WHERE id=?').run(user.player_id, id);
+    service.updateRouteResult(user.player_id, id);
 
     return c.body(null, 202);
   });
@@ -311,13 +297,9 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       .max(1000)
       .parse(c.req.query('pageSize') ?? 100);
 
-    backfillRoutes(runtime, user.player_id);
+    runtime.services.records.backfillRoutes(user.player_id);
 
-    const rows = db
-      .prepare(
-        'SELECT route_hash, min(world_time) AS first, max(world_time) AS last FROM route_result WHERE player_id=? GROUP BY route_hash',
-      )
-      .all(user.player_id);
+    const rows = service.listRouteResult(user.player_id);
 
     const stats = rows.map((row) => {
       const item = z
@@ -345,20 +327,20 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     });
   });
 
-  const unlockPath = (id: number) => resolve(runtime.profiles.folder(id), 'route_completion_achievements.bin');
+  const unlockPath = (id: number) => resolve(runtime.services.profiles.folder(id), 'route_completion_achievements.bin');
 
   app.get('/api/achievement/route-completion-achievements', (c) => {
     const user = authenticated(c);
 
     const response = fromJsonString(
       LoadPlayerRouteCompletionAchievementsResponseSchema,
-      readFileSync(resolve(runtime.assets, 'data/route_completion_achievement.txt'), 'utf8'),
+      runtime.services.files.read(resolve(runtime.assets, 'data/route_completion_achievement.txt'), 'utf8'),
     );
 
     const file = unlockPath(user.player_id);
 
-    const unlocked = existsSync(file)
-      ? fromBinary(RouteCompletionAchievementUnlockRequestSchema, readFileSync(file)).achievementUuids
+    const unlocked = runtime.services.files.exists(file)
+      ? fromBinary(RouteCompletionAchievementUnlockRequestSchema, runtime.services.files.read(file)).achievementUuids
       : [];
 
     for (const achievement of response.achievements)
@@ -376,12 +358,12 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const file = unlockPath(user.player_id);
 
-    const old = existsSync(file)
-      ? fromBinary(RouteCompletionAchievementUnlockRequestSchema, readFileSync(file))
+    const old = runtime.services.files.exists(file)
+      ? fromBinary(RouteCompletionAchievementUnlockRequestSchema, runtime.services.files.read(file))
       : create(RouteCompletionAchievementUnlockRequestSchema);
 
     old.achievementUuids = [...new Set([...old.achievementUuids, ...incoming.achievementUuids])];
-    writeDurable(file, toBinary(RouteCompletionAchievementUnlockRequestSchema, old), true);
+    runtime.services.files.write(file, toBinary(RouteCompletionAchievementUnlockRequestSchema, old), true);
 
     return c.body(null, 202);
   });
@@ -412,7 +394,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     );
 
     const entries = sorted.map(([playerId, result], index) => {
-      const profile = runtime.profiles.get(playerId);
+      const profile = runtime.services.profiles.get(playerId);
 
       const entry = create(RaceResultEntrySchema, {
         playerId: BigInt(playerId),
@@ -429,7 +411,9 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           playerType: profile.playerType,
           firstName: profile.firstName,
           lastName: profile.lastName,
-          avatarUrl: existsSync(resolve(runtime.profiles.folder(playerId), 'avatarLarge.jpg'))
+          avatarUrl: runtime.services.files.exists(
+            resolve(runtime.services.profiles.folder(playerId), 'avatarLarge.jpg'),
+          )
             ? `https://us-or-rly101.zwift.com/download/${playerId}/avatarLarge.jpg`
             : '',
         }),
@@ -437,7 +421,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
       if (entry.activityData) {
         entry.activityData.time = entry.activityData.worldTime + 1_414_016_074_397n;
-        const meetup = db.prepare('SELECT json FROM private_event WHERE id=?').get(id);
+        const meetup = service.findPrivateEvent(id);
 
         if (meetup) {
           const { eventStart } = z

@@ -1,17 +1,13 @@
+import { authenticated, csrf, page } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { Hono } from 'hono';
-import { HTTPException } from 'hono/http-exception';
 import { html } from 'hono/html';
-import { existsSync, readFileSync } from 'node:fs';
+import { HTTPException } from 'hono/http-exception';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { Workouts } from '#src/domain/workouts/planned';
-import { Connections } from '#src/node/persistence/connections';
-import { writeDurable } from '#src/node/persistence/files';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated, page, csrf } from '#src/http/routes/accounts';
 
 export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const workouts = new Workouts(runtime);
+  const workouts = runtime.services.workouts;
 
   const selected = (id: number, sport = 'CYCLING') => (sport.toUpperCase() === 'CYCLING' ? workouts.list(id) : []);
 
@@ -63,9 +59,9 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.get('/tp-workouts/intervalsicu/:id', (c) => {
     const file = workouts.file(c.req.param('id').replace(/\.zwo$/, ''));
 
-    if (!file || !existsSync(file)) throw new HTTPException(404);
+    if (!file || !runtime.services.files.exists(file)) throw new HTTPException(404);
 
-    return c.body(readFileSync(file), 200, {
+    return c.body(runtime.services.files.read(file), 200, {
       'Content-Type': 'application/xml',
     });
   });
@@ -74,7 +70,7 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   );
   app.on(['GET', 'POST'], '/intervals/:username/', async (c) => {
     const user = authenticated(c);
-    const connections = new Connections(runtime.config.storageDir);
+    const connections = runtime.services.connections;
 
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
@@ -85,7 +81,7 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return c.redirect(`/settings/${user.username}/`);
     }
 
-    const connected = existsSync(connections.file(user.player_id, 'intervals'));
+    const connected = runtime.services.files.exists(connections.file(user.player_id, 'intervals'));
 
     return c.html(
       page(
@@ -107,9 +103,9 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
-      const overrides = runtime.settings.read(user.player_id);
+      const overrides = runtime.services.settings.read(user.player_id);
       overrides['workouts.trainingpeaks.bridgeFolder'] = z.string().parse(form.bridge_folder).trim();
-      runtime.settings.save(user.player_id, overrides);
+      runtime.services.settings.save(user.player_id, overrides);
     }
 
     return c.html(
@@ -123,7 +119,7 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             <input type="hidden" name="csrf_token" value="${c.get('browser').csrf}" /><label
               >Export folder<input
                 name="bridge_folder"
-                value="${runtime.settings.read(user.player_id)['workouts.trainingpeaks.bridgeFolder'] ??
+                value="${runtime.services.settings.read(user.player_id)['workouts.trainingpeaks.bridgeFolder'] ??
                 runtime.config.riderDefaults.workouts.trainingpeaks.bridgeFolder}" /></label
             ><button>Save folder</button>
           </form>
@@ -139,7 +135,11 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const provider = c.req.param('provider') === 'intervals' ? 'intervals-icu' : 'trainingpeaks';
 
-    writeDurable(resolve(runtime.profiles.folder(user.player_id), 'active_workout_provider.txt'), provider, true);
+    runtime.services.files.write(
+      resolve(runtime.services.profiles.folder(user.player_id), 'active_workout_provider.txt'),
+      provider,
+      true,
+    );
     let message: string;
 
     try {

@@ -9,7 +9,7 @@ import { worldTime } from '#src/world/state';
 import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import type { InitializationVector } from '#src/node/network/packet';
 import type { Runtime } from '#src/http/runtime';
-import { writeDurable } from '#src/node/persistence/files';
+import { writeDurable } from '#src/repositories/files.repository';
 
 export function startRideListeners(runtime: Runtime) {
   const { world, config } = runtime;

@@ -7,7 +7,7 @@ import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/supp
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { ZFilesProtoSchema } from '#src/protocol/generated/zfiles_pb';
 import { createCdn } from '#src/node/network/cdn';
-import { writeDurable } from '#src/node/persistence/files';
+import { writeDurable } from '#src/repositories/files.repository';
 
 const xml =
   '<workout_file><name>Medium Tempo</name><sportType>bike</sportType><workout><SteadyState Duration="600" Power="0.8"/></workout></workout_file>';

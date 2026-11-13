@@ -1,12 +1,10 @@
+import { authenticated, csrf, page } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { Hono } from 'hono';
 import { html } from 'hono/html';
 import { HTTPException } from 'hono/http-exception';
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated, csrf, page } from '#src/http/routes/accounts';
-import { resolveRiderSettings } from '#src/node/persistence/settings';
 
 const downloadable = z.enum([
   'profile.bin',
@@ -22,8 +20,8 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
-      runtime.settings.save(rider.player_id, {
-        ...runtime.settings.read(rider.player_id),
+      runtime.services.settings.save(rider.player_id, {
+        ...runtime.services.settings.read(rider.player_id),
         'ghosts.enabled': form.enableghosts !== undefined,
         'workouts.trainingpeaks.bridgeFolder': z.string().catch('').parse(form.bridge_folder),
         'uploads.strava.method': z.enum(['paid', 'free']).parse(form.strava_method ?? 'paid'),
@@ -32,7 +30,10 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return c.redirect(`/settings/${rider.username}/`);
     }
 
-    const settings = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id));
+    const settings = runtime.services.settings.resolveRiderSettings(
+      runtime.config.riderDefaults,
+      runtime.services.settings.read(rider.player_id),
+    );
 
     return c.html(
       page(
@@ -54,7 +55,9 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           </form>
           <h2>Rider data</h2>
           ${downloadable.options
-            .filter((name) => existsSync(resolve(runtime.profiles.folder(rider.player_id), name)))
+            .filter((name) =>
+              runtime.services.files.exists(resolve(runtime.services.profiles.folder(rider.player_id), name)),
+            )
             .map(
               (name) =>
                 html`<form method="post" action="/download">
@@ -75,21 +78,21 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const rider = authenticated(c);
     const form = await csrf(c, runtime);
     const file = downloadable.parse(form.filename);
-    const path = resolve(runtime.profiles.folder(rider.player_id), file);
+    const path = resolve(runtime.services.profiles.folder(rider.player_id), file);
 
-    if (!existsSync(path)) throw new HTTPException(404);
+    if (!runtime.services.files.exists(path)) throw new HTTPException(404);
 
-    return c.body(readFileSync(path), 200, {
+    return c.body(runtime.services.files.read(path), 200, {
       'Content-Disposition': `attachment; filename="${file}"`,
     });
   });
   app.get('/download/:id/avatarLarge.jpg', (c) => {
     const id = z.coerce.number().int().positive().safe().parse(c.req.param('id'));
 
-    const path = resolve(runtime.profiles.folder(id), 'avatarLarge.jpg');
+    const path = resolve(runtime.services.profiles.folder(id), 'avatarLarge.jpg');
 
-    if (!existsSync(path)) throw new HTTPException(404);
+    if (!runtime.services.files.exists(path)) throw new HTTPException(404);
 
-    return c.body(readFileSync(path), 200, { 'Content-Type': 'image/jpeg' });
+    return c.body(runtime.services.files.read(path), 200, { 'Content-Type': 'image/jpeg' });
   });
 }

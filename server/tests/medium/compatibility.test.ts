@@ -1,4 +1,4 @@
-import { writeDurable } from '#src/node/persistence/files';
+import { writeDurable } from '#src/repositories/files.repository';
 import { ActivityListSchema } from '#src/protocol/generated/activity_pb';
 import { PlayerJoinedEventSchema } from '#src/protocol/generated/events_pb';
 import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated/profile_pb';

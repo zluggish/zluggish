@@ -1,19 +1,21 @@
+import { createServices } from '#src/composition';
+import type { ResolvedConfig } from '#src/config/index';
+import { packageRoot } from '#src/config/load';
+import type { RepositoryContext } from '#src/context';
+import type { Runtime } from '#src/http/runtime';
+import { Accounts } from '#src/repositories/accounts.repository';
+import { Sessions } from '#src/repositories/browser-session.repository';
+import { acquireStorageLock } from '#src/repositories/lock.repository';
+import { ProfileImports } from '#src/repositories/profile-import.repository';
+import { Profiles } from '#src/repositories/profile.repository';
+import { SettingsStore } from '#src/repositories/settings.repository';
+import { Simulation } from '#src/world/simulation';
+import { World } from '#src/world/state';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import type { ResolvedConfig } from '#src/config/index';
-import { packageRoot } from '#src/config/load';
-import { Accounts } from '#src/domain/accounts/repository';
-import { Sessions } from '#src/domain/accounts/sessions';
-import { Profiles } from '#src/domain/profiles/store';
-import { ProfileImports } from '#src/domain/profiles/imports';
-import { SettingsStore } from '#src/node/persistence/settings';
-import { acquireStorageLock } from '#src/node/persistence/lock';
-import { World } from '#src/world/state';
-import { Simulation } from '#src/world/simulation';
-import type { Runtime } from '#src/http/runtime';
 
-import { startDiscord } from '#src/node/integrations/discord';
+import { startDiscord } from '#src/repositories/discord.repository';
 
 export async function openRuntime(config: ResolvedConfig, assets: string) {
   const release = await acquireStorageLock(config.storageDir);
@@ -31,7 +33,7 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
       .object({ access: z.string(), refresh: z.string(), id: z.string() })
       .parse(JSON.parse(readFileSync(resolve(packageRoot(), '../assets/tokens.json'), 'utf8')));
 
-    const runtime: Runtime = {
+    const context: RepositoryContext = {
       config,
       assets,
       accounts,
@@ -41,6 +43,8 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
       world,
       tokens,
     };
+
+    const runtime: Runtime = Object.assign(context, { services: createServices(context) });
 
     new ProfileImports(accounts, world).recover();
     const simulation = new Simulation(runtime);

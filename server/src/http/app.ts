@@ -1,36 +1,36 @@
+import { ApplicationError } from '#src/errors';
 import { parseProtobuf } from '#src/http/protobuf';
-import { HTTPException } from 'hono/http-exception';
-import { z } from 'zod';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
 import { accountRoutes, authenticated } from '#src/http/routes/accounts';
-import { profileRoutes } from '#src/http/routes/profiles';
 import { activityRoutes } from '#src/http/routes/activities';
-import { storageRoutes } from '#src/http/routes/storage';
-import { settingsRoutes } from '#src/http/routes/settings';
-import { staticRoutes } from '#src/http/routes/static';
-import { goalRoutes } from '#src/http/routes/goals';
-import { recordRoutes } from '#src/http/routes/records';
-import { fitnessRoutes } from '#src/http/routes/fitness';
-import { workoutRoutes } from '#src/http/routes/workouts';
-import { eventRoutes } from '#src/http/routes/events';
-import { socialRoutes } from '#src/http/routes/social';
-import { integrationRoutes } from '#src/http/routes/integrations';
 import { assetRoutes } from '#src/http/routes/assets';
+import { eventRoutes } from '#src/http/routes/events';
+import { fitnessRoutes } from '#src/http/routes/fitness';
+import { goalRoutes } from '#src/http/routes/goals';
+import { integrationRoutes } from '#src/http/routes/integrations';
+import { profileRoutes } from '#src/http/routes/profiles';
+import { recordRoutes } from '#src/http/routes/records';
 import { relayRoutes } from '#src/http/routes/relay';
-import { Hono } from 'hono';
-import { bodyLimit } from 'hono/body-limit';
-import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import type { Rider } from '#src/domain/accounts/repository';
+import { settingsRoutes } from '#src/http/routes/settings';
+import { socialRoutes } from '#src/http/routes/social';
+import { staticRoutes } from '#src/http/routes/static';
+import { storageRoutes } from '#src/http/routes/storage';
+import { workoutRoutes } from '#src/http/routes/workouts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import type { FeatureResponse_Params } from '#src/protocol/generated/variants_pb';
 import {
   FeatureRequestSchema,
-  FeatureResponseSchema,
   FeatureResponse_ParamsSchema,
+  FeatureResponseSchema,
   StructSchema,
   ValueSchema,
 } from '#src/protocol/generated/variants_pb';
-import type { FeatureResponse_Params } from '#src/protocol/generated/variants_pb';
+import type { Rider } from '#src/repositories/accounts.repository';
+import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
+import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { HTTPException } from 'hono/http-exception';
+import { resolve } from 'node:path';
+import { z } from 'zod';
 
 export interface PublicMetadata {
   gameInfo: string;
@@ -61,7 +61,7 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
     socialRoutes(app, runtime);
     integrationRoutes(app, runtime);
     assetRoutes(app, runtime);
-    staticRoutes(app);
+    staticRoutes(app, runtime);
   }
 
   app.get('/health', (c) => c.json({ status: 'ok', implementation: 'typescript', rideReady: false }));
@@ -90,11 +90,12 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
     const known = new Map(byName);
 
     if (runtime && rider) {
-      const file = resolve(runtime.profiles.folder(rider.player_id), 'variants.txt');
+      const file = resolve(runtime.services.profiles.folder(rider.player_id), 'variants.txt');
 
-      if (existsSync(file))
+      if (runtime.services.files.exists(file))
         try {
-          for (const variant of fromJsonString(FeatureResponseSchema, readFileSync(file, 'utf8')).variants)
+          for (const variant of fromJsonString(FeatureResponseSchema, runtime.services.files.read(file, 'utf8'))
+            .variants)
             known.set(variant.name, variant);
         } catch {
           console.warn(`Ignoring invalid variants override for ${rider.player_id}`);
@@ -103,7 +104,11 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
 
     const mochi = known.get('game_mochi');
 
-    if (runtime && mochi && existsSync(resolve(runtime.config.storageDir, 'mochi/watopian/watopian.manifest.json'))) {
+    if (
+      runtime &&
+      mochi &&
+      runtime.services.files.exists(resolve(runtime.config.storageDir, 'mochi/watopian/watopian.manifest.json'))
+    ) {
       const copy = clone(FeatureResponse_ParamsSchema, mochi);
       const values = copy.values ?? create(StructSchema);
 
@@ -130,6 +135,9 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
       }),
     );
   app.onError((error, c) => {
+    if (error instanceof ApplicationError)
+      return new HTTPException(error.status, { message: error.message }).getResponse();
+
     if (error instanceof HTTPException) return error.getResponse();
 
     if (error instanceof z.ZodError) return c.text('Invalid request', 400);

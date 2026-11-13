@@ -1,9 +1,9 @@
-import { identityOf } from '#src/domain/accounts/repository';
-import { ProfileImports } from '#src/domain/profiles/imports';
-import { syncWorkoutsAutomatically } from '#src/domain/workouts/automatic';
-import { Workouts } from '#src/domain/workouts/planned';
-import { Connections } from '#src/node/persistence/connections';
-import { writeDurable } from '#src/node/persistence/files';
+import { identityOf } from '#src/repositories/accounts.repository';
+import { ProfileImports } from '#src/repositories/profile-import.repository';
+import { syncWorkoutsAutomatically } from '#src/repositories/automatic-workout.repository';
+import { Workouts } from '#src/repositories/workout.repository';
+import { Connections } from '#src/repositories/connections.repository';
+import { writeDurable } from '#src/repositories/files.repository';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { AchievementsSchema, PlayerProfileSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';

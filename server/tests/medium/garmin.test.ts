@@ -1,4 +1,4 @@
-import { garminClient, uploadGarmin } from '#src/node/integrations/garmin';
+import { garminClient, uploadGarmin } from '#src/repositories/garmin.repository';
 import { runtimeFixture } from '#tests/support/runtime';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';

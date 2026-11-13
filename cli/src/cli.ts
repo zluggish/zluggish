@@ -2,21 +2,21 @@ import { parseArgs } from 'node:util';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { LoadOptions } from 'zluggish/internal/config/load';
-import { Accounts } from 'zluggish/internal/domain/accounts/repository';
-import { migrateAccounts } from 'zluggish/internal/domain/accounts/migrate';
+import { Accounts } from 'zluggish/internal/repositories/accounts.repository';
+import { migrateAccounts } from 'zluggish/internal/repositories/account-migration.repository';
 import { ConfigError } from 'zluggish/internal/config/index';
 import { loadConfig, selectConfigPath, packageRoot } from 'zluggish/internal/config/load';
 import { migrateConfig } from 'zluggish/internal/config/migrate';
-import { writeDurable } from 'zluggish/internal/node/persistence/files';
-import type { Overrides } from 'zluggish/internal/node/persistence/settings';
+import { writeDurable } from 'zluggish/internal/repositories/files.repository';
+import type { Overrides } from 'zluggish/internal/repositories/settings.repository';
 import {
   SettingsStore,
   checkRider,
   overrideSchema,
   settingKeySchema,
   resolveRiderSettings,
-} from 'zluggish/internal/node/persistence/settings';
-import { acquireStorageLock } from 'zluggish/internal/node/persistence/lock';
+} from 'zluggish/internal/repositories/settings.repository';
+import { acquireStorageLock } from 'zluggish/internal/repositories/lock.repository';
 import { z } from 'zod';
 
 export const HELP = `Usage: zluggish [--config PATH] [--storage-dir DIR] config init|validate|show|typecheck|migrate

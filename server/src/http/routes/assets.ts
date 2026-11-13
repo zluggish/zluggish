@@ -1,7 +1,6 @@
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { Hono } from 'hono';
-import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, relative, resolve } from 'node:path';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
 
 const types = new Map([
   ['.css', 'text/css'],
@@ -32,9 +31,10 @@ export function assetRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     app.get(`${prefix}/*`, (c) => {
       const file = inside(root, c.req.path.slice(prefix.length));
 
-      if (!file || !existsSync(file) || !statSync(file).isFile()) return c.notFound();
+      if (!file || !runtime.services.files.exists(file) || !runtime.services.files.stat(file).isFile())
+        return c.notFound();
 
-      return c.body(readFileSync(file), 200, {
+      return c.body(runtime.services.files.read(file), 200, {
         'Content-Type': types.get(extname(file)) ?? 'application/octet-stream',
       });
     });

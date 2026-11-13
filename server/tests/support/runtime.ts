@@ -1,16 +1,17 @@
-import type { TestContext } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { z } from 'zod';
-import { Accounts } from '#src/domain/accounts/repository';
-import { Sessions } from '#src/domain/accounts/sessions';
-import { Profiles } from '#src/domain/profiles/store';
-import { SettingsStore } from '#src/node/persistence/settings';
+import { createServices } from '#src/composition';
 import { validateConfig } from '#src/config/index';
-import { World } from '#src/world/state';
-import { createApp } from '#src/http/app';
 import { packageRoot } from '#src/config/load';
+import { createApp } from '#src/http/app';
+import { Accounts } from '#src/repositories/accounts.repository';
+import { Sessions } from '#src/repositories/browser-session.repository';
+import { Profiles } from '#src/repositories/profile.repository';
+import { SettingsStore } from '#src/repositories/settings.repository';
+import { World } from '#src/world/state';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import type { TestContext } from 'node:test';
+import { z } from 'zod';
 
 export function runtimeFixture(t: TestContext) {
   const storage = mkdtempSync(resolve(tmpdir(), 'zluggish-accounts-'));
@@ -26,7 +27,7 @@ export function runtimeFixture(t: TestContext) {
     .object({ access: z.string(), refresh: z.string(), id: z.string() })
     .parse(JSON.parse(readFileSync(resolve(packageRoot(), '../assets/tokens.json'), 'utf8')));
 
-  const runtime = {
+  const context = {
     accounts,
     sessions,
     profiles,
@@ -36,6 +37,8 @@ export function runtimeFixture(t: TestContext) {
     assets,
     tokens,
   };
+
+  const runtime = Object.assign(context, { services: createServices(context) });
 
   const app = createApp({ gameInfo: '{}', gameInfoHash: '0', variants: '{}' }, runtime);
 

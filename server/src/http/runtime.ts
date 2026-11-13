@@ -1,23 +1,13 @@
-import type { Rider, Accounts } from '#src/domain/accounts/repository';
-import type { BrowserSession, Sessions } from '#src/domain/accounts/sessions';
-import type { ResolvedConfig } from '#src/config/index';
-import type { World } from '#src/world/state';
-import type { SettingsStore } from '#src/node/persistence/settings';
-import type { Profiles } from '#src/domain/profiles/store';
+import type { Services } from '#src/composition';
+import type { RepositoryContext } from '#src/context';
+import type { Rider } from '#src/repositories/accounts.repository';
+import type { BrowserSession } from '#src/repositories/browser-session.repository';
 
-export interface Runtime {
-  discord?: import('#src/node/integrations/discord').DiscordBridge;
-  config: ResolvedConfig;
-  accounts: Accounts;
-  sessions: Sessions;
-  world: World;
-  settings: SettingsStore;
-  profiles: Profiles;
-  assets: string;
-  tokens: { access: string; refresh: string; id: string };
-  /** Overrides the default SIGINT used by the admin restart countdown. */
-  stop?: () => void;
+export interface Runtime extends RepositoryContext {
+  services: Services;
 }
+
+export type HttpRuntime = Omit<Runtime, 'accounts' | 'sessions' | 'profiles' | 'settings'>;
 
 export type RuntimeEnv = {
   Variables: {

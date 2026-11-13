@@ -1,58 +1,19 @@
+import { importFilenameSchema } from '#src/contracts/profile-import';
 import { parseProtobuf } from '#src/http/protobuf';
-import type { Hono, Context } from 'hono';
-import { HTTPException } from 'hono/http-exception';
-import { html } from 'hono/html';
-import { z } from 'zod';
+import { authenticated, csrf, page } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import { PlayerProfileSchema, ProfileEntitlementsSchema } from '#src/protocol/generated/profile_pb';
+import type { ImportFiles } from '#src/repositories/profile-import.repository';
 import { create, toBinary } from '@bufbuild/protobuf';
-import {
-  PlayerProfileSchema,
-  ProfileEntitlementsSchema,
-  ProfileEntitlementSchema,
-  ProfileEntitlement_EntitlementType,
-  ProfileEntitlement_ProfileEntitlementStatus,
-} from '#src/protocol/generated/profile_pb';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { companionProfile } from '#src/domain/profiles/json';
-import { existsSync, readFileSync } from 'node:fs';
+import type { Context, Hono } from 'hono';
+import { html } from 'hono/html';
+import { HTTPException } from 'hono/http-exception';
 import { resolve } from 'node:path';
-import { page, authenticated, csrf } from '#src/http/routes/accounts';
-import { ProfileImports, importFilenameSchema } from '#src/domain/profiles/imports';
-import type { ImportFiles } from '#src/domain/profiles/imports';
+import { z } from 'zod';
 
 export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const imports = new ProfileImports(runtime.accounts, runtime.world);
+  const imports = runtime.services.imports;
   imports.recover();
-
-  function entitlements(profile: ReturnType<typeof create<typeof PlayerProfileSchema>>) {
-    profile.entitlements = profile.entitlements.filter((item) => item.type !== ProfileEntitlement_EntitlementType.RIDE);
-    profile.entitlements.push(
-      create(ProfileEntitlementSchema, {
-        type: ProfileEntitlement_EntitlementType.RIDE,
-        id: -1n,
-        status: ProfileEntitlement_ProfileEntitlementStatus.ACTIVE,
-      }),
-    );
-
-    if (runtime.config.equipment.unlockAll || runtime.config.equipment.unlockEntitlements) {
-      const range = z
-        .object({ first: z.number().int(), last: z.number().int() })
-        .parse(JSON.parse(readFileSync(resolve(runtime.assets, 'data/entitlements.txt'), 'utf8')));
-
-      const owned = new Set(profile.entitlements.map((item) => item.id));
-
-      for (let id = runtime.config.equipment.unlockAll ? 1 : range.first; id <= range.last; id++)
-        if (!owned.has(BigInt(id)))
-          profile.entitlements.push(
-            create(ProfileEntitlementSchema, {
-              id: BigInt(id),
-              type: ProfileEntitlement_EntitlementType.USE,
-              status: ProfileEntitlement_ProfileEntitlementStatus.ACTIVE,
-            }),
-          );
-    }
-
-    return profile;
-  }
 
   app.on(['GET', 'POST'], '/profile/:username/', async (c) => {
     const rider = authenticated(c);
@@ -110,7 +71,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const duplicate =
       manifest.sourceId &&
-      runtime.accounts
+      runtime.services.accounts
         .list()
         .some((user) => user.player_id !== rider.player_id && user.official_player_id === manifest.sourceId);
 
@@ -150,15 +111,15 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   });
 
   function profileResponse(c: Context<RuntimeEnv>, id: number) {
-    const profile = entitlements(runtime.profiles.get(id));
+    const profile = runtime.services.profiles.entitlements(runtime.services.profiles.get(id));
 
     return c.req.header('Accept')?.includes('application/json')
-      ? c.json(companionProfile(profile, avatar(id)))
+      ? c.json(runtime.services.profiles.companionProfile(profile, avatar(id)))
       : c.body(toBinary(PlayerProfileSchema, profile));
   }
 
   function avatar(id: number) {
-    return existsSync(resolve(runtime.profiles.folder(id), 'avatarLarge.jpg'))
+    return runtime.services.files.exists(resolve(runtime.services.profiles.folder(id), 'avatarLarge.jpg'))
       ? `https://us-or-rly101.zwift.com/download/${id}/avatarLarge.jpg`
       : null;
   }
@@ -166,7 +127,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.on('GET', ['/api/profiles/me', '/api/profiles/me/'], (c) => profileResponse(c, authenticated(c).player_id));
   app.get('/api/profiles/me/entitlements', (c) => {
     const user = authenticated(c);
-    const profile = entitlements(runtime.profiles.get(user.player_id));
+    const profile = runtime.services.profiles.entitlements(runtime.services.profiles.get(user.player_id));
 
     return c.body(
       toBinary(
@@ -183,17 +144,17 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const id = z.coerce.number().int().positive().safe().parse(c.req.param('id'));
 
     if (
-      !runtime.accounts.get(id) &&
-      !runtime.profiles.synthetic.has(BigInt(id)) &&
-      !existsSync(resolve(runtime.profiles.folder(id), 'profile.bin'))
+      !runtime.services.accounts.get(id) &&
+      !runtime.services.profiles.synthetic.has(BigInt(id)) &&
+      !runtime.services.files.exists(resolve(runtime.services.profiles.folder(id), 'profile.bin'))
     )
       throw new HTTPException(404);
-    const profile = runtime.profiles.get(id);
+    const profile = runtime.services.profiles.get(id);
 
     return c.json(
-      companionProfile(
+      runtime.services.profiles.companionProfile(
         profile,
-        existsSync(resolve(runtime.profiles.folder(Number(profile.id)), 'avatarLarge.jpg'))
+        runtime.services.files.exists(resolve(runtime.services.profiles.folder(Number(profile.id)), 'avatarLarge.jpg'))
           ? `https://us-or-rly101.zwift.com/download/${profile.id}/avatarLarge.jpg`
           : null,
       ),
@@ -218,7 +179,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       })
       .parse(await c.req.json());
 
-    const profile = runtime.profiles.get(user.player_id);
+    const profile = runtime.services.profiles.get(user.player_id);
 
     if (update.countryCode !== undefined) profile.countryCode = update.countryCode;
 
@@ -237,7 +198,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (update.useMetric !== undefined) profile.useMetric = update.useMetric;
 
     if (update.weight !== undefined) profile.weightInGrams = update.weight;
-    runtime.profiles.save(user.player_id, profile);
+    runtime.services.profiles.save(user.player_id, profile);
 
     return profileResponse(c, user.player_id);
   });
@@ -250,7 +211,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const profile = parseProtobuf(PlayerProfileSchema, new Uint8Array(await c.req.arrayBuffer()));
 
-    runtime.profiles.save(user.player_id, profile);
+    runtime.services.profiles.save(user.player_id, profile);
 
     return c.body(null, 204);
   });

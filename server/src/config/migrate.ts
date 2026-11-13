@@ -7,10 +7,10 @@ import { parse as parseIni } from 'ini';
 import { ConfigError, validateConfig } from '#src/config/index';
 import { CONFIG_NAME } from '#src/config/load';
 import { configSchema } from '#src/config/schema';
-import { writeDurable } from '#src/node/persistence/files';
-import { acquireStorageLock } from '#src/node/persistence/lock';
-import { SettingsStore, preferenceSchema } from '#src/node/persistence/settings';
-import type { Preference } from '#src/node/persistence/settings';
+import { writeDurable } from '#src/repositories/files.repository';
+import { acquireStorageLock } from '#src/repositories/lock.repository';
+import { SettingsStore, preferenceSchema } from '#src/repositories/settings.repository';
+import type { Preference } from '#src/repositories/settings.repository';
 
 const journalSchema = z.strictObject({
   version: z.literal(1),

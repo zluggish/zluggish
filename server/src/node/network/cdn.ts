@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { startHttp } from '#src/node/network/http';
 import type { Runtime } from '#src/http/runtime';
-import { Workouts } from '#src/domain/workouts/planned';
+import { Workouts } from '#src/repositories/workout.repository';
 
 const contentTypes = new Map([
   ['.xml', 'text/xml'],

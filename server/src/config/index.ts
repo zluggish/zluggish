@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { configSchema, riderSettingsSchema } from '#src/config/schema';
+import { z } from 'zod';
 
 export type { ConfigInput, ResolvedConfig, RiderSettings } from '#src/config/schema';
 

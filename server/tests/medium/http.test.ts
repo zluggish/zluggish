@@ -1,5 +1,5 @@
 import { createApp } from '#src/http/app';
-import { writeDurable } from '#src/node/persistence/files';
+import { writeDurable } from '#src/repositories/files.repository';
 import { FeatureRequestSchema, FeatureResponseSchema } from '#src/protocol/generated/variants_pb';
 import { runtimeFixture } from '#tests/support/runtime';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';

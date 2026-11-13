@@ -1,6 +1,6 @@
-import { migrateAccounts } from '#src/domain/accounts/migrate';
-import { Accounts } from '#src/domain/accounts/repository';
-import { ProfileImports } from '#src/domain/profiles/imports';
+import { migrateAccounts } from '#src/repositories/account-migration.repository';
+import { Accounts } from '#src/repositories/accounts.repository';
+import { ProfileImports } from '#src/repositories/profile-import.repository';
 import { createApp } from '#src/http/app';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';

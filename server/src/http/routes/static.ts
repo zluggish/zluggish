@@ -1,16 +1,15 @@
+import { packageRoot } from '#src/config/load';
 import { parseProtobuf } from '#src/http/protobuf';
-import type { Hono } from 'hono';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { z } from 'zod';
-import { create, toBinary } from '@bufbuild/protobuf';
+import { authenticated } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import {
   SaveStructuredEventRequestSchema,
   SaveStructuredEventResponseSchema,
 } from '#src/protocol/generated/structured_events_pb';
-import { packageRoot } from '#src/config/load';
-import type { RuntimeEnv } from '#src/http/runtime';
-import { authenticated } from '#src/http/routes/accounts';
+import { create, toBinary } from '@bufbuild/protobuf';
+import type { Hono } from 'hono';
+import { resolve } from 'node:path';
+import { z } from 'zod';
 
 const contracts = z.array(
   z.object({
@@ -31,9 +30,9 @@ const contracts = z.array(
   }),
 );
 
-export function staticRoutes(app: Hono<RuntimeEnv>) {
+export function staticRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const routes = contracts.parse(
-    JSON.parse(readFileSync(resolve(packageRoot(), '../assets/static-responses.json'), 'utf8')),
+    JSON.parse(runtime.services.files.read(resolve(packageRoot(), '../assets/static-responses.json'), 'utf8')),
   );
 
   for (const route of routes)

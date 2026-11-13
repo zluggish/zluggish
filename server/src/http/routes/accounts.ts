@@ -1,15 +1,11 @@
-import { syncWorkoutsAutomatically } from '#src/domain/workouts/automatic';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import type { Hono, Context } from 'hono';
-import { html } from 'hono/html';
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { getConnInfo } from '@hono/node-server/conninfo';
+import type { Context, Hono } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { html } from 'hono/html';
 import { HTTPException } from 'hono/http-exception';
+import { resolve } from 'node:path';
 import { z } from 'zod';
-import { identityOf } from '#src/domain/accounts/repository';
-import { resolveRiderSettings } from '#src/node/persistence/settings';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
 
 export function page(title: string, body: ReturnType<typeof html>) {
   return html`<!doctype html>
@@ -76,7 +72,7 @@ type FormFields = Record<string, string | File | (string | File)[]>;
 export async function csrf(c: Context<RuntimeEnv>, runtime: Runtime): Promise<FormFields> {
   const form = await c.req.parseBody();
 
-  if (!runtime.sessions.validCsrf(c.get('browser'), z.string().catch('').parse(form.csrf_token)))
+  if (!runtime.services.sessions.validCsrf(c.get('browser'), z.string().catch('').parse(form.csrf_token)))
     throw new HTTPException(400, {
       message: 'The form expired. Reload and retry.',
     });
@@ -95,7 +91,8 @@ export function peerAddress(c: Context<RuntimeEnv>) {
 }
 
 export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const { accounts, sessions, world } = runtime;
+  const { accounts, sessions } = runtime.services;
+  const { world } = runtime;
   app.use('*', async (c, next) => {
     const authorization = c.req.header('Authorization');
     const existing = getCookie(c, 'zluggish_session');
@@ -154,7 +151,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (user && (!user.pass_hash || (await accounts.verify(user, password)))) {
         sessions.browsers.delete(c.get('browserId'));
         const fresh = sessions.open();
-        fresh.session.identity = identityOf(user);
+        fresh.session.identity = runtime.services.accounts.identityOf(user);
         fresh.session.selected = true;
         setCookie(c, 'zluggish_session', fresh.id, {
           httpOnly: true,
@@ -244,13 +241,16 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.get('/user/:username/', async (c) => {
     const user = authenticated(c);
     const session = c.get('browser');
-    await syncWorkoutsAutomatically(runtime, user.player_id);
+    await runtime.services.workouts.syncWorkoutsAutomatically(user.player_id);
 
     const climbs = z
       .array(z.object({ name: z.string(), road: z.string() }))
-      .parse(JSON.parse(readFileSync(resolve(runtime.assets, 'data/climbs.txt'), 'utf8')));
+      .parse(JSON.parse(runtime.services.files.read(resolve(runtime.assets, 'data/climbs.txt'), 'utf8')));
 
-    const settings = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(user.player_id));
+    const settings = runtime.services.settings.resolveRiderSettings(
+      runtime.config.riderDefaults,
+      runtime.services.settings.read(user.player_id),
+    );
 
     return c.html(
       page(
@@ -369,7 +369,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (world.active(user.player_id)) throw new HTTPException(409);
 
     return c.redirect(
-      `http://zwift/?code=zwift_refresh_token${sessions.token(identityOf(user), runtime.tokens.refresh)}`,
+      `http://zwift/?code=zwift_refresh_token${sessions.token(runtime.services.accounts.identityOf(user), runtime.tokens.refresh)}`,
     );
   });
 
@@ -381,8 +381,8 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (world.active(user.player_id)) throw new HTTPException(409);
 
-    runtime.settings.save(user.player_id, {
-      ...runtime.settings.read(user.player_id),
+    runtime.services.settings.save(user.player_id, {
+      ...runtime.services.settings.read(user.player_id),
       'ghosts.enabled': form.enableghosts !== undefined,
     });
     const address = peerAddress(c);

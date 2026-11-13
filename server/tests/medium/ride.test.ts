@@ -1,5 +1,5 @@
 import { validateConfig } from '#src/config/index';
-import { Accounts } from '#src/domain/accounts/repository';
+import { Accounts } from '#src/repositories/accounts.repository';
 import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import { startRideListeners } from '#src/node/network/ride';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';

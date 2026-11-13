@@ -1,59 +1,30 @@
 import { parseProtobuf } from '#src/http/protobuf';
-import type { Hono } from 'hono';
-import { HTTPException } from 'hono/http-exception';
-import { create, toBinary } from '@bufbuild/protobuf';
-import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { PlayerProfilesSchema, PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { authenticated } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import { PlaybackDataSchema, PlaybackMetadataSchema } from '#src/protocol/generated/playback_pb';
+import { PlayerProfileSchema, PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
+import { SocialPlayerActionSchema } from '#src/protocol/generated/tcp-node-msgs_pb';
 import {
   RideOnSchema,
-  WorldAttributeSchema,
   ServerToClientSchema,
   WA_TYPE,
+  WorldAttributeSchema,
 } from '#src/protocol/generated/udp-node-msgs_pb';
-import { SocialPlayerActionSchema, SocialPlayerActionType } from '#src/protocol/generated/tcp-node-msgs_pb';
-import { PlaybackDataSchema, PlaybackMetadataSchema } from '#src/protocol/generated/playback_pb';
-import { writeDurable } from '#src/node/persistence/files';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated } from '#src/http/routes/accounts';
-import { worldTime, course } from '#src/world/state';
-
-export function sendMessage(runtime: Runtime, message: string, recipients?: bigint[], sender = 'Server') {
-  if (sender === 'Server' && recipients === undefined) runtime.discord?.send(message);
-  runtime.world.enqueue(
-    create(WorldAttributeSchema, {
-      serverRealm: 1n,
-      waType: WA_TYPE.WAT_SPA,
-      worldTimeBorn: worldTime(),
-      worldTimeExpire: worldTime() + 60_000n,
-      waF12: 1n,
-      timestamp: BigInt(Date.now()) * 1000n,
-      payload: toBinary(
-        SocialPlayerActionSchema,
-        create(SocialPlayerActionSchema, {
-          playerId: 0n,
-          toPlayerId: 0n,
-          spaType: SocialPlayerActionType.SOCIAL_TEXT_MESSAGE,
-          firstName: sender,
-          lastName: '',
-          message,
-          countryCode: 0,
-        }),
-      ),
-    }),
-    recipients,
-  );
-}
+import { course, worldTime } from '#src/world/state';
+import { create, toBinary } from '@bufbuild/protobuf';
+import type { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { z } from 'zod';
 
 export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const db = runtime.accounts.db;
+  const service = runtime.services.social;
 
   const summary = (id: number) => {
-    const profile = runtime.profiles.get(id);
+    const profile = runtime.services.profiles.get(id);
 
-    const image = existsSync(resolve(runtime.profiles.folder(id), 'avatarLarge.jpg'))
+    const image = runtime.services.files.exists(resolve(runtime.services.profiles.folder(id), 'avatarLarge.jpg'))
       ? `https://us-or-rly101.zwift.com/download/${id}/avatarLarge.jpg`
       : null;
 
@@ -78,7 +49,8 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         PlayerProfilesSchema,
         create(PlayerProfilesSchema, {
           profiles: ids.map((id) => {
-            if (runtime.profiles.synthetic.has(BigInt(id)) || runtime.accounts.get(id)) return runtime.profiles.get(id);
+            if (runtime.services.profiles.synthetic.has(BigInt(id)) || runtime.services.accounts.get(id))
+              return runtime.services.profiles.get(id);
 
             return create(PlayerProfileSchema, {
               id: BigInt(id),
@@ -98,7 +70,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (c.req.header('Accept') === 'application/x-protobuf-lite') return c.body(null, 200);
 
       return c.json(
-        runtime.accounts.list().map((user) => ({
+        runtime.services.accounts.list().map((user) => ({
           id: 0,
           followerId: user.player_id,
           followeeId: Number(c.req.param('id')),
@@ -127,9 +99,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       .max(1000)
       .parse(c.req.query('limit') ?? 100);
 
-    const rows = db
-      .prepare('SELECT player_id FROM user WHERE first_name LIKE ? OR last_name LIKE ? LIMIT ? OFFSET ?')
-      .all(`%${input.query}%`, `%${input.query}%`, limit, start);
+    const rows = service.listUser(`%${input.query}%`, `%${input.query}%`, limit, start);
 
     return c.json(rows.map((row) => summary(z.number().parse(row.player_id))));
   });
@@ -151,7 +121,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       })
       .parse(await c.req.json());
 
-    const profile = runtime.profiles.get(user.player_id);
+    const profile = runtime.services.profiles.get(user.player_id);
     profile.privacyBits = BigInt(
       (input.approvalRequired ? 1 : 0) +
         (input.minor ? 2 : 0) +
@@ -163,17 +133,17 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     );
     profile.defaultActivityPrivacy =
       input.defaultActivityPrivacy === 'PRIVATE' ? 1 : input.defaultActivityPrivacy === 'FRIENDS' ? 2 : 0;
-    runtime.profiles.save(user.player_id, profile);
-    writeDurable(resolve(runtime.profiles.folder(user.player_id), 'privacy.json'), JSON.stringify(input), true);
+    runtime.services.profiles.save(user.player_id, profile);
+    runtime.services.files.write(
+      resolve(runtime.services.profiles.folder(user.player_id), 'privacy.json'),
+      JSON.stringify(input),
+      true,
+    );
 
     return c.body(null, 200);
   });
   app.get('/api/profiles/:id/statistics', (c) => {
-    const row = db
-      .prepare(
-        'SELECT SUM(CAST((julianday(date)-julianday(start_date))*1440 AS INTEGER)) AS timeRiddenInMinutes, SUM(distanceInMeters) AS distanceRiddenInMeters, SUM(calories) AS caloriesBurned, SUM(total_elevation) AS heightClimbedInMeters FROM activity WHERE player_id=? AND julianday(start_date)>=julianday(?)',
-      )
-      .get(c.req.param('id'), c.req.query('startDateTime') ?? '1970-01-01');
+    const row = service.findActivity(c.req.param('id'), c.req.query('startDateTime') ?? '1970-01-01');
 
     return c.json(z.record(z.string(), z.number().nullable()).parse(row));
   });
@@ -200,7 +170,11 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (image.length < 4 || image[0] !== 0xff || image[1] !== 0xd8 || image.at(-2) !== 0xff || image.at(-1) !== 0xd9)
       throw new HTTPException(400);
-    writeDurable(resolve(runtime.profiles.folder(user.player_id), 'avatarLarge.jpg'), image, true);
+    runtime.services.files.write(
+      resolve(runtime.services.profiles.folder(user.player_id), 'avatarLarge.jpg'),
+      image,
+      true,
+    );
 
     return c.body(null, 200);
   });
@@ -235,7 +209,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   });
   app.post('/api/profiles/:id/activities/0/rideon', (c) => {
     const user = authenticated(c);
-    const profile = runtime.profiles.get(user.player_id);
+    const profile = runtime.services.profiles.get(user.player_id);
     const receiver = BigInt(c.req.param('id'));
 
     const payload = toBinary(
@@ -277,7 +251,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (update.waType === WA_TYPE.WAT_SPA) {
       const action = parseProtobuf(SocialPlayerActionSchema, update.payload);
       action.playerId = id;
-      const profile = runtime.profiles.get(user.player_id);
+      const profile = runtime.services.profiles.get(user.player_id);
       action.firstName = profile.firstName;
       action.lastName = profile.lastName;
       update.payload = toBinary(SocialPlayerActionSchema, action);
@@ -285,7 +259,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (action.message.startsWith('.')) {
         const reply = runtime.world.simulation?.command(id, action.message.slice(1)) ?? 'Simulation is unavailable.';
 
-        sendMessage(runtime, reply, [id]);
+        runtime.services.social.sendMessage(reply, [id]);
 
         return c.body(null, 201);
       }
@@ -302,7 +276,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     } else if (update.waType === WA_TYPE.WAT_B_ACT) {
       const reply = runtime.world.simulation?.gesture(id, update.payload);
 
-      if (reply) sendMessage(runtime, reply, [id]);
+      if (reply) runtime.services.social.sendMessage(reply, [id]);
     }
 
     runtime.world.enqueue(update, recipients);
@@ -316,15 +290,8 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (!playback.time) return c.body(null, 200);
     const id = randomUUID();
-    writeDurable(resolve(runtime.config.storageDir, 'playbacks', `${id}.playback`), bytes);
-    db.prepare('INSERT INTO playback (player_id,uuid,segment_id,time,world_time,type) VALUES (?,?,?,?,?,?)').run(
-      user.player_id,
-      id,
-      playback.segmentId,
-      playback.time,
-      playback.worldTime,
-      playback.type,
-    );
+    runtime.services.files.write(resolve(runtime.config.storageDir, 'playbacks', `${id}.playback`), bytes);
+    service.insertPlayback(user.player_id, id, playback.segmentId, playback.time, playback.worldTime, playback.type);
 
     return c.text(id, 201);
   });
@@ -340,13 +307,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const before = c.req.query('before') ?? '0';
     const type = c.req.query('type') === 'ROUTE' ? 1 : 0;
 
-    const query = db.prepare(
-      'SELECT * FROM playback WHERE player_id=? AND segment_id=? AND type=? AND (? OR world_time>?) AND (? OR world_time<?) ORDER BY CASE WHEN ? THEN time ELSE -world_time END LIMIT 1',
-    );
-
-    query.setReadBigInts(true);
-
-    const row = query.get(
+    const row = service.playbackForSegment(
       player,
       BigInt(c.req.param('segment')),
       type,
@@ -388,8 +349,8 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (!/^[0-9a-f-]{36}\.playback$/.test(file)) throw new HTTPException(404);
     const path = resolve(runtime.config.storageDir, 'playbacks', file);
 
-    if (!existsSync(path)) throw new HTTPException(404);
+    if (!runtime.services.files.exists(path)) throw new HTTPException(404);
 
-    return c.body(readFileSync(path));
+    return c.body(runtime.services.files.read(path));
   });
 }

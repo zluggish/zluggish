@@ -1,4 +1,4 @@
-import { writeDurable } from '#src/node/persistence/files';
+import { writeDurable } from '#src/repositories/files.repository';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { Simulation } from '#src/world/simulation';

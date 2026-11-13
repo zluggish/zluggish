@@ -8,8 +8,8 @@ import { mediumFixture, mediumBrowser } from '#tests/medium/support';
 import { PlayerProfileSchema, AchievementsSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
 import { LoginResponseSchema } from '#src/protocol/generated/login_pb';
-import { Connections } from '#src/node/persistence/connections';
-import { writeDurable } from '#src/node/persistence/files';
+import { Connections } from '#src/repositories/connections.repository';
+import { writeDurable } from '#src/repositories/files.repository';
 import { createApp } from '#src/http/app';
 
 const cases = [

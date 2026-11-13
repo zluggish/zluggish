@@ -1,24 +1,13 @@
-import { ProfileImports } from '#src/domain/profiles/imports';
-import { downloadOfficialData } from '#src/node/integrations/profile-download';
+import { authenticated, csrf, page } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import { RestartScheduler } from '#src/node/lifecycle/restart';
+import type { Rider } from '#src/repositories/accounts.repository';
 import type { GarminClient, MfaState } from 'garminconnect-js';
 import type { Context, Hono } from 'hono';
 import { html } from 'hono/html';
 import { HTTPException } from 'hono/http-exception';
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import type { Rider } from '#src/domain/accounts/repository';
-import { savePowerCurve } from '#src/domain/activities/fit';
-import { garminClient } from '#src/node/integrations/garmin';
-import { authorizationUrl, checkSession, exchangeCode, writeToken } from '#src/node/integrations/strava';
-import { officialHeaders, officialLogin, officialRelay } from '#src/node/integrations/zwift';
-import { RestartScheduler } from '#src/node/lifecycle/restart';
-import { writeDurable } from '#src/node/persistence/files';
-import { Connections } from '#src/node/persistence/connections';
-import { resolveRiderSettings } from '#src/node/persistence/settings';
-import type { Runtime, RuntimeEnv } from '#src/http/runtime';
-import { authenticated, csrf, page } from '#src/http/routes/accounts';
-import { sendMessage } from '#src/http/routes/social';
 
 function admin(c: Env) {
   const rider = authenticated(c);
@@ -43,27 +32,33 @@ const removable = z.enum([
 const text = z.string().catch('');
 
 export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
-  const connections = new Connections(runtime.config.storageDir);
+  const service = runtime.services.integrations;
+
+  const connections = runtime.services.connections;
 
   const restart = new RestartScheduler(
-    (message) => sendMessage(runtime, message),
+    (message) => runtime.services.social.sendMessage(message),
     runtime.stop ?? (() => process.kill(process.pid, 'SIGINT')),
   );
 
-  const folder = (rider: Rider) => runtime.profiles.folder(rider.player_id);
+  const folder = (rider: Rider) => runtime.services.profiles.folder(rider.player_id);
 
   function cookieOf(rider: Rider) {
     const file = resolve(folder(rider), 'strava4_session.txt');
 
-    return existsSync(file) ? (readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '') : '';
+    return runtime.services.files.exists(file)
+      ? (runtime.services.files.read(file, 'utf8').split(/\r?\n/, 1)[0] ?? '')
+      : '';
   }
 
   function stravaPage(c: Env, rider: Rider, message = '') {
-    const method = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id)).uploads
-      .strava.method;
+    const method = runtime.services.settings.resolveRiderSettings(
+      runtime.config.riderDefaults,
+      runtime.services.settings.read(rider.player_id),
+    ).uploads.strava.method;
 
     const client = connections.read(rider.player_id, 'strava');
-    const authorized = existsSync(resolve(folder(rider), 'strava_token.txt'));
+    const authorized = runtime.services.files.exists(resolve(folder(rider), 'strava_token.txt'));
 
     return c.html(
       page(
@@ -103,7 +98,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           ${removable.options
             .filter((file) => file.startsWith('strava'))
             .map((file) =>
-              existsSync(resolve(folder(rider), file))
+              runtime.services.files.exists(resolve(folder(rider), file))
                 ? html`<form method="post" action="/delete/${file}">${token(c)}<button>Remove ${file}</button></form>`
                 : '',
             )}`,
@@ -112,8 +107,12 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   }
 
   function zwiftPage(c: Env, rider: Rider, message = '') {
-    const connected = existsSync(connections.file(rider.player_id, 'zwift'));
-    const settings = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id));
+    const connected = runtime.services.files.exists(connections.file(rider.player_id, 'zwift'));
+
+    const settings = runtime.services.settings.resolveRiderSettings(
+      runtime.config.riderDefaults,
+      runtime.services.settings.read(rider.player_id),
+    );
 
     return c.html(
       page(
@@ -173,10 +172,10 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         connections.save(rider.player_id, 'zwift', [username, password]);
       }
 
-      if (!existsSync(connections.file(rider.player_id, 'zwift')) && (form.upload || form.click))
+      if (!runtime.services.files.exists(connections.file(rider.player_id, 'zwift')) && (form.upload || form.click))
         return zwiftPage(c, rider, 'Save credentials before enabling uploads or Click.');
-      runtime.settings.save(rider.player_id, {
-        ...runtime.settings.read(rider.player_id),
+      runtime.services.settings.save(rider.player_id, {
+        ...runtime.services.settings.read(rider.player_id),
         'uploads.zwift.enabled': form.upload === 'on',
         'devices.zwiftClick.enabled': form.click === 'on',
       });
@@ -193,14 +192,14 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (runtime.world.active(rider.player_id)) return zwiftPage(c, rider, 'Finish the active ride before importing.');
 
     try {
-      const files = await downloadOfficialData(
+      const files = await runtime.services.integrations.downloadOfficialData(
         credentials[0],
         credentials[1],
         form.profile === 'on',
         form.achievements === 'on',
       );
 
-      const imports = new ProfileImports(runtime.accounts, runtime.world);
+      const imports = runtime.services.imports;
       const stage = imports.prepare(rider, files);
       const browser = c.get('browser');
 
@@ -224,15 +223,15 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const cookie = text.parse(form._strava4_session).trim();
 
       if (cookie) {
-        writeDurable(resolve(folder(rider), 'strava4_session.txt'), cookie, true);
+        runtime.services.files.write(resolve(folder(rider), 'strava4_session.txt'), cookie, true);
         message = 'Session cookie saved.';
       } else message = "Session cookie can't be empty.";
     } else if ('method' in form) {
       const method = z.enum(['paid', 'free']).safeParse(form.method);
 
       if (method.success) {
-        runtime.settings.save(rider.player_id, {
-          ...runtime.settings.read(rider.player_id),
+        runtime.services.settings.save(rider.player_id, {
+          ...runtime.services.settings.read(rider.player_id),
           'uploads.strava.method': method.data,
         });
         message = 'Strava upload method saved.';
@@ -260,7 +259,9 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return stravaPage(
         c,
         rider,
-        (await checkSession(cookie)) ? 'Session is valid.' : 'Session is not valid. Update the cookie.',
+        (await runtime.services.integrations.checkSession(cookie))
+          ? 'Session is valid.'
+          : 'Session is not valid. Update the cookie.',
       );
     } catch {
       return stravaPage(c, rider, 'Could not reach Strava. Check your internet connection.');
@@ -273,7 +274,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (!client?.[0]) return stravaPage(c, rider, 'Save API credentials first.');
 
-    return c.redirect(authorizationUrl(client[0], c.get('browser').csrf));
+    return c.redirect(runtime.services.integrations.authorizationUrl(client[0], c.get('browser').csrf));
   });
 
   app.on(['GET', 'POST'], '/authorization', async (c) => {
@@ -288,7 +289,10 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return stravaPage(c, rider, 'Strava authorization canceled.');
 
     try {
-      writeToken(resolve(folder(rider), 'strava_token.txt'), await exchangeCode(client[0], client[1], code));
+      runtime.services.integrations.writeToken(
+        resolve(folder(rider), 'strava_token.txt'),
+        await runtime.services.integrations.exchangeCode(client[0], client[1], code),
+      );
 
       return stravaPage(c, rider, 'Strava authorized.');
     } catch {
@@ -301,7 +305,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   function garminPage(c: Env, rider: Rider, message = '') {
     const client = connections.read(rider.player_id, 'garmin');
 
-    const authorized = existsSync(resolve(folder(rider), 'garth/oauth1_token.json'));
+    const authorized = runtime.services.files.exists(resolve(folder(rider), 'garth/oauth1_token.json'));
 
     return c.html(
       page(
@@ -321,7 +325,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           ${removable.options
             .filter((file) => file.startsWith('gar'))
             .map((file) =>
-              existsSync(resolve(folder(rider), file))
+              runtime.services.files.exists(resolve(folder(rider), file))
                 ? html`<form method="post" action="/delete/${file}">${token(c)}<button>Remove ${file}</button></form>`
                 : '',
             )}`,
@@ -359,7 +363,10 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
         if (!credentials) return garminPage(c, rider, 'Save credentials first.');
 
-        const client = garminClient(resolve(folder(rider), 'garth'), runtime.config.integrations.garmin.domain);
+        const client = runtime.services.integrations.garminClient(
+          resolve(folder(rider), 'garth'),
+          runtime.config.integrations.garmin.domain,
+        );
 
         const result = await client.login(credentials[0], credentials[1]);
 
@@ -405,7 +412,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const file = removable.safeParse(decodeURIComponent(c.req.path.slice('/delete/'.length)));
 
     if (!file.success) throw new HTTPException(403);
-    rmSync(resolve(folder(rider), file.data), { force: true });
+    runtime.services.files.remove(resolve(folder(rider), file.data), { force: true });
 
     if (file.data.startsWith('strava')) return c.redirect(`/strava/${rider.username}/`);
 
@@ -421,15 +428,18 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
 
-      runtime.accounts.db.prepare('DELETE FROM power_curve WHERE player_id=?').run(rider.player_id);
+      service.deletePowerCurve(rider.player_id);
 
       if (!form.create) return c.redirect(`/settings/${rider.username}/`);
       const fit = resolve(folder(rider), 'fit');
 
-      if (existsSync(fit))
-        for (const name of readdirSync(fit))
+      if (runtime.services.files.exists(fit))
+        for (const name of runtime.services.files.list(fit))
           try {
-            savePowerCurve(runtime.accounts, runtime.profiles, rider.player_id, readFileSync(resolve(fit, name)));
+            runtime.services.activities.savePowerCurve(
+              rider.player_id,
+              runtime.services.files.read(resolve(fit, name)),
+            );
           } catch {
             console.warn(`Power curve unavailable for ${name}`);
           }
@@ -452,24 +462,29 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const rider = authenticated(c);
     const credentials = connections.read(rider.player_id, 'zwift');
 
-    const enabled = resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(rider.player_id)).devices
-      .zwiftClick.enabled;
+    const enabled = runtime.services.settings.resolveRiderSettings(
+      runtime.config.riderDefaults,
+      runtime.services.settings.read(rider.player_id),
+    ).devices.zwiftClick.enabled;
 
     if (!enabled || !credentials) return c.body(null, 204);
 
     try {
-      const token = await officialLogin(credentials[0], credentials[1]);
+      const token = await runtime.services.integrations.officialLogin(credentials[0], credentials[1]);
 
-      const response = await fetch(`${officialRelay}/api/d-lock-service/device/authenticate`, {
-        method: 'POST',
-        headers: {
-          ...officialHeaders(token),
-          'Content-Type': c.req.header('Content-Type') ?? 'application/octet-stream',
-          Accept: c.req.header('Accept') ?? '*/*',
+      const response = await runtime.services.integrations.request(
+        `${runtime.services.integrations.officialRelay}/api/d-lock-service/device/authenticate`,
+        {
+          method: 'POST',
+          headers: {
+            ...runtime.services.integrations.officialHeaders(token),
+            'Content-Type': c.req.header('Content-Type') ?? 'application/octet-stream',
+            Accept: c.req.header('Accept') ?? '*/*',
+          },
+          body: new Uint8Array(await c.req.arrayBuffer()),
+          signal: AbortSignal.timeout(30_000),
         },
-        body: new Uint8Array(await c.req.arrayBuffer()),
-        signal: AbortSignal.timeout(30_000),
-      });
+      );
 
       return new Response(await response.arrayBuffer(), {
         status: response.status,

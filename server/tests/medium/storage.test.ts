@@ -9,8 +9,8 @@ import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated
 import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
 import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
 import { createCdn } from '#src/node/network/cdn';
-import { Workouts } from '#src/domain/workouts/planned';
-import { writeDurable } from '#src/node/persistence/files';
+import { Workouts } from '#src/repositories/workout.repository';
+import { writeDurable } from '#src/repositories/files.repository';
 
 for (const companion of [false, true])
   for (const json of [false, true]) {
