@@ -13,7 +13,8 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { z } from 'zod';
 
-await test('Companion and game zfiles negotiate independently and preserve overwrite metadata', async (t) => {
+await test('Companion and game zfiles negotiate independently and refresh overwrite timestamps', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Files Rider', '', true);
   const other = await f.accounts.create('Other Rider', '');
@@ -69,10 +70,13 @@ await test('Companion and game zfiles negotiate independently and preserve overw
 
   assert.equal(
     z.object({ lastModified: z.string() }).parse(await overwrite.json()).lastModified,
-    '1970-01-01T00:02:03.000+0000',
+    new Date(Date.now()).toISOString().replace('Z', '+0000'),
   );
   const listed = await f.app.request('/api/zfiles/list?folder=customworkouts', { headers: authorization });
-  assert.equal(fromBinary(ZFilesProtoSchema, new Uint8Array(await listed.arrayBuffer())).zfiles[0]?.timestamp, 123n);
+  assert.equal(
+    fromBinary(ZFilesProtoSchema, new Uint8Array(await listed.arrayBuffer())).zfiles[0]?.timestamp,
+    BigInt(Date.now() / 1000),
+  );
   const download = await f.app.request('/api/zfiles/1/download', { headers: authorization });
   assert.equal(await download.text(), 'x');
 

@@ -8,7 +8,7 @@ function sources(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = join(directory, entry.name);
 
-    return entry.isDirectory() ? sources(file) : file.endsWith('.ts') && !file.endsWith('.test.ts') ? file : [];
+    return entry.isDirectory() ? sources(file) : file.endsWith('.ts') && !file.endsWith('.spec.ts') ? file : [];
   });
 }
 

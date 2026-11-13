@@ -700,7 +700,7 @@
     "method": "GET",
     "path": "/api/activities/987654/file/987654",
     "audit": "Traced",
-    "anonymous": 404,
+    "anonymous": 401,
     "status": 404,
     "contentType": "text/plain;charset=UTF-8",
     "text": "",

@@ -97,8 +97,16 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const authorization = c.req.header('Authorization');
     const existing = getCookie(c, 'zluggish_session');
 
-    const opened = authorization
-      ? {
+    const browserPage =
+      !/^\/(?:api|relay|health|download|uploads|style|static|mochi|gameassets|experimentation|live-segment-results-service|player-playback)(?:\/|$)/.test(
+        c.req.path,
+      );
+
+    const persistent = !authorization && (browserPage || (existing !== undefined && sessions.browsers.has(existing)));
+
+    const opened = persistent
+      ? sessions.open(existing)
+      : {
           id: '',
           session: {
             csrf: '',
@@ -107,13 +115,12 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             pendingImport: null,
             touched: Date.now(),
           },
-        }
-      : sessions.open(existing);
+        };
 
     c.set('browser', opened.session);
     c.set('browserId', opened.id);
 
-    if (!authorization && existing !== opened.id)
+    if (persistent && existing !== opened.id)
       setCookie(c, 'zluggish_session', opened.id, {
         httpOnly: true,
         sameSite: 'Lax',

@@ -82,10 +82,14 @@ export class StorageService {
   }
   upload(id: number, upload: { folder: string; filename: string; file: Uint8Array }) {
     const folder = safeName(upload.folder);
+
+    if (folder.startsWith('.')) throw new ApplicationError(400);
     const name = safeName(upload.filename);
     this.repository.write(resolve(this.context.profiles.folder(id), folder, name), upload.file);
     const existing = this.repository.findZfile(id, folder, name);
-    const timestamp = existing ? fileRow.parse(existing).timestamp : Math.floor(Date.now() / 1000);
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    if (existing) this.repository.updateZfileTimestamp(timestamp, fileRow.parse(existing).id);
 
     const fileId = existing
       ? fileRow.parse(existing).id

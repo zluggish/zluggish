@@ -1,7 +1,9 @@
+import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
+import { writeDurable } from '#src/repositories/files.repository';
 import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mediumFixture, binary, decode } from '#tests/medium/support';
 import {
@@ -253,3 +255,131 @@ await test('F11 activity startup list excludes old dates without losing detail, 
   );
   assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM activity').get()?.n, 4);
 });
+
+await test('private activities stay out of other riders feeds, lists, details and charts', async (t) => {
+  const f = await mediumFixture(t);
+  const base = `/api/profiles/${f.rider.player_id}/activities`;
+  const privateIds: number[] = [];
+
+  for (const values of [
+    { privacy: ActivityPrivacyType.PRIVATE },
+    { privateActivity: true },
+    { privacy: ActivityPrivacyType.FRIENDS },
+    { privacy: ActivityPrivacyType.PUBLIC },
+  ]) {
+    const response = await f.request(base, {
+      method: 'POST',
+      ...binary(ActivitySchema, {
+        ...values,
+        playerId: BigInt(f.rider.player_id),
+        courseId: 6n,
+        name: 'Visibility test',
+        startDate: new Date().toISOString(),
+        distanceInMeters: 2000,
+        endDate: new Date().toISOString(),
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const { id } = z.object({ id: z.number() }).parse(await response.json());
+    privateIds.push(id);
+
+    const chart = f.accounts.db
+      .prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)')
+      .run(id).lastInsertRowid;
+
+    writeDurable(resolve(f.config.storageDir, 'activities', String(chart)), '{"heartRate":[150]}');
+    const ownerDetail = await f.request(`/api/activities/${id}`);
+    assert.equal(ownerDetail.status, 200);
+    const detail = z.object({ privacy: z.string() }).parse(await ownerDetail.json());
+    assert.equal(detail.privacy, values.privateActivity ? 'PRIVATE' : ActivityPrivacyType[values.privacy ?? 0]);
+    const outsider = await f.request(`/api/activities/${id}`, {}, f.other);
+    assert.equal(outsider.status, values.privacy === ActivityPrivacyType.PUBLIC ? 200 : 404);
+    const file = `/api/activities/${id}/file/${chart}`;
+    const anonymous = await f.app.request(file);
+    assert.equal(anonymous.status, 401);
+    const ownerChart = await f.request(file);
+    assert.equal(ownerChart.status, 200);
+    const otherChart = await f.request(file, {}, f.other);
+    assert.equal(otherChart.status, values.privacy === ActivityPrivacyType.PUBLIC ? 200 : 404);
+  }
+
+  for (const path of [
+    '/api/activity-feed-service-v2/feed/everyone?limit=1',
+    `/api/activity-feed-service-v2/feed/profile/${f.rider.player_id}`,
+  ]) {
+    const response = await f.request(path, {}, f.other);
+    const feed = z.array(z.object({ id: z.number() })).parse(await response.json());
+    assert.deepEqual(
+      feed.map((activity) => activity.id),
+      [privateIds[3]],
+    );
+  }
+
+  const ownerList = await decode(await f.request(base), ActivityListSchema);
+  assert.equal(ownerList.activities.length, 4);
+  const otherList = await decode(await f.request(base, {}, f.other), ActivityListSchema);
+  assert.deepEqual(
+    otherList.activities.map((activity) => Number(activity.id)),
+    [privateIds[3]],
+  );
+});
+
+for (const discard of [false, true])
+  await test(`activity deletion removes dependent data and rejects old chart links: discard=${discard}`, async (t) => {
+    const f = await mediumFixture(t);
+
+    const id = f.accounts.db
+      .prepare('INSERT INTO activity (player_id,name) VALUES (?,?)')
+      .run(f.rider.player_id, 'Delete me').lastInsertRowid;
+
+    const chartId = f.accounts.db
+      .prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)')
+      .run(id).lastInsertRowid;
+
+    const imageId = f.accounts.db
+      .prepare('INSERT INTO activity_image (player_id,activity_id) VALUES (?,?)')
+      .run(f.rider.player_id, id).lastInsertRowid;
+
+    const mediaId = f.accounts.db
+      .prepare('INSERT INTO activity_media (player_id,activity_id,content_type) VALUES (?,?,?)')
+      .run(f.rider.player_id, id, 'video/mp4').lastInsertRowid;
+
+    const paths = [
+      resolve(f.config.storageDir, 'activities', String(chartId)),
+      resolve(f.profiles.folder(f.rider.player_id), 'images', `${imageId}.jpg`),
+      resolve(f.profiles.folder(f.rider.player_id), 'medias', `${mediaId}.mp4`),
+      resolve(f.profiles.folder(f.rider.player_id), 'fit', `${id} - ride.fit`),
+    ];
+
+    for (const path of paths) writeDurable(path, 'data');
+    const base = `/api/profiles/${f.rider.player_id}/activities/${id}`;
+    const wrongOwner = await f.request(base, { method: 'DELETE' }, f.other);
+    assert.equal(wrongOwner.status, 401);
+    assert.ok(paths.every((path) => existsSync(path)));
+
+    const deleted = await f.request(
+      discard ? `${base}?upload-to-strava=true` : base,
+      discard
+        ? {
+            method: 'PUT',
+            ...binary(ActivitySchema, {
+              playerId: BigInt(f.rider.player_id),
+              courseId: 6n,
+              name: 'Discard',
+              startDate: new Date().toISOString(),
+              distanceInMeters: 0,
+            }),
+          }
+        : { method: 'DELETE' },
+    );
+
+    assert.equal(deleted.status, 200);
+
+    for (const path of paths) assert.equal(existsSync(path), false);
+
+    for (const table of ['activity', 'activity_file', 'activity_image', 'activity_media'])
+      assert.equal(f.accounts.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n, 0);
+    const chart = await f.request(`/api/activities/${id}/file/${chartId}`);
+    assert.equal(chart.status, 404);
+  });

@@ -1,3 +1,4 @@
+import { ProfileImports } from '#src/repositories/profile-import.repository';
 import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -57,10 +58,17 @@ for (const companion of [false, true])
       t.mock.timers.tick(5000);
       const second = await upload('replacement');
       const updated = json ? await second.json() : await decode(second, ZFileProtoSchema);
-      assert.deepEqual(updated, metadata);
+      assert.equal(String(updated.id), String(metadata.id));
+
+      if (json)
+        assert.equal(
+          updated.lastModified,
+          new Date(Date.UTC(2026, 10, 13, 12, 0, 5)).toISOString().replace('Z', '+0000'),
+        );
+      else assert.equal(updated.timestamp, BigInt(Date.UTC(2026, 10, 13, 12, 0, 5) / 1000));
       const listed = await decode(await f.request('/api/zfiles/list?folder=customworkouts'), ZFilesProtoSchema);
       assert.equal(listed.zfiles.length, 1);
-      assert.equal(listed.zfiles[0]?.timestamp, BigInt(Date.UTC(2026, 10, 13, 12) / 1000));
+      assert.equal(listed.zfiles[0]?.timestamp, BigInt(Date.UTC(2026, 10, 13, 12, 0, 5) / 1000));
       assert.equal(String(listed.zfiles[0]?.id), String(metadata.id));
 
       for (const suffix of ['', '/download']) {
@@ -280,4 +288,27 @@ await test('CDN workout endpoint serves exactly the cached XML', async (t) => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Content-Type'), 'application/xml');
   assert.equal(await response.text(), readFileSync(file, 'utf8'));
+});
+
+await test('zfile uploads cannot create internal import journals through either upload format', async (t) => {
+  const f = await mediumFixture(t);
+
+  for (const folder of ['.import-review', `.ts-import-${'a'.repeat(32)}`, '.hidden'])
+    for (const companion of [false, true]) {
+      const response = await f.request('/api/zfiles', {
+        method: 'POST',
+        ...(companion
+          ? {
+              headers: { Source: 'zwift-companion', 'Content-Type': 'application/json' },
+              body: JSON.stringify({ folder, name: 'manifest.json', content: 'e30=' }),
+            }
+          : binary(ZFileProtoSchema, { folder, filename: 'manifest.json', file: Buffer.from('{}') })),
+      });
+
+      assert.equal(response.status, 400);
+      assert.equal(existsSync(resolve(f.profiles.folder(f.rider.player_id), folder)), false);
+    }
+
+  assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM zfile').get()?.n, 0);
+  assert.doesNotThrow(() => new ProfileImports(f.accounts, f.world).recover());
 });

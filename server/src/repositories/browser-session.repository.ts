@@ -1,3 +1,4 @@
+import { ApplicationError } from '#src/errors';
 import { Accounts, identityOf } from '#src/repositories/accounts.repository';
 import { writeDurable } from '#src/repositories/files.repository';
 import { signIdentity, verifyIdentity } from '#src/repositories/password.repository';
@@ -47,7 +48,20 @@ export class Sessions {
       return { id, session: previous };
     }
 
-    if (this.browsers.size >= 10_000) throw new Error('Too many browser sessions');
+    if (this.browsers.size >= 10_000) {
+      let oldest: string | undefined;
+      let touched = Infinity;
+
+      for (const [key, session] of this.browsers)
+        if (!session.identity && session.touched < touched) {
+          oldest = key;
+          touched = session.touched;
+        }
+
+      if (oldest === undefined) throw new ApplicationError(503, 'Too many browser sessions');
+      this.browsers.delete(oldest);
+    }
+
     const token = randomBytes(32).toString('base64url');
 
     const session: BrowserSession = {

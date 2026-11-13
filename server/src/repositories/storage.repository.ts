@@ -12,6 +12,9 @@ export class StorageRepository {
   insertZfile(...values: SQLInputValue[]) {
     return this.db.prepare('INSERT INTO zfile (player_id,folder,filename,timestamp) VALUES (?,?,?,?)').run(...values);
   }
+  updateZfileTimestamp(...values: SQLInputValue[]) {
+    return this.db.prepare('UPDATE zfile SET timestamp=? WHERE id=?').run(...values);
+  }
   listZfile(...values: SQLInputValue[]) {
     return this.db.prepare('SELECT * FROM zfile WHERE player_id=? AND folder=?').all(...values);
   }

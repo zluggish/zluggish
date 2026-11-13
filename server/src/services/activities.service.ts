@@ -1,7 +1,10 @@
 import { type RepositoryContext } from '#src/context';
+import { ApplicationError } from '#src/errors';
+import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
+import { FitnessPrivacy } from '#src/protocol/generated/activity_pb';
 import { type Activity } from '#src/protocol/generated/activity_pb';
 import { ActivitiesRepository } from '#src/repositories/activities.repository';
-import { existsSync } from '#src/repositories/files.repository';
+import { existsSync, readdirSync, rmSync } from '#src/repositories/files.repository';
 import { activityChart, savePowerCurve } from '#src/repositories/fit.repository';
 import { updateStreaks } from '#src/repositories/streak.repository';
 import { resolve } from 'node:path';
@@ -16,11 +19,37 @@ export class ActivitiesService {
   findActivity(...values: Parameters<ActivitiesRepository['findActivity']>) {
     return this.repository.findActivity(...values);
   }
-  deleteActivity(...values: Parameters<ActivitiesRepository['deleteActivity']>) {
-    return this.repository.deleteActivity(...values);
+  deleteActivity(id: bigint, player: number) {
+    if (!this.repository.findActivity(id, player)) throw new ApplicationError(404);
+
+    const charts = this.repository
+      .listActivityFile(id)
+      .map((row) => resolve(this.context.config.storageDir, 'activities', String(z.number().parse(row.id))));
+
+    const photos = this.photos(player, id);
+    const fitFolder = resolve(this.context.profiles.folder(player), 'fit');
+
+    const fits = existsSync(fitFolder)
+      ? readdirSync(fitFolder)
+          .filter((name) => name.startsWith(`${id} - `))
+          .map((name) => resolve(fitFolder, name))
+      : [];
+
+    this.repository.deleteActivityData(id, player);
+
+    for (const file of [...charts, ...photos, ...fits]) rmSync(file, { force: true });
   }
-  deleteActivityById(...values: Parameters<ActivitiesRepository['deleteActivityById']>) {
-    return this.repository.deleteActivityById(...values);
+  visible(activity: Activity, viewer: number) {
+    return (
+      activity.playerId === BigInt(viewer) ||
+      (!activity.privateActivity && activity.privacy === ActivityPrivacyType.PUBLIC)
+    );
+  }
+  fitnessVisible(activity: Activity, viewer: number) {
+    return (
+      this.visible(activity, viewer) &&
+      (activity.playerId === BigInt(viewer) || activity.fitnessPrivacy !== FitnessPrivacy.HIDE_SENSITIVE_DATA)
+    );
   }
   findActivityFile(...values: Parameters<ActivitiesRepository['findActivityFile']>) {
     return this.repository.findActivityFile(...values);
@@ -85,7 +114,7 @@ export class ActivitiesService {
       avgSpeedInMetersPerSecond: activity.avgSpeed,
       activityRideOnCount: 0,
       activityCommentCount: 0,
-      privacy: 'PUBLIC',
+      privacy: activity.privateActivity ? 'PRIVATE' : ActivityPrivacyType[activity.privacy],
       eventId: null,
       rideOnGiven: false,
       id_str: String(activity.id),

@@ -60,7 +60,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         ActivityListSchema,
         create(ActivityListSchema, {
           activities: (() => {
-            return service.recentActivities(id).map((row) => records.decode(ActivitySchema, row));
+            return service.recentActivities(id, user.player_id).map((row) => records.decode(ActivitySchema, row));
           })(),
         }),
       ),
@@ -91,7 +91,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     records.update('activity', id, ActivitySchema, activity, ['fit']);
 
     if (c.req.query('upload-to-strava') === 'true') {
-      if (activity.distanceInMeters < 1) service.deleteActivityById(id);
+      if (activity.distanceInMeters < 1) service.deleteActivity(id, user.player_id);
       else {
         const folder = runtime.services.profiles.folder(user.player_id);
         runtime.services.files.write(
@@ -163,13 +163,16 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   });
 
   app.get('/api/activities/:activityId', (c) => {
-    authenticated(c);
+    const user = authenticated(c);
 
     const row = service.activityById(c.req.param('activityId'));
 
     if (!row) throw new HTTPException(404);
     const activity = records.decode(ActivitySchema, row);
-    const data = service.companion(activity, true);
+
+    if (!service.visible(activity, user.player_id)) throw new HTTPException(404);
+    const fitness = service.fitnessVisible(activity, user.player_id);
+    const data = service.companion(activity, fitness);
 
     const fit = resolve(
       runtime.services.profiles.folder(Number(activity.playerId)),
@@ -185,7 +188,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         ? Number(service.insertActivityFile(activity.id).lastInsertRowid)
         : null;
 
-    if (fileId !== null) {
+    if (fitness && fileId !== null) {
       const chart = resolve(runtime.config.storageDir, 'activities', String(fileId));
 
       if (!runtime.services.files.exists(chart) && runtime.services.files.exists(fit)) {
@@ -241,13 +244,18 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const before = c.req.query('start_after_activity_id');
 
       const activities = service
-        .activityFeed(id, id, before ?? null, before ?? null, type === 'preview' ? 1 : 0, limit)
+        .activityFeed(id, id, before ?? null, before ?? null, type === 'preview' ? 1 : 0, user.player_id, limit)
         .map((row) => records.decode(ActivitySchema, row));
 
       return c.json(activities.map((activity) => service.companion(activity)));
     },
   );
   app.get('/api/activities/:activityId/file/:fileId', (c) => {
+    const user = authenticated(c);
+    const activity = service.activityById(c.req.param('activityId'));
+
+    if (!activity || !service.fitnessVisible(records.decode(ActivitySchema, activity), user.player_id))
+      throw new HTTPException(404);
     const id = z.coerce.number().int().positive().safe().parse(c.req.param('fileId'));
 
     if (!service.findOwnedActivityFile(id, c.req.param('activityId'))) throw new HTTPException(404);
@@ -264,9 +272,10 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
-    const id = service.insertActivityImage(user.player_id, c.req.param('activityId')).lastInsertRowid;
-
     const image = parseProtobuf(ActivityImageSchema, new Uint8Array(await c.req.arrayBuffer()));
+
+    if (!service.findActivity(c.req.param('activityId'), user.player_id)) throw new HTTPException(404);
+    const id = service.insertActivityImage(user.player_id, c.req.param('activityId')).lastInsertRowid;
 
     runtime.services.files.write(
       resolve(runtime.services.profiles.folder(user.player_id), 'images', `${id}.jpg`),
@@ -283,6 +292,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const body = parseProtobuf(ActivityMediaSaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
+    if (!service.findActivity(c.req.param('activityId'), user.player_id)) throw new HTTPException(404);
     const id = service.insertActivityMedia(user.player_id, c.req.param('activityId'), body.contentType).lastInsertRowid;
 
     for (const [key, entry] of mediaTokens) if (entry.expires < Date.now()) mediaTokens.delete(key);

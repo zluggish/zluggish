@@ -1,3 +1,4 @@
+import { mediumFixture, mediumBrowser } from '#tests/medium/support';
 import { migrateAccounts } from '#src/repositories/account-migration.repository';
 import { Accounts } from '#src/repositories/accounts.repository';
 import { ProfileImports } from '#src/repositories/profile-import.repository';
@@ -312,4 +313,42 @@ await test('login and both TCP config endpoints advertise configured ports', asy
       assert.equal(fromBinary(TcpConfigSchema, new Uint8Array(await response.arrayBuffer())).nodes[0]?.port, port);
     }
   }
+});
+
+await test('anonymous API and asset traffic does not allocate sessions', async (t) => {
+  const f = await mediumFixture(t);
+
+  for (const path of ['/health', '/api/profiles/me', '/style/site.css', '/missing']) {
+    const response = await f.app.request(path);
+
+    if (path !== '/missing') assert.equal(response.headers.has('Set-Cookie'), false);
+  }
+
+  assert.equal(f.sessions.browsers.size, 1);
+});
+
+await test('session capacity evicts anonymous sessions and preserves authenticated browsers', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  const identity = `${f.rider.player_id}:${f.rider.auth_version}`;
+  const signedIn = [...f.sessions.browsers].find(([, session]) => session.identity === identity);
+  assert.ok(signedIn);
+  const anonymous = f.sessions.open();
+
+  // Populate the limit without 10,000 HTTP requests or repeated expiry scans.
+  for (let index = f.sessions.browsers.size; index < 10_000; index++)
+    f.sessions.browsers.set(`anonymous-${index}`, { ...anonymous.session });
+  anonymous.session.touched = 0;
+  // Keep the deliberately oldest entry within the session lifetime.
+  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
+
+  for (const [key, session] of f.sessions.browsers) if (key !== anonymous.id) session.touched = 1000;
+
+  const response = await f.app.request('/login/');
+  assert.equal(response.status, 200);
+  assert.equal(f.sessions.browsers.size, 10_000);
+  assert.equal(f.sessions.browsers.has(anonymous.id), false);
+  assert.equal(f.sessions.browsers.has(signedIn[0]), true);
+  const profile = await browser.request(`/profile/${f.rider.username}/`);
+  assert.equal(profile.status, 200);
 });

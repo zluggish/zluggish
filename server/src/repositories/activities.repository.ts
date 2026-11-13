@@ -16,8 +16,21 @@ export class ActivitiesRepository {
   deleteActivity(...values: SQLInputValue[]) {
     return this.db.prepare('DELETE FROM activity WHERE id=? AND player_id=?').run(...values);
   }
-  deleteActivityById(...values: SQLInputValue[]) {
-    return this.db.prepare('DELETE FROM activity WHERE id=?').run(...values);
+  listActivityFile(id: bigint) {
+    return this.db.prepare('SELECT id FROM activity_file WHERE activity_id=?').all(id);
+  }
+  deleteActivityData(id: bigint, player: number) {
+    this.db.exec('BEGIN IMMEDIATE');
+
+    try {
+      for (const table of ['activity_file', 'activity_image', 'activity_media'])
+        this.db.prepare(`DELETE FROM ${table} WHERE activity_id=?`).run(id);
+      this.deleteActivity(id, player);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
   findActivityFile(...values: SQLInputValue[]) {
     return this.db.prepare('SELECT id FROM activity_file WHERE activity_id=? AND full=0').get(...values);
@@ -26,7 +39,11 @@ export class ActivitiesRepository {
     return this.db.prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)').run(...values);
   }
   findOwnedActivityFile(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id FROM activity_file WHERE id=? AND activity_id=?').get(...values);
+    return this.db
+      .prepare(
+        'SELECT id FROM activity_file WHERE id=? AND activity_id=? AND EXISTS (SELECT 1 FROM activity WHERE activity.id=activity_file.activity_id)',
+      )
+      .get(...values);
   }
   insertActivityImage(...values: SQLInputValue[]) {
     return this.db.prepare('INSERT INTO activity_image (player_id,activity_id) VALUES (?,?)').run(...values);
@@ -42,7 +59,7 @@ export class ActivitiesRepository {
 
   recentActivities(...values: SQLInputValue[]) {
     const query = this.db.prepare(
-      "SELECT * FROM activity WHERE player_id=? AND date > date('now', '-1 month') ORDER BY id",
+      "SELECT * FROM activity WHERE player_id=? AND date > date('now', '-1 month') AND (player_id=? OR (COALESCE(privateActivity,0)=0 AND COALESCE(privacy,0)=0)) ORDER BY id",
     );
 
     query.setReadBigInts(true);
@@ -59,7 +76,7 @@ export class ActivitiesRepository {
 
   activityFeed(...values: SQLInputValue[]) {
     const query = this.db.prepare(
-      'SELECT * FROM activity WHERE distanceInMeters>1 AND (? IS NULL OR player_id=?) AND (? IS NULL OR id<?) AND (? OR end_date IS NOT NULL) ORDER BY date DESC LIMIT ?',
+      'SELECT * FROM activity WHERE distanceInMeters>1 AND (? IS NULL OR player_id=?) AND (? IS NULL OR id<?) AND (? OR end_date IS NOT NULL) AND (player_id=? OR (COALESCE(privateActivity,0)=0 AND COALESCE(privacy,0)=0)) ORDER BY date DESC LIMIT ?',
     );
 
     query.setReadBigInts(true);
