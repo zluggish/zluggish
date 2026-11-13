@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/zluggish/zluggish/main/media/zluggish.svg" alt="An orange snail with a Z" height="200">
+<img src="https://raw.githubusercontent.com/zluggish/zluggish/feat/hono/media/zluggish.svg" alt="An orange snail with a Z" height="200">
 
 # Zluggish
 
