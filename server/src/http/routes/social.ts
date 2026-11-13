@@ -1,3 +1,10 @@
+import {
+  profileSearchSchema,
+  privacyUpdateSchema,
+  companionConnectionSchema,
+  playbackRecordSchema,
+} from '#src/dtos/social.dto';
+
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -10,11 +17,11 @@ import {
   WA_TYPE,
   WorldAttributeSchema,
 } from '#src/protocol/generated/udp-node-msgs_pb';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { course, worldTime } from '#src/world/state';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomUUID } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -84,7 +91,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   );
   app.on('POST', ['/api/search/profiles', '/api/search/profiles/restricted'], async (c) => {
     authenticated(c);
-    const input = z.object({ query: z.string() }).parse(await c.req.json());
+    const input = profileSearchSchema.parse(await c.req.json());
 
     const start = z.coerce
       .number()
@@ -108,18 +115,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
-    const input = z
-      .object({
-        approvalRequired: z.boolean(),
-        displayWeight: z.boolean().default(false),
-        minor: z.boolean().default(false),
-        privateMessaging: z.boolean(),
-        defaultFitnessDataPrivacy: z.boolean(),
-        suppressFollowerNotification: z.boolean().default(false),
-        displayAge: z.boolean(),
-        defaultActivityPrivacy: z.enum(['PUBLIC', 'PRIVATE', 'FRIENDS']),
-      })
-      .parse(await c.req.json());
+    const input = privacyUpdateSchema.parse(await c.req.json());
 
     const profile = runtime.services.profiles.get(user.player_id);
     profile.privacyBits = BigInt(
@@ -181,14 +177,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.put('/relay/profiles/me/phone', async (c) => {
     const user = authenticated(c);
 
-    const input = z
-      .object({
-        phoneAddress: z.string().max(255),
-        port: z.number().int().min(1).max(65_535).optional(),
-        securePort: z.number().int().min(1).max(65_535).optional(),
-        secret: z.string().optional(),
-      })
-      .parse(await c.req.json());
+    const input = companionConnectionSchema.parse(await c.req.json());
 
     const port = input.securePort ?? input.port;
 
@@ -290,7 +279,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const playback = parseProtobuf(PlaybackDataSchema, bytes);
 
     if (!playback.time) return c.body(null, 200);
-    const id = randomUUID();
+    const id = new CryptoRepository().randomUUID();
     runtime.services.files.write(resolve(runtime.config.storageDir, 'playbacks', `${id}.playback`), bytes);
     service.insertPlayback(user.player_id, id, playback.segmentId, playback.time, playback.worldTime, playback.type);
 
@@ -321,14 +310,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (!row) return c.body(null, 200);
 
-    const parsed = z
-      .object({
-        uuid: z.string(),
-        segment_id: z.bigint(),
-        time: z.number(),
-        world_time: z.bigint(),
-      })
-      .parse(row);
+    const parsed = playbackRecordSchema.parse(row);
 
     return c.body(
       toBinary(

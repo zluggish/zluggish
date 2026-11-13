@@ -1,3 +1,4 @@
+import type { UploadState } from '#src/enum';
 import { query, SqliteExecutor } from '#src/db/query';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -58,12 +59,7 @@ export class UploadsRepository {
         .where('c.done', '=', 1),
     );
   }
-  setState(
-    activity: number,
-    provider: string,
-    state: 'sending' | 'cancelled' | 'sent' | 'failed',
-    expected?: 'sending',
-  ) {
+  setState(activity: number, provider: string, state: UploadState, expected?: 'sending') {
     let update = query
       .updateTable('activity_upload')
       .set({ state })

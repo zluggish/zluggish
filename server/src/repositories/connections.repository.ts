@@ -1,9 +1,10 @@
-import { decryptCredentials, encryptCredentials, randomBytes } from '#src/repositories/crypto.repository';
-import { writeDurable } from '#src/repositories/files.repository';
+import type { ConnectionProvider } from '#src/enum';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-export type Connection = 'zwift' | 'intervals' | 'garmin' | 'strava';
+export type Connection = ConnectionProvider;
 
 const names: Record<Connection, string> = {
   zwift: 'zwift_credentials.bin',
@@ -17,7 +18,7 @@ export class Connections {
   private key() {
     const file = resolve(this.storage, 'credentials-key.bin');
 
-    if (!existsSync(file)) writeDurable(file, randomBytes(32));
+    if (!existsSync(file)) new AssetFiles().writeDurable(file, new CryptoRepository().randomBytes(32));
     const key = readFileSync(file);
 
     if (key.length !== 32) throw new Error('Invalid credentials key');
@@ -30,10 +31,14 @@ export class Connections {
   read(player: number, service: Connection) {
     const file = this.file(player, service);
 
-    return existsSync(file) ? decryptCredentials(this.key(), readFileSync(file)) : null;
+    return existsSync(file) ? new CryptoRepository().decryptCredentials(this.key(), readFileSync(file)) : null;
   }
   save(player: number, service: Connection, credentials: readonly [string, string]) {
-    writeDurable(this.file(player, service), encryptCredentials(this.key(), credentials), true);
+    new AssetFiles().writeDurable(
+      this.file(player, service),
+      new CryptoRepository().encryptCredentials(this.key(), credentials),
+      true,
+    );
   }
   remove(player: number, service: Connection) {
     const file = this.file(player, service);

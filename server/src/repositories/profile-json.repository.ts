@@ -7,6 +7,8 @@ const dictionary = z
   .object({ bikeframes: z.record(z.string(), z.string()) })
   .parse(JSON.parse(readFileSync(resolve(packageRoot(), '../assets/data/game_dictionary.txt'), 'utf8')));
 
-export function bikeFrameName(id: number) {
-  return dictionary.bikeframes[String(id)] ?? '---';
+export class ProfileJsonRepository {
+  bikeFrameName(id: number) {
+    return dictionary.bikeframes[String(id)] ?? '---';
+  }
 }

@@ -1,3 +1,4 @@
+import { fileUploadSchema } from '#src/dtos/storage.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -7,7 +8,6 @@ import { ZFileProtoSchema, ZFilesProtoSchema } from '#src/protocol/generated/zfi
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { z } from 'zod';
 
 export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const service = runtime.services.storage;
@@ -46,17 +46,11 @@ export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     let upload;
 
     if (c.req.header('Source') === 'zwift-companion') {
-      const input = z
-        .object({
-          folder: z.string(),
-          name: z.string(),
-          content: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
-        })
-        .parse(
-          await c.req.json().catch(() => {
-            throw new HTTPException(400);
-          }),
-        );
+      const input = fileUploadSchema.parse(
+        await c.req.json().catch(() => {
+          throw new HTTPException(400);
+        }),
+      );
 
       upload = { folder: input.folder, filename: input.name, file: Buffer.from(input.content, 'base64') };
     } else upload = parseProtobuf(ZFileProtoSchema, new Uint8Array(await c.req.arrayBuffer()));

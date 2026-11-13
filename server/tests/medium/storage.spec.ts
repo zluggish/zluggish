@@ -1,17 +1,17 @@
+import { createCdn } from '#src/node/network/cdn';
+import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
+import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
+import { ZFileProtoSchema, ZFilesProtoSchema } from '#src/protocol/generated/zfiles_pb';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { ImportsService } from '#src/services/profile-import.service';
-import { z } from 'zod';
+import { WorkoutsService } from '#src/services/workout.service';
+import { binary, decode, mediumFixture } from '#tests/medium/support';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mediumFixture, binary, decode } from '#tests/medium/support';
-import { ZFileProtoSchema, ZFilesProtoSchema } from '#src/protocol/generated/zfiles_pb';
-import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
-import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
-import { createCdn } from '#src/node/network/cdn';
-import { WorkoutsService } from '#src/services/workout.service';
-import { writeDurable } from '#src/repositories/files.repository';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 for (const companion of [false, true])
   for (const json of [false, true]) {
@@ -283,7 +283,7 @@ await test('CDN workout endpoint serves exactly the cached XML', async (t) => {
   const id = '84e16aa6-2e13-4cc5-9bea-76595a66abe0';
   const file = new WorkoutsService(f).file(id);
   assert.ok(file);
-  writeDurable(file, '<workout_file><name>Tempo</name></workout_file>');
+  new AssetFiles().writeDurable(file, '<workout_file><name>Tempo</name></workout_file>');
   const response = await createCdn(f).request(`/tp-workouts/intervalsicu/${id}.zwo`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Content-Type'), 'application/xml');

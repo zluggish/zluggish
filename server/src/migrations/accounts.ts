@@ -1,8 +1,8 @@
 import { ConfigError } from '#src/config/index';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { createSchemaSQL } from '#src/db/ddl';
+import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { fromBinary } from '@bufbuild/protobuf';
-import { randomBytes } from '#src/repositories/crypto.repository';
 import { existsSync, readdirSync, readFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
@@ -101,7 +101,7 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
           `INSERT INTO user (player_id,username,first_name,last_name,pass_hash,auth_version,is_admin,enable_ghosts,remember) VALUES (?,?,?,?,NULL,1,?,1,0)`,
         ).run(
           selected,
-          `rider-${randomBytes(12).toString('hex')}@local.invalid`,
+          `rider-${new CryptoRepository().randomBytes(12).toString('hex')}@local.invalid`,
           profile.firstName,
           profile.lastName,
           users.length > 0 ? 0 : 1,

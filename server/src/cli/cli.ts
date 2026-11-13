@@ -1,22 +1,18 @@
-import { resolveRiderSettings } from '#src/services/settings.service';
-import { parseArgs } from 'node:util';
+import { ConfigError } from '#src/config/index';
+import type { LoadOptions } from '#src/config/load';
+import { loadConfig, packageRoot, selectConfigPath } from '#src/config/load';
+import { migrateConfig } from '#src/config/migrate';
+import { migrateAccounts } from '#src/migrations/accounts';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { LockRepository } from '#src/repositories/lock.repository';
+import type { Overrides } from '#src/dtos/settings.dto';
+import { RiderRepository, SettingsStore } from '#src/repositories/settings.repository';
+import { overrideSchema, settingKeySchema } from '#src/dtos/settings.dto';
+import { AccountsService } from '#src/services/auth.service';
+import { SettingsService } from '#src/services/settings.service';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { LoadOptions } from '#src/config/load';
-import { AccountsService } from '#src/services/auth.service';
-import { migrateAccounts } from '#src/migrations/accounts';
-import { ConfigError } from '#src/config/index';
-import { loadConfig, selectConfigPath, packageRoot } from '#src/config/load';
-import { migrateConfig } from '#src/config/migrate';
-import { writeDurable } from '#src/repositories/files.repository';
-import type { Overrides } from '#src/repositories/settings.repository';
-import {
-  SettingsStore,
-  checkRider,
-  overrideSchema,
-  settingKeySchema,
-} from '#src/repositories/settings.repository';
-import { acquireStorageLock } from '#src/repositories/lock.repository';
+import { parseArgs } from 'node:util';
 import { z } from 'zod';
 
 export const HELP = `Usage: zluggish [--config PATH] [--storage-dir DIR] config init|validate|show|typecheck|migrate
@@ -92,7 +88,7 @@ export async function run(argv: string[], output: (message: string) => void = co
       throw new ConfigError(`Missing ${selected}`);
     }
 
-    const release = await acquireStorageLock(storage);
+    const release = await new LockRepository().acquireStorageLock(storage);
 
     try {
       if (action === 'migrate') {
@@ -135,7 +131,10 @@ export async function run(argv: string[], output: (message: string) => void = co
 
     switch (action) {
       case 'init': {
-        writeDurable(selected, readFileSync(resolve(packageRoot(), '../examples/zluggish.config.ts'), 'utf8'));
+        new AssetFiles().writeDurable(
+          selected,
+          readFileSync(resolve(packageRoot(), '../examples/zluggish.config.ts'), 'utf8'),
+        );
         output(`Created ${selected}`);
 
         return 0;
@@ -240,7 +239,7 @@ export async function run(argv: string[], output: (message: string) => void = co
 
   if (values['storage-dir'] !== undefined) options.storageDir = storage;
   const { config } = await loadConfig(options);
-  checkRider(config.storageDir, playerId);
+  new RiderRepository().checkRider(config.storageDir, playerId);
 
   if (action === 'show') {
     if (key !== undefined) throw new ConfigError('Unexpected settings show arguments');
@@ -249,7 +248,13 @@ export async function run(argv: string[], output: (message: string) => void = co
     const store = existsSync(path) ? new SettingsStore(config.storageDir, true) : null;
 
     try {
-      output(JSON.stringify(resolveRiderSettings(config.riderDefaults, store?.read(playerId) ?? {}), null, 2));
+      output(
+        JSON.stringify(
+          SettingsService.resolveRiderSettings(config.riderDefaults, store?.read(playerId) ?? {}),
+          null,
+          2,
+        ),
+      );
     } finally {
       store?.close();
     }
@@ -288,7 +293,7 @@ export async function run(argv: string[], output: (message: string) => void = co
     return 0;
   }
 
-  const release = await acquireStorageLock(config.storageDir);
+  const release = await new LockRepository().acquireStorageLock(config.storageDir);
 
   try {
     const store = new SettingsStore(config.storageDir);

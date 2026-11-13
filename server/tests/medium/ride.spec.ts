@@ -1,6 +1,5 @@
 import { validateConfig } from '#src/config/index';
-import { AccountsService } from '#src/services/auth.service';
-import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
+import { decodePacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import { startRideListeners } from '#src/node/network/ride';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { LoginRequestSchema } from '#src/protocol/generated/login_pb';
@@ -9,9 +8,10 @@ import {
   ClientToServerSchema,
   PlayerStateSchema,
   ServerToClientSchema,
-  WorldAttributeSchema,
   WA_TYPE,
+  WorldAttributeSchema,
 } from '#src/protocol/generated/udp-node-msgs_pb';
+import { AccountsService } from '#src/services/auth.service';
 import { worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
@@ -73,10 +73,7 @@ await test(
 
         return fromBinary(
           ServerToClientSchema,
-          decodeLegacyPacket(frame, key, { device: 1, channel: 4, connection, sequence: sequence++ }).payload.subarray(
-            0,
-            -4,
-          ),
+          decodePacket(frame, key, { device: 1, channel: 4, connection, sequence: sequence++ }).payload,
         );
       };
 
@@ -219,14 +216,14 @@ await test(
     const first = frames[0];
     assert.ok(first);
 
-    const decoded = decodeLegacyPacket(first, key, {
+    const decoded = decodePacket(first, key, {
       device: 1,
       channel: 4,
       connection: 7,
       sequence: 0,
     });
 
-    const handshake = fromBinary(ServerToClientSchema, decoded.payload.subarray(0, -4));
+    const handshake = fromBinary(ServerToClientSchema, decoded.payload);
 
     assert.equal(handshake.udpConfig?.relayAddresses[0]?.port, udpPort);
     assert.equal(handshake.udpConfigVod1?.port, udpPort);
@@ -242,12 +239,12 @@ await test(
 
     const phone = fromBinary(
       ServerToClientSchema,
-      decodeLegacyPacket(phoneFrame, key, {
+      decodePacket(phoneFrame, key, {
         device: 1,
         channel: 4,
         connection: 7,
         sequence: 1,
-      }).payload.subarray(0, -4),
+      }).payload,
     );
 
     assert.equal(phone.zcLocalIp, '127.0.0.2');
@@ -288,12 +285,12 @@ await test(
     udp.send(datagram, udpPort, '127.0.0.1');
     const [reply] = await incoming;
 
-    const body = decodeLegacyPacket(z.instanceof(Buffer).parse(reply), key, {
+    const body = decodePacket(z.instanceof(Buffer).parse(reply), key, {
       device: 1,
       channel: 2,
       connection: 9,
       sequence: 0,
-    }).payload.subarray(0, -4);
+    }).payload;
 
     assert.equal(fromBinary(ServerToClientSchema, body).playerId, BigInt(user.player_id));
     assert.equal(f.world.active(user.player_id), true);

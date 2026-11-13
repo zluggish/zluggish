@@ -1,3 +1,4 @@
+import { eventFeedSchema } from '#src/dtos/relay.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated, peerAddress } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -18,11 +19,11 @@ import {
   DropInWorldSchema,
   TeleportTargetsSchema,
 } from '#src/protocol/generated/world_pb';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { course, worldTime } from '#src/world/state';
 import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomInt } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -157,8 +158,8 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         HashSeedsSchema,
         create(HashSeedsSchema, {
           seeds: Array.from({ length: 4 }, (_, index) => ({
-            seed1: randomInt(0x80_00_00_00),
-            seed2: randomInt(0x80_00_00_00),
+            seed1: new CryptoRepository().randomInt(0x80_00_00_00),
+            seed2: new CryptoRepository().randomInt(0x80_00_00_00),
             expiryDate: worldTime() + BigInt(10_800 + index * 1200) * 1000n,
           })),
         }),
@@ -231,9 +232,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           )
         : Promise.resolve([]),
       eventCount
-        ? read(`/api/event-feed?${eventQuery}`, z.object({ data: z.array(z.object({ event: z.json() })) })).then(
-            (feed) => feed.data.map((item) => item.event),
-          )
+        ? read(`/api/event-feed?${eventQuery}`, eventFeedSchema).then((feed) => feed.data.map((item) => item.event))
         : Promise.resolve([]),
       invites('PENDING', count('pendingEventInviteCount')),
       invites('ACCEPTED', count('acceptedEventInviteCount')),

@@ -1,4 +1,4 @@
-import { pairedEvent } from '#src/services/uploads.service';
+import { UploadsService } from '#src/services/uploads.service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -15,30 +15,33 @@ await test('pairing needs a unique workout for the day or an exact unique title'
     date: '',
   };
 
-  assert.equal(pairedEvent(activity, { collection: false, entries: [entry(7, 'Other')] }), 7);
+  assert.equal(UploadsService.pairedEvent(activity, { collection: false, entries: [entry(7, 'Other')] }), 7);
   assert.equal(
-    pairedEvent(activity, {
+    UploadsService.pairedEvent(activity, {
       collection: true,
       entries: [entry(7, 'Other')],
     }),
     null,
   );
   assert.equal(
-    pairedEvent(activity, {
+    UploadsService.pairedEvent(activity, {
       collection: true,
       entries: [entry(7, 'Other'), entry(8, 'tempo '), entry(9, 'x', '2026-05-02')],
     }),
     8,
   );
   assert.equal(
-    pairedEvent(activity, {
+    UploadsService.pairedEvent(activity, {
       collection: true,
       entries: [entry(8, 'Tempo'), entry(9, 'Tempo')],
     }),
     null,
   );
   assert.equal(
-    pairedEvent({ name: 'Tempo', startDate: 'garbage', date: '' }, { collection: false, entries: [entry(7, 'Tempo')] }),
+    UploadsService.pairedEvent(
+      { name: 'Tempo', startDate: 'garbage', date: '' },
+      { collection: false, entries: [entry(7, 'Tempo')] },
+    ),
     null,
   );
 });

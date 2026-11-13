@@ -5,29 +5,28 @@ import {
   ProfileEntitlement_ProfileEntitlementStatus,
   ProfileEntitlementSchema,
 } from '#src/protocol/generated/profile_pb';
-import { readFileSync } from '#src/repositories/files.repository';
-import { companionProfile, profileAge } from '#src/services/profile-json.service';
 import type { Profiles } from '#src/repositories/profile.repository';
+import { BaseService } from '#src/services/base.service';
+import { ProfileJsonService } from '#src/services/profile-json.service';
 import { create } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-export class ProfilesService {
-  constructor(
-    private readonly repository: Profiles,
-    private readonly context: RepositoryContext,
-  ) {}
+export class ProfilesService extends BaseService {
+  constructor(private readonly context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   folder(...args: Parameters<Profiles['folder']>) {
-    return this.repository.folder(...args);
+    return this.profileRepository.folder(...args);
   }
   get(...args: Parameters<Profiles['get']>) {
-    return this.repository.get(...args);
+    return this.profileRepository.get(...args);
   }
   save(...args: Parameters<Profiles['save']>) {
-    return this.repository.save(...args);
+    return this.profileRepository.save(...args);
   }
   get synthetic() {
-    return this.repository.synthetic;
+    return this.profileRepository.synthetic;
   }
 
   forViewer(profile: ReturnType<typeof create<typeof PlayerProfileSchema>>, viewer?: number) {
@@ -72,12 +71,12 @@ export class ProfilesService {
 
     if (profile.privacyBits & 4n) publicProfile.weightInGrams = profile.weightInGrams;
 
-    if (!(profile.privacyBits & 64n)) publicProfile.age = profileAge(profile);
+    if (!(profile.privacyBits & 64n)) publicProfile.age = ProfileJsonService.profileAge(profile);
 
     return publicProfile;
   }
-  companionProfile(...args: Parameters<typeof companionProfile>) {
-    return companionProfile(...args);
+  companionProfile(...args: [Parameters<typeof ProfileJsonService.companionProfile>[0], string | null]) {
+    return ProfileJsonService.companionProfile(...args, this.profileJsonRepository.bikeFrameName(args[0].bikeFrame));
   }
   entitlements(profile: ReturnType<typeof create<typeof PlayerProfileSchema>>) {
     profile.entitlements = profile.entitlements.filter((item) => item.type !== ProfileEntitlement_EntitlementType.RIDE);
@@ -92,7 +91,9 @@ export class ProfilesService {
     if (this.context.config.equipment.unlockAll || this.context.config.equipment.unlockEntitlements) {
       const range = z
         .object({ first: z.number().int(), last: z.number().int() })
-        .parse(JSON.parse(readFileSync(resolve(this.context.assets, 'data/entitlements.txt'), 'utf8')));
+        .parse(
+          JSON.parse(this.filesRepository.readFileSync(resolve(this.context.assets, 'data/entitlements.txt'), 'utf8')),
+        );
 
       const owned = new Set(profile.entitlements.map((item) => item.id));
 

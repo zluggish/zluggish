@@ -1,3 +1,4 @@
+import type { ProtobufTable } from '#src/enum';
 import { query, SqliteExecutor } from '#src/db/query';
 import type { DescMessage } from '@bufbuild/protobuf';
 import { fromJsonString, toJsonString } from '@bufbuild/protobuf';
@@ -6,7 +7,7 @@ import { z } from 'zod';
 
 export type ProtobufMessage<Schema extends DescMessage> = ReturnType<typeof fromJsonString<Schema>>;
 
-export type Table = 'activity' | 'goal' | 'segment_result' | 'route_result';
+export type Table = ProtobufTable;
 
 export class ProtobufRows {
   private readonly executor: SqliteExecutor;

@@ -1,29 +1,29 @@
-import { resolveRiderSettings } from '#src/services/settings.service';
+import { run } from '#src/cli/cli';
+import { validateConfig } from '#src/config/index';
+import { loadConfig, packageRoot } from '#src/config/load';
+import { migrateConfig, migrationCandidate } from '#src/config/migrate';
+import { LockRepository } from '#src/repositories/lock.repository';
+import { SettingsStore } from '#src/repositories/settings.repository';
 import { AccountsService } from '#src/services/auth.service';
-import { test } from 'node:test';
-import type { TestContext } from 'node:test';
+import { SettingsService } from '#src/services/settings.service';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import {
-  mkdtempSync,
-  writeFileSync,
-  rmSync,
+  existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
-  existsSync,
-  unlinkSync,
   renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
 } from 'node:fs';
-import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { spawn } from 'node:child_process';
-import { migrateConfig, migrationCandidate } from '#src/config/migrate';
-import { loadConfig, packageRoot } from '#src/config/load';
-import { SettingsStore } from '#src/repositories/settings.repository';
-import { validateConfig } from '#src/config/index';
-import { acquireStorageLock } from '#src/repositories/lock.repository';
-import { run } from '#src/cli/cli';
+import type { TestContext } from 'node:test';
+import { test } from 'node:test';
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-migrate-'));
@@ -107,7 +107,7 @@ await test('direct migration generates loadable TS and preferences with no JSONC
   assert.ok(!readFileSync(f.output, 'utf8').includes('do-not-copy-this-secret'));
   const store = f.openSettings(true);
 
-  const settings = resolveRiderSettings(loaded.config.riderDefaults, store.read(42));
+  const settings = SettingsService.resolveRiderSettings(loaded.config.riderDefaults, store.read(42));
 
   assert.equal(settings.ghosts.enabled, true);
   assert.equal(settings.uploads.strava.method, 'free');
@@ -180,8 +180,8 @@ await test('independent Node processes contend on the storage OS lock', async (t
       '--input-type=module',
       '-e',
       `
-    import { acquireStorageLock } from './src/repositories/lock.repository.ts';
-    const release = await acquireStorageLock(process.argv[1]);
+    import { LockRepository } from './src/repositories/lock.repository.ts';
+    const release = await new LockRepository().acquireStorageLock(process.argv[1]);
     process.stdin.on('end', async () => { await release(); });
     process.stdin.resume();
     process.stdout.write('ready\\n');
@@ -203,7 +203,7 @@ await test('independent Node processes contend on the storage OS lock', async (t
       if (code) fail(new Error('Lock contender failed'));
     });
   });
-  await assert.rejects(acquireStorageLock(f.storage), /busy/);
+  await assert.rejects(new LockRepository().acquireStorageLock(f.storage), /busy/);
 });
 
 await test('CLI migrates directly, validates and typechecks the externally generated module', async (t) => {
@@ -239,9 +239,9 @@ await test('preference reset exposes configured defaults and invalid writes fail
   }).riderDefaults;
 
   store.save(42, { 'ghosts.enabled': false });
-  assert.equal(resolveRiderSettings(defaults, store.read(42)).ghosts.enabled, false);
+  assert.equal(SettingsService.resolveRiderSettings(defaults, store.read(42)).ghosts.enabled, false);
   store.save(42, {});
-  assert.equal(resolveRiderSettings(defaults, store.read(42)).ghosts.enabled, true);
+  assert.equal(SettingsService.resolveRiderSettings(defaults, store.read(42)).ghosts.enabled, true);
   assert.throws(() => store.save(-1, {}));
 });
 

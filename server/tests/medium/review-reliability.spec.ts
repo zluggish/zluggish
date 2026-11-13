@@ -1,30 +1,30 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { EventEmitter, once } from 'node:events';
-import { create, toBinary } from '@bufbuild/protobuf';
-import { Encoder, Profile, type FileIdMesg, type RecordMesg } from '@garmin/fitsdk';
-import { mkdirSync, existsSync, readFileSync, unlinkSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { z } from 'zod';
-import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/support';
+import { validateConfig } from '#src/config/index';
+import { createApp } from '#src/http/app';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerProfileSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { Completions } from '#src/repositories/completion.repository';
-import { advancedStreak, streaksFor } from '#src/services/streak.service';
-import { ImportsService } from '#src/services/profile-import.service';
-import { writeDurable } from '#src/repositories/files.repository';
-import { activityChart } from '#src/services/fit.service';
-import { Simulation } from '#src/world/simulation';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { validateConfig } from '#src/config/index';
-import { UploadsService } from '#src/services/uploads.service';
+import { Completions } from '#src/repositories/completion.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { LoggingRepository } from '#src/repositories/logging.repository';
 import { AccountsService } from '#src/services/auth.service';
-import { configureLogging, createLogger, log } from '#src/logging';
-import { createApp } from '#src/http/app';
+import { FitService } from '#src/services/fit.service';
+import { ImportsService } from '#src/services/profile-import.service';
+import { StreakService } from '#src/services/streak.service';
+import { UploadsService } from '#src/services/uploads.service';
+import { Simulation } from '#src/world/simulation';
+import { binary, decode, mediumBrowser, mediumFixture } from '#tests/medium/support';
+import { create, toBinary } from '@bufbuild/protobuf';
+import { Encoder, Profile, type FileIdMesg, type RecordMesg } from '@garmin/fitsdk';
+import assert from 'node:assert/strict';
+import { EventEmitter, once } from 'node:events';
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 await test('deleting a queued activity while another upload is sending prevents its later delivery', async (t) => {
   const f = await mediumFixture(t);
-  writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'runalyze_token.txt'), 'test');
+  new AssetFiles().writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'runalyze_token.txt'), 'test');
   const ids: number[] = [];
 
   const data = {
@@ -116,7 +116,7 @@ await test('a failed completion commit is recovered before the rider saves anoth
 await test('reopened upload queues require explicit owner retries for interrupted sends and honor disconnection', async (t) => {
   const f = await mediumFixture(t);
   const token = resolve(f.profiles.folder(f.rider.player_id), 'runalyze_token.txt');
-  writeDurable(token, 'test');
+  new AssetFiles().writeDurable(token, 'test');
 
   const data = {
     playerId: BigInt(f.rider.player_id),
@@ -159,19 +159,18 @@ await test('configured logging level controls request logging and application di
   const info = t.mock.method(console, 'log', () => {});
   const warning = t.mock.method(console, 'warn', () => {});
   const error = t.mock.method(console, 'error', () => {});
-  t.after(() => configureLogging('INFO'));
-  configureLogging('ERROR');
+  const log = new LoggingRepository({ level: 'ERROR' });
   const response = await f.request('/health');
   assert.equal(response.status, 200);
-  log.warn('suppressed');
-  log.error('visible');
+  log.warn('test.warning', 'suppressed');
+  log.error('test.error', 'visible');
   assert.equal(info.mock.callCount(), 0);
   assert.equal(warning.mock.callCount(), 0);
   assert.equal(error.mock.callCount(), 1);
-  configureLogging('INFO');
+  log.configure({ level: 'INFO' });
   await f.request('/health');
   assert.equal(info.mock.callCount(), 0, 'Routine requests stay quiet at INFO');
-  f.world.lifecycle.log = createLogger({ level: 'VERBOSE' });
+  f.world.lifecycle.log = new LoggingRepository({ level: 'VERBOSE' });
   const verboseApp = createApp({ gameInfo: '{}', gameInfoHash: '0', variants: '{}' }, f);
   await verboseApp.request('/health?token=never-log-this');
   assert.equal(info.mock.callCount(), 1);
@@ -218,11 +217,19 @@ await test('finalization retries and crash recovery preserve one streak update a
 
   const { id } = z.object({ id: z.number() }).parse(await response.json());
   const activity = create(ActivitySchema, { ...data, id: BigInt(id) });
-  const after = toBinary(StreaksSchema, advancedStreak(streaksFor(f.profiles, f.rider.player_id), activity));
+
+  const after = toBinary(
+    StreaksSchema,
+    StreakService.advancedStreak(
+      new StreakService(f.accounts.repositories).streaksFor(f.profiles, f.rider.player_id),
+      activity,
+    ),
+  );
+
   new Completions(f.accounts.db).prepare(activity.id, f.rider.player_id, toBinary(ActivitySchema, activity), after);
   // Model a crash after the streak file was replaced but before the database commit.
-  writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'streaks.bin'), after);
-  writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'runalyze_token.txt'), 'test');
+  new AssetFiles().writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'streaks.bin'), after);
+  new AssetFiles().writeDurable(resolve(f.profiles.folder(f.rider.player_id), 'runalyze_token.txt'), 'test');
   f.services.activities.recover();
   let delivered = 0;
   t.mock.method(globalThis, 'fetch', () => {
@@ -262,12 +269,15 @@ await test('import recovery discards preparation without a manifest but preserve
   const f = await mediumFixture(t);
   const folder = resolve(f.profiles.folder(f.rider.player_id), `.ts-import-${'a'.repeat(32)}`);
   mkdirSync(folder);
-  writeDurable(resolve(folder, 'profile.bin'), toBinary(PlayerProfileSchema, create(PlayerProfileSchema, { id: 1n })));
+  new AssetFiles().writeDurable(
+    resolve(folder, 'profile.bin'),
+    toBinary(PlayerProfileSchema, create(PlayerProfileSchema, { id: 1n })),
+  );
   const imports = new ImportsService(f.accounts, f.world);
   imports.recover();
   assert.equal(existsSync(folder), false);
   mkdirSync(folder);
-  writeDurable(resolve(folder, 'manifest.json'), '{bad');
+  new AssetFiles().writeDurable(resolve(folder, 'manifest.json'), '{bad');
   assert.throws(() => imports.recover());
   assert.equal(existsSync(folder), true);
 });
@@ -297,7 +307,7 @@ await test('charts keep records without optional sensors and power curves includ
     }
 
     const bytes = encoder.close();
-    const chart = activityChart(bytes);
+    const chart = FitService.activityChart(bytes);
     assert.equal(chart.timeInSec.length, powers.length);
     assert.deepEqual(
       chart.heartRate,
@@ -315,13 +325,16 @@ await test('charts keep records without optional sensors and power curves includ
 await test('ghost recordings apply migrated equipment and randomized body overrides without changing identity', async (t) => {
   const f = await mediumFixture(t);
   const configFile = resolve(f.config.storageDir, 'ghost_profile.txt');
-  writeDurable(configFile, JSON.stringify({ ride_jersey: 42, bike_frame: 123, is_male: false, random_body: true }));
+  new AssetFiles().writeDurable(
+    configFile,
+    JSON.stringify({ ride_jersey: 42, bike_frame: 123, is_male: false, random_body: true }),
+  );
 
   const states = [100, 200].map((roadTime) =>
     create(PlayerStateSchema, { id: BigInt(f.rider.player_id), roadTime, f19: (6 << 16) | 4, aux3: 1 << 8 }),
   );
 
-  writeDurable(
+  new AssetFiles().writeDurable(
     resolve(f.profiles.folder(f.rider.player_id), 'ghosts/6/1/ride.bin'),
     toBinary(GhostSchema, create(GhostSchema, { playerId: f.rider.player_id, states })),
     true,

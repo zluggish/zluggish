@@ -1,25 +1,5 @@
 const agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 
-export function unescapeHtml(text: string) {
-  return text.replaceAll(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (match, entity: string) => {
-    const lower = entity.toLowerCase();
-
-    if (lower === 'amp') return '&';
-
-    if (lower === 'lt') return '<';
-
-    if (lower === 'gt') return '>';
-
-    if (lower === 'quot') return '"';
-
-    if (lower === 'apos') return "'";
-
-    const code = lower.startsWith('#x') ? Number.parseInt(lower.slice(2), 16) : Math.trunc(Number(lower.slice(1)));
-
-    return Number.isSafeInteger(code) && code > 0 && code <= 0x10_ff_ff ? String.fromCodePoint(code) : match;
-  });
-}
-
 export interface SessionRequest {
   method?: string;
   headers?: Record<string, string>;
@@ -81,4 +61,25 @@ export class CookieSession {
   }
 }
 
-export const binaryBlob = (bytes: Uint8Array) => new Blob([Uint8Array.from(bytes)]);
+export class SessionRepository {
+  unescapeHtml(text: string) {
+    return text.replaceAll(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (match, entity: string) => {
+      const lower = entity.toLowerCase();
+
+      if (lower === 'amp') return '&';
+
+      if (lower === 'lt') return '<';
+
+      if (lower === 'gt') return '>';
+
+      if (lower === 'quot') return '"';
+
+      if (lower === 'apos') return "'";
+
+      const code = lower.startsWith('#x') ? Number.parseInt(lower.slice(2), 16) : Math.trunc(Number(lower.slice(1)));
+
+      return Number.isSafeInteger(code) && code > 0 && code <= 0x10_ff_ff ? String.fromCodePoint(code) : match;
+    });
+  }
+  binaryBlob = (bytes: Uint8Array) => new Blob([Uint8Array.from(bytes)]);
+}

@@ -1,8 +1,8 @@
-import { WorkoutsService, workoutDetails } from '#src/services/workout.service';
-import { Connections } from '#src/repositories/connections.repository';
-import { writeDurable } from '#src/repositories/files.repository';
 import { PrivateEventProtoSchema } from '#src/protocol/generated/events_pb';
 import { PlayerStateSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
+import { Connections } from '#src/repositories/connections.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { WorkoutsService } from '#src/services/workout.service';
 import { Simulation } from '#src/world/simulation';
 import { worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
@@ -82,21 +82,21 @@ await test('workout ramps split at power boundaries and cached schedules retain 
   const xml =
     '<workout_file><name>Tempo</name><sportType>bike</sportType><workout><Warmup Duration="600" PowerLow="0.5" PowerHigh="1.0"/><SteadyState Duration="300" Power="0.8"/></workout></workout_file>';
 
-  const details = workoutDetails(xml);
+  const details = WorkoutsService.workoutDetails(xml);
   assert.equal(details?.duration, 900);
   assert.equal(
     details?.zonePercentages.reduce((a, b) => a + b, 0),
     100,
   );
   assert.deepEqual(details?.zonePercentages, [7, 27, 53, 13, 0, 0]);
-  assert.throws(() => workoutDetails('<!DOCTYPE foo><workout_file/>'));
+  assert.throws(() => WorkoutsService.workoutDetails('<!DOCTYPE foo><workout_file/>'));
   const workouts = new WorkoutsService(f);
   const id = '84e16aa6-2e13-4cc5-9bea-76595a66abe0';
   const file = workouts.file(id);
   assert.ok(file);
-  writeDurable(file, xml);
+  new AssetFiles().writeDurable(file, xml);
   new Connections(f.accounts.storage).save(user.player_id, 'intervals', ['123', 'secret']);
-  writeDurable(
+  new AssetFiles().writeDurable(
     resolve(f.profiles.folder(user.player_id), 'intervals_icu_workout.json'),
     JSON.stringify({
       provider: 'intervals-icu',

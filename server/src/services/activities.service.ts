@@ -1,30 +1,26 @@
-import { Completions } from '#src/repositories/completion.repository';
-import { ProtobufRows } from '#src/repositories/protobuf.repository';
-import { UploadsService } from '#src/services/uploads.service';
-import { resolveRiderSettings } from '#src/services/settings.service';
-import { GhostSchema, WorldAttributeSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
-import { course, worldTime } from '#src/world/state';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { type RepositoryContext } from '#src/context';
 import { ApplicationError } from '#src/errors';
+import { ActivitySchema, FitnessPrivacy, type Activity } from '#src/protocol/generated/activity_pb';
 import { ActivityPrivacyType, Sport, StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { FitnessPrivacy } from '#src/protocol/generated/activity_pb';
-import { ActivitySchema, type Activity } from '#src/protocol/generated/activity_pb';
+import { GhostSchema, WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { ActivitiesRepository } from '#src/repositories/activities.repository';
-import { existsSync, readdirSync, rmSync, writeDurable } from '#src/repositories/files.repository';
-import { activityChart, savePowerCurve } from '#src/services/fit.service';
-import { advancedStreak, streaksFor, updateStreaks } from '#src/services/streak.service';
+import { BaseService } from '#src/services/base.service';
+import { FitService } from '#src/services/fit.service';
+import { SettingsService } from '#src/services/settings.service';
+import { StreakService } from '#src/services/streak.service';
+import { UploadsService } from '#src/services/uploads.service';
+import { course, worldTime } from '#src/world/state';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-export class ActivitiesService {
-  constructor(
-    private readonly repository: ActivitiesRepository,
-    private readonly context: RepositoryContext,
-  ) {}
+export class ActivitiesService extends BaseService {
+  constructor(private readonly context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
 
   finalized(activity: Activity) {
-    const saved = new Completions(this.context.accounts.db).get(activity.id);
+    const saved = this.completionRepository.get(activity.id);
 
     if (!saved) return false;
 
@@ -35,7 +31,7 @@ export class ActivitiesService {
   }
 
   recover() {
-    for (const row of new Completions(this.context.accounts.db).unfinished())
+    for (const row of this.completionRepository.unfinished())
       this.finalize(fromBinary(ActivitySchema, row.payload), true);
   }
 
@@ -64,7 +60,7 @@ export class ActivitiesService {
   private complete(activity: Activity) {
     if (this.finalized(activity)) return;
     const player = Number(activity.playerId);
-    const journal = new Completions(this.context.accounts.db);
+    const journal = this.completionRepository;
     const folder = this.context.profiles.folder(player);
 
     if (!journal.get(activity.id)) {
@@ -74,7 +70,13 @@ export class ActivitiesService {
 
       const streak =
         activity.sport === Sport.CYCLING && activity.distanceInMeters >= 2000
-          ? toBinary(StreaksSchema, advancedStreak(streaksFor(this.context.profiles, player), activity))
+          ? toBinary(
+              StreaksSchema,
+              StreakService.advancedStreak(
+                new StreakService(this.repositories).streaksFor(this.context.profiles, player),
+                activity,
+              ),
+            )
           : null;
 
       journal.prepare(activity.id, player, toBinary(ActivitySchema, activity), streak);
@@ -90,18 +92,19 @@ export class ActivitiesService {
         .replaceAll(/[^\w. -]/g, '_')
         .replace(/^\.+/, '') || 'activity.fit';
 
-    writeDurable(resolve(folder, 'fit', `${activity.id} - ${name}`), activity.fit, true);
-    writeDurable(resolve(folder, 'last_activity.bin'), saved.payload, true);
+    this.filesRepository.writeDurable(resolve(folder, 'fit', `${activity.id} - ${name}`), activity.fit, true);
+    this.filesRepository.writeDurable(resolve(folder, 'last_activity.bin'), saved.payload, true);
 
-    if (saved.streak) writeDurable(resolve(folder, 'streaks.bin'), saved.streak, true);
+    if (saved.streak) this.filesRepository.writeDurable(resolve(folder, 'streaks.bin'), saved.streak, true);
     const history = this.context.world.histories.get(activity.playerId) ?? [];
     const state = history.at(-1);
 
     if (
       state &&
-      resolveRiderSettings(this.context.config.riderDefaults, this.context.settings.read(player)).ghosts.enabled
+      SettingsService.resolveRiderSettings(this.context.config.riderDefaults, this.context.settings.read(player)).ghosts
+        .enabled
     )
-      writeDurable(
+      this.filesRepository.writeDurable(
         resolve(
           folder,
           'ghosts',
@@ -115,7 +118,7 @@ export class ActivitiesService {
         true,
       );
     journal.complete(activity.id, new UploadsService(this.context).configured(player), () => {
-      new ProtobufRows(this.context.accounts.db).update('activity', activity.id, ActivitySchema, activity, ['fit']);
+      this.protobufRepository.update('activity', activity.id, ActivitySchema, activity, ['fit']);
 
       try {
         this.savePowerCurve(player, activity.fit);
@@ -141,27 +144,28 @@ export class ActivitiesService {
   }
 
   findActivity(...values: Parameters<ActivitiesRepository['findActivity']>) {
-    return this.repository.findActivity(...values);
+    return this.activitiesRepository.findActivity(...values);
   }
   deleteActivity(id: bigint, player: number) {
-    if (!this.repository.findActivity(id, player)) throw new ApplicationError(404);
+    if (!this.activitiesRepository.findActivity(id, player)) throw new ApplicationError(404);
 
-    const charts = this.repository
+    const charts = this.activitiesRepository
       .listActivityFile(id)
       .map((row) => resolve(this.context.config.storageDir, 'activities', String(z.number().parse(row.id))));
 
     const photos = this.photos(player, id);
     const fitFolder = resolve(this.context.profiles.folder(player), 'fit');
 
-    const fits = existsSync(fitFolder)
-      ? readdirSync(fitFolder)
+    const fits = this.filesRepository.existsSync(fitFolder)
+      ? this.filesRepository
+          .readdirSync(fitFolder)
           .filter((name) => name.startsWith(`${id} - `))
           .map((name) => resolve(fitFolder, name))
       : [];
 
-    this.repository.deleteActivityData(id, player);
+    this.activitiesRepository.deleteActivityData(id, player);
 
-    for (const file of [...charts, ...photos, ...fits]) rmSync(file, { force: true });
+    for (const file of [...charts, ...photos, ...fits]) this.filesRepository.rmSync(file, { force: true });
   }
   visible(activity: Activity, viewer: number) {
     return (
@@ -198,22 +202,22 @@ export class ActivitiesService {
     });
   }
   findActivityFile(...values: Parameters<ActivitiesRepository['findActivityFile']>) {
-    return this.repository.findActivityFile(...values);
+    return this.activitiesRepository.findActivityFile(...values);
   }
   insertActivityFile(...values: Parameters<ActivitiesRepository['insertActivityFile']>) {
-    return this.repository.insertActivityFile(...values);
+    return this.activitiesRepository.insertActivityFile(...values);
   }
   findOwnedActivityFile(...values: Parameters<ActivitiesRepository['findOwnedActivityFile']>) {
-    return this.repository.findOwnedActivityFile(...values);
+    return this.activitiesRepository.findOwnedActivityFile(...values);
   }
   insertActivityImage(...values: Parameters<ActivitiesRepository['insertActivityImage']>) {
-    return this.repository.insertActivityImage(...values);
+    return this.activitiesRepository.insertActivityImage(...values);
   }
   insertActivityMedia(...values: Parameters<ActivitiesRepository['insertActivityMedia']>) {
-    return this.repository.insertActivityMedia(...values);
+    return this.activitiesRepository.insertActivityMedia(...values);
   }
   findActivityMedia(...values: Parameters<ActivitiesRepository['findActivityMedia']>) {
-    return this.repository.findActivityMedia(...values);
+    return this.activitiesRepository.findActivityMedia(...values);
   }
 
   photos(player: number, activity: bigint) {
@@ -221,15 +225,15 @@ export class ActivitiesService {
 
     const images = z
       .array(z.object({ id: z.number() }))
-      .parse(this.repository.listActivityImage(player, activity))
+      .parse(this.activitiesRepository.listActivityImage(player, activity))
       .map((row) => resolve(folder, 'images', `${row.id}.jpg`));
 
     const media = z
       .array(z.object({ id: z.number(), content_type: z.string() }))
-      .parse(this.repository.listActivityMedia(player, activity))
+      .parse(this.activitiesRepository.listActivityMedia(player, activity))
       .map((row) => resolve(folder, 'medias', `${row.id}.${row.content_type.includes('quicktime') ? 'mov' : 'mp4'}`));
 
-    return [...images, ...media].filter((path) => existsSync(path));
+    return [...images, ...media].filter((path) => this.filesRepository.existsSync(path));
   }
   companion(activity: Activity, details = false) {
     const profile = this.context.profiles.get(Number(activity.playerId));
@@ -281,26 +285,26 @@ export class ActivitiesService {
   }
 
   recentActivities(...values: Parameters<ActivitiesRepository['recentActivities']>) {
-    return this.repository.recentActivities(...values);
+    return this.activitiesRepository.recentActivities(...values);
   }
 
   activityById(...values: Parameters<ActivitiesRepository['activityById']>) {
-    return this.repository.activityById(...values);
+    return this.activitiesRepository.activityById(...values);
   }
 
   activityFeed(...values: Parameters<ActivitiesRepository['activityFeed']>) {
-    return this.repository.activityFeed(...values);
+    return this.activitiesRepository.activityFeed(...values);
   }
 
-  activityChart(...args: Parameters<typeof activityChart>) {
-    return activityChart(...args);
+  activityChart(...args: Parameters<typeof FitService.activityChart>) {
+    return FitService.activityChart(...args);
   }
 
   savePowerCurve(id: number, bytes: Uint8Array) {
-    return savePowerCurve(this.context.accounts.db, this.context.profiles, id, bytes);
+    return new FitService(this.repositories).savePowerCurve(id, bytes);
   }
 
   updateStreaks(id: number, activity: Activity) {
-    return updateStreaks(this.context.profiles, id, activity);
+    return new StreakService(this.repositories).updateStreaks(this.context.profiles, id, activity);
   }
 }

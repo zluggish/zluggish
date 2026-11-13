@@ -1,3 +1,5 @@
+import { staticResponseSchema } from '#src/dtos/static.dto';
+
 import { packageRoot } from '#src/config/load';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
@@ -11,24 +13,7 @@ import type { Hono } from 'hono';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-const contracts = z.array(
-  z.object({
-    methods: z.array(z.enum(['GET', 'POST', 'PUT', 'DELETE'])),
-    path: z.string(),
-    body: z.json(),
-    mode: z.enum(['json', 'text']),
-    authenticated: z.boolean(),
-    status: z.union([
-      z.literal(200),
-      z.literal(201),
-      z.literal(202),
-      z.literal(204),
-      z.literal(400),
-      z.literal(404),
-      z.literal(500),
-    ]),
-  }),
-);
+const contracts = z.array(staticResponseSchema);
 
 export function staticRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const routes = contracts.parse(

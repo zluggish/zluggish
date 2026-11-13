@@ -1,16 +1,17 @@
-import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { basename, dirname, relative, resolve } from 'node:path';
-import { randomUUID } from '#src/repositories/crypto.repository';
-import { DatabaseSync, backup } from 'node:sqlite';
-import { z } from 'zod';
-import { parse as parseIni } from 'ini';
 import { ConfigError, validateConfig } from '#src/config/index';
 import { CONFIG_NAME } from '#src/config/load';
 import { configSchema } from '#src/config/schema';
-import { writeDurable } from '#src/repositories/files.repository';
-import { acquireStorageLock } from '#src/repositories/lock.repository';
-import { SettingsStore, preferenceSchema } from '#src/repositories/settings.repository';
-import type { Preference } from '#src/repositories/settings.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { LockRepository } from '#src/repositories/lock.repository';
+import type { Preference } from '#src/dtos/settings.dto';
+import { SettingsStore } from '#src/repositories/settings.repository';
+import { preferenceSchema } from '#src/dtos/settings.dto';
+import { parse as parseIni } from 'ini';
+import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { basename, dirname, relative, resolve } from 'node:path';
+import { DatabaseSync, backup } from 'node:sqlite';
+import { z } from 'zod';
 
 const journalSchema = z.strictObject({
   version: z.literal(1),
@@ -285,7 +286,7 @@ export async function migrateConfig(options: MigrationOptions) {
     };
   }
 
-  const release = await acquireStorageLock(options.storage);
+  const release = await new LockRepository().acquireStorageLock(options.storage);
   const journalPath = resolve(options.storage, '.config-migration.json');
 
   try {
@@ -298,7 +299,7 @@ export async function migrateConfig(options: MigrationOptions) {
         throw new ConfigError('An interrupted migration targets another output; resume that destination first');
     } else {
       const candidate = migrationCandidate(options);
-      const id = randomUUID();
+      const id = new CryptoRepository().randomUUID();
       const settingsPath = resolve(options.storage, 'settings.db');
       let backupPath: string | null = null;
 
@@ -321,7 +322,7 @@ export async function migrateConfig(options: MigrationOptions) {
         preferences: candidate.preferences,
         backup: backupPath,
       });
-      writeDurable(journalPath, JSON.stringify(journal));
+      new AssetFiles().writeDurable(journalPath, JSON.stringify(journal));
     }
 
     if (existsSync(journal.output) && readFileSync(journal.output, 'utf8') !== journal.source)
@@ -335,7 +336,7 @@ export async function migrateConfig(options: MigrationOptions) {
       settings.close();
     }
 
-    if (!existsSync(journal.output)) writeDurable(journal.output, journal.source);
+    if (!existsSync(journal.output)) new AssetFiles().writeDurable(journal.output, journal.source);
 
     unlinkSync(journalPath);
 

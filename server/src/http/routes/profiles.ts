@@ -1,9 +1,10 @@
-import { importFilenameSchema } from '#src/contracts/profile-import';
+import { profileUpdateSchema } from '#src/dtos/profiles.dto';
+import { importFilenameSchema } from '#src/dtos/profile-import.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { PlayerProfileSchema, ProfileEntitlementsSchema } from '#src/protocol/generated/profile_pb';
-import type { ImportFiles } from '#src/contracts/profile-import';
+import type { ImportFiles } from '#src/dtos/profile-import.dto';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Context, Hono } from 'hono';
 import { html } from 'hono/html';
@@ -165,19 +166,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
-    const update = z
-      .object({
-        countryCode: z.number().int().optional(),
-        dob: z.string().optional(),
-        emailAddress: z.string().optional(),
-        firstName: z.string().optional(),
-        lastName: z.string().optional(),
-        height: z.number().int().positive().optional(),
-        male: z.boolean().optional(),
-        useMetric: z.boolean().optional(),
-        weight: z.number().int().positive().optional(),
-      })
-      .parse(await c.req.json());
+    const update = profileUpdateSchema.parse(await c.req.json());
 
     const profile = runtime.services.profiles.get(user.player_id);
 

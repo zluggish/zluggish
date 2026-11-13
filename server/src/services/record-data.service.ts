@@ -1,15 +1,19 @@
+import type { RepositoryContext } from '#src/context';
 import type { ProtobufMessage, ProtobufRows, Table } from '#src/repositories/protobuf.repository';
+import { BaseService } from '#src/services/base.service';
 import type { DescMessage } from '@bufbuild/protobuf';
 
-export class RecordDataService {
-  constructor(private readonly repository: ProtobufRows) {}
+export class RecordDataService extends BaseService {
+  constructor(context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   insert<Schema extends DescMessage>(
     table: Table,
     schema: Schema,
     message: ProtobufMessage<Schema>,
     exclude: string[] = [],
   ) {
-    return this.repository.insert(table, schema, message, exclude);
+    return this.protobufRepository.insert(table, schema, message, exclude);
   }
   update<Schema extends DescMessage>(
     table: Table,
@@ -18,12 +22,12 @@ export class RecordDataService {
     message: ProtobufMessage<Schema>,
     exclude: string[] = [],
   ) {
-    this.repository.update(table, id, schema, message, exclude);
+    this.protobufRepository.update(table, id, schema, message, exclude);
   }
   select<Schema extends DescMessage>(table: Table, schema: Schema, playerId: bigint) {
-    return this.repository.select(table, schema, playerId);
+    return this.protobufRepository.select(table, schema, playerId);
   }
   decode<Schema extends DescMessage>(schema: Schema, row: Parameters<ProtobufRows['decode']>[1]) {
-    return this.repository.decode(schema, row);
+    return this.protobufRepository.decode(schema, row);
   }
 }

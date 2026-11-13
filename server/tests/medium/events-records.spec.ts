@@ -1,25 +1,25 @@
-import { z } from 'zod';
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { fromBinary } from '@bufbuild/protobuf';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { mediumFixture, binary, decode } from '#tests/medium/support';
+import { storedSchema, type MeetupInput } from '#src/dtos/meetup.dto';
 import {
-  PrivateEventProtoSchema,
   PlayerJoinedEventSchema,
   PrivateEventFeedListProtoSchema,
+  PrivateEventProtoSchema,
 } from '#src/protocol/generated/events_pb';
+import { AchievementsSchema } from '#src/protocol/generated/profile_pb';
+import { RaceResultEntrySaveRequestSchema, RaceResultSummarySchema } from '#src/protocol/generated/race-result_pb';
 import {
   SegmentResultSchema,
   SegmentResultsSchema,
   SegmentRideStatsSchema,
 } from '#src/protocol/generated/segment-result_pb';
-import { RaceResultEntrySaveRequestSchema, RaceResultSummarySchema } from '#src/protocol/generated/race-result_pb';
-import { AchievementsSchema } from '#src/protocol/generated/profile_pb';
 import { WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
 import { worldTime } from '#src/world/state';
-import { storedSchema, type MeetupInput } from '#src/contracts/meetup';
+import { binary, decode, mediumFixture } from '#tests/medium/support';
+import { fromBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 const jsonRequest = (body: MeetupInput) => ({
   headers: { 'Content-Type': 'application/json' },

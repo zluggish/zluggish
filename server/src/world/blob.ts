@@ -1,17 +1,18 @@
+import type { BlobMode, GesturePhase } from '#src/enum';
 import type { ResolvedConfig } from '#src/config/index';
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
 import { UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
 import { clamp, Random, Trail } from '#src/world/geometry';
-import { course, forward, road } from '#src/world/state';
 import type { RiderPool } from '#src/world/riders';
+import { course, forward, road } from '#src/world/state';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
 type BlobConfig = ResolvedConfig['soloBlob'];
 
-type Mode = 'attack' | 'hammer' | 'toast' | 'lead' | null;
+type Mode = BlobMode | null;
 
 interface BlobRider {
   profile: PlayerProfile;
@@ -19,7 +20,7 @@ interface BlobRider {
   gap: number;
   lateral: number;
   strength: number;
-  phase: 'approach' | 'pull' | null;
+  phase: GesturePhase | null;
   until: number;
   side: number;
   dropping: boolean;

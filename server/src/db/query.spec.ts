@@ -1,4 +1,4 @@
-import { createSchemaSQL, completionSchemaSQL } from '#src/db/ddl';
+import { completionSchemaSQL, createSchemaSQL } from '#src/db/ddl';
 import { query, SqliteExecutor } from '#src/db/query';
 import { integer } from '#src/db/values';
 import assert from 'node:assert/strict';

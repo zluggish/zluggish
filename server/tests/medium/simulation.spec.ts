@@ -1,6 +1,6 @@
-import { writeDurable } from '#src/repositories/files.repository';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { Simulation } from '#src/world/simulation';
 import { runtimeFixture } from '#tests/support/runtime';
 import { create, toBinary } from '@bufbuild/protobuf';
@@ -13,11 +13,11 @@ await test('simulation playback stops, resumes and removes deleted pacers on rel
   t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.UTC(2026, 10, 12) });
   const f = runtimeFixture(t);
   const folder = resolve(f.accounts.storage, 'robopacers/demo');
-  writeDurable(
+  new AssetFiles().writeDurable(
     resolve(folder, 'profile.bin'),
     toBinary(PlayerProfileSchema, create(PlayerProfileSchema, { id: 100n, firstName: 'Pacer' })),
   );
-  writeDurable(
+  new AssetFiles().writeDurable(
     resolve(folder, 'route.bin'),
     toBinary(
       GhostSchema,

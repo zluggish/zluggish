@@ -1,31 +1,12 @@
-import { query, SqliteExecutor } from '#src/db/query';
+import { overrideSchema, type Overrides, preferenceSchema, type Preference } from '#src/dtos/settings.dto';
+
 import { ConfigError } from '#src/config/index';
 import { riderSettingsSchema } from '#src/config/schema';
+import { query, SqliteExecutor } from '#src/db/query';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-
-export const overrideSchema = z.strictObject({
-  'ghosts.enabled': z.boolean().optional(),
-  'uploads.zwift.enabled': z.boolean().optional(),
-  'uploads.strava.method': z.enum(['paid', 'free']).optional(),
-  'devices.zwiftClick.enabled': z.boolean().optional(),
-  'workouts.trainingpeaks.bridgeFolder': z.string().optional(),
-});
-
-export type Overrides = z.infer<typeof overrideSchema>;
-
-export type SettingKey = keyof Overrides;
-
-export const settingKeySchema = overrideSchema.keyof();
-
-export const preferenceSchema = z.object({
-  playerId: z.number().int().positive().safe(),
-  overrides: overrideSchema,
-});
-
-export type Preference = z.infer<typeof preferenceSchema>;
 
 const rowSchema = z.object({ value: z.string() });
 
@@ -148,19 +129,21 @@ export class SettingsStore {
   }
 }
 
-export function checkRider(storage: string, playerId: number) {
-  const currentDatabase = resolve(storage, 'zluggish.db');
-  const path = existsSync(currentDatabase) ? currentDatabase : resolve(storage, 'zwift-offline.db');
+export const defaultRiderSettings = riderSettingsSchema.parse({});
 
-  if (!existsSync(path)) throw new ConfigError('Unknown rider; initialize accounts before changing preferences');
-  const db = new DatabaseSync(path, { readOnly: true });
+export class RiderRepository {
+  checkRider(storage: string, playerId: number) {
+    const currentDatabase = resolve(storage, 'zluggish.db');
+    const path = existsSync(currentDatabase) ? currentDatabase : resolve(storage, 'zwift-offline.db');
 
-  try {
-    if (!new SqliteExecutor(db).get(query.selectFrom('user').select('player_id').where('player_id', '=', playerId)))
-      throw new ConfigError('Unknown rider');
-  } finally {
-    db.close();
+    if (!existsSync(path)) throw new ConfigError('Unknown rider; initialize accounts before changing preferences');
+    const db = new DatabaseSync(path, { readOnly: true });
+
+    try {
+      if (!new SqliteExecutor(db).get(query.selectFrom('user').select('player_id').where('player_id', '=', playerId)))
+        throw new ConfigError('Unknown rider');
+    } finally {
+      db.close();
+    }
   }
 }
-
-export const defaultRiderSettings = riderSettingsSchema.parse({});

@@ -1,19 +1,19 @@
 import { ConfigError } from '#src/config/index';
-import { openDatabase } from '#src/db/open';
-import { AccountsRepository } from '#src/repositories/accounts.repository';
+import { Repositories } from '#src/repositories';
 import type { Rider } from '#src/repositories/accounts.repository';
-import { hashPassword, verifyPassword, randomBytes } from '#src/repositories/crypto.repository';
-import { mkdirSync, readdirSync, rmSync } from '#src/repositories/files.repository';
+import { AccountsRepository } from '#src/repositories/accounts.repository';
+import { BaseService } from '#src/services/base.service';
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
-export class AccountsService {
+export class AccountsService extends BaseService {
   readonly db: DatabaseSync;
   readonly repository: AccountsRepository;
 
   constructor(readonly storage: string) {
-    this.db = openDatabase(storage);
-    this.repository = new AccountsRepository(this.db);
+    super(new Repositories(storage));
+    this.db = this.repositories.db;
+    this.repository = this.accountsRepository;
   }
 
   list() {
@@ -29,7 +29,7 @@ export class AccountsService {
     return this.repository.setupComplete();
   }
   identityOf(rider: Rider) {
-    return identityOf(rider);
+    return `${rider.player_id}:${rider.auth_version}`;
   }
 
   identity(identity: string): Rider | null {
@@ -44,7 +44,7 @@ export class AccountsService {
     const displayName = name.trim();
 
     if (!displayName || displayName.length > 100) throw new ConfigError('Enter a name between 1 and 100 characters');
-    const passwordHash = password ? await hashPassword(password) : null;
+    const passwordHash = password ? await this.cryptoRepository.hashPassword(password) : null;
     let created: string | null = null;
     this.db.exec('BEGIN IMMEDIATE');
 
@@ -53,7 +53,8 @@ export class AccountsService {
 
       const occupied = [
         ...this.list().map((user) => user.player_id),
-        ...readdirSync(this.storage)
+        ...this.filesRepository
+          .readdirSync(this.storage)
           .filter((name) => /^\d+$/.test(name))
           .map(Number),
       ];
@@ -63,12 +64,12 @@ export class AccountsService {
 
       if (!Number.isSafeInteger(id) || id > 2_147_483_647) throw new ConfigError('Rider ID space exhausted');
       const folder = resolve(this.storage, String(id));
-      mkdirSync(folder);
+      this.filesRepository.mkdirSync(folder);
       created = folder;
       const [first = '', ...rest] = displayName.split(/\s+/);
       this.repository.insert({
         player_id: id,
-        username: username ?? `rider-${randomBytes(12).toString('hex')}@local.invalid`,
+        username: username ?? `rider-${this.cryptoRepository.randomBytes(12).toString('hex')}@local.invalid`,
         first_name: first,
         last_name: rest.join(' '),
         pass_hash: passwordHash,
@@ -91,25 +92,21 @@ export class AccountsService {
     } catch (error) {
       if (this.db.isTransaction) this.db.exec('ROLLBACK');
 
-      if (created) rmSync(created, { recursive: true, force: true });
+      if (created) this.filesRepository.rmSync(created, { recursive: true, force: true });
 
       throw error;
     }
   }
 
   async verify(rider: Rider, password: string) {
-    return verifyPassword(rider.pass_hash, password);
+    return this.cryptoRepository.verifyPassword(rider.pass_hash, password);
   }
 
   async changePassword(id: number, password: string | null, admin = false) {
-    const hash = password ? await hashPassword(password) : null;
+    const hash = password ? await this.cryptoRepository.hashPassword(password) : null;
     this.repository.setPassword(id, hash, admin);
   }
   close() {
     if (this.db.isOpen) this.db.close();
   }
-}
-
-export function identityOf(rider: Rider) {
-  return `${rider.player_id}:${rider.auth_version}`;
 }

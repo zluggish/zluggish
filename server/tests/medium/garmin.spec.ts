@@ -1,4 +1,4 @@
-import { garminClient, uploadGarmin } from '#src/repositories/garmin.repository';
+import { GarminRepository } from '#src/repositories/garmin.repository';
 import { runtimeFixture } from '#tests/support/runtime';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -50,7 +50,7 @@ await test('Garmin imports FIT using existing garth tokens entirely through Node
       },
     });
   });
-  await uploadGarmin(folder, 'garmin.com', 'ride.fit', new Uint8Array([1, 2, 3]));
+  await new GarminRepository().uploadGarmin(folder, 'garmin.com', 'ride.fit', new Uint8Array([1, 2, 3]));
   assert.equal(uploads, 1);
-  assert.throws(() => garminClient(folder, 'untrusted.example'), /Unsupported/);
+  assert.throws(() => new GarminRepository().garminClient(folder, 'untrusted.example'), /Unsupported/);
 });

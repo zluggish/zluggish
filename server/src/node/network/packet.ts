@@ -1,4 +1,4 @@
-import { encryptPacketPayload, decryptLegacyPacketPayload } from '#src/repositories/crypto.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
 
 export interface InitializationVector {
   device: number;
@@ -50,14 +50,11 @@ export function encodePacket(payload: Uint8Array, key: Uint8Array, iv: Initializ
 
   const header = Buffer.concat([Buffer.from([flags]), ...parts]);
 
-  return Buffer.concat([header, encryptPacketPayload(payload, key, nonce(iv), header)]);
+  return Buffer.concat([header, new CryptoRepository().encryptPacketPayload(payload, key, nonce(iv), header)]);
 }
 
-/** Preserve the legacy receive contract: decrypted bytes include the four-byte trailer.
-This deliberately does not claim to authenticate incoming packets. Callers must
-parse the channel-specific body; do not use this as a general AEAD decrypt API.
-*/
-export function decodeLegacyPacket(data: Uint8Array, key: Uint8Array, iv: InitializationVector) {
+/** Authenticate the packet header and body before returning plaintext. */
+export function decodePacket(data: Uint8Array, key: Uint8Array, iv: InitializationVector) {
   const buffer = Buffer.from(data);
   const flags = buffer[0];
 
@@ -85,12 +82,17 @@ export function decodeLegacyPacket(data: Uint8Array, key: Uint8Array, iv: Initia
     sequence: fields.sequence ?? iv.sequence,
   };
 
-  if (buffer.length - offset < 4) throw new Error('Missing packet trailer');
+  if (buffer.length - offset < 4) throw new Error('Missing packet authentication tag');
 
   return {
     fields,
     iv: actual,
-    payload: decryptLegacyPacketPayload(buffer.subarray(offset), key, nonce(actual)),
+    payload: new CryptoRepository().decryptPacketPayload(
+      buffer.subarray(offset),
+      key,
+      nonce(actual),
+      buffer.subarray(0, offset),
+    ),
   };
 }
 

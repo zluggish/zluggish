@@ -1,10 +1,10 @@
-import { writeDurable } from '#src/repositories/files.repository';
 import { ActivityListSchema } from '#src/protocol/generated/activity_pb';
 import { PlayerJoinedEventSchema } from '#src/protocol/generated/events_pb';
 import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { RaceResultEntrySaveRequestSchema, RaceResultSummarySchema } from '#src/protocol/generated/race-result_pb';
 import { PlayerStateSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
 import { ZFileProtoSchema, ZFilesProtoSchema } from '#src/protocol/generated/zfiles_pb';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { runtimeFixture } from '#tests/support/runtime';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
@@ -304,7 +304,7 @@ await test('race summary derives meetup durations and avatars without changing s
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Racer', '', true);
   const headers = { Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}` };
-  writeDurable(resolve(f.profiles.folder(user.player_id), 'avatarLarge.jpg'), Buffer.from('avatar'));
+  new AssetFiles().writeDurable(resolve(f.profiles.folder(user.player_id), 'avatarLarge.jpg'), Buffer.from('avatar'));
   f.accounts.db
     .prepare('INSERT INTO private_event(id,json) VALUES (42,?)')
     .run(JSON.stringify({ eventStart: '2026-11-13T12:00:00Z' }));
@@ -346,7 +346,7 @@ await test('profile JSON edits reuse read negotiation and avatar resolution', as
     'Content-Type': 'application/json',
   };
 
-  writeDurable(resolve(f.profiles.folder(user.player_id), 'avatarLarge.jpg'), Buffer.from('avatar'));
+  new AssetFiles().writeDurable(resolve(f.profiles.folder(user.player_id), 'avatarLarge.jpg'), Buffer.from('avatar'));
 
   const json = await f.app.request(`/api/profiles/me/${user.player_id}`, {
     method: 'PUT',

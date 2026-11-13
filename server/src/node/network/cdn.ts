@@ -1,11 +1,11 @@
-import { fetchCdn } from '#src/node/network/proxy';
-import { Hono } from 'hono';
-import { getConnInfo } from '@hono/node-server/conninfo';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolve, relative, extname } from 'node:path';
-import { startHttp } from '#src/node/network/http';
 import type { Runtime } from '#src/http/runtime';
+import { startHttp } from '#src/node/network/http';
+import { fetchCdn } from '#src/node/network/proxy';
 import { WorkoutsService } from '#src/services/workout.service';
+import { getConnInfo } from '@hono/node-server/conninfo';
+import { Hono } from 'hono';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { extname, relative, resolve } from 'node:path';
 
 const contentTypes = new Map([
   ['.xml', 'text/xml'],

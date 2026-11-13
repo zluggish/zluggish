@@ -1,13 +1,6 @@
 import { ApplicationError } from '#src/errors';
-import { AccountsService, identityOf } from '#src/services/auth.service';
-import { writeDurable, existsSync, readFileSync } from '#src/repositories/files.repository';
-import {
-  signIdentity,
-  verifyIdentity,
-  signToken,
-  randomBytes,
-  timingSafeEqual,
-} from '#src/repositories/crypto.repository';
+import { AccountsService } from '#src/services/auth.service';
+import { BaseService } from '#src/services/base.service';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -26,17 +19,18 @@ export interface OpenedSession {
   session: BrowserSession;
 }
 
-export class SessionsService {
+export class SessionsService extends BaseService {
   readonly secret: Buffer;
   readonly browsers = new Map<string, BrowserSession>();
 
   constructor(readonly accounts: AccountsService) {
+    super(accounts.repositories);
     const path = resolve(accounts.storage, 'secret-key.txt');
 
-    if (existsSync(path)) this.secret = readFileSync(path);
+    if (this.filesRepository.existsSync(path)) this.secret = this.filesRepository.readFileSync(path);
     else {
-      this.secret = randomBytes(32);
-      writeDurable(path, this.secret);
+      this.secret = this.cryptoRepository.randomBytes(32);
+      this.filesRepository.writeDurable(path, this.secret);
     }
   }
 
@@ -66,10 +60,10 @@ export class SessionsService {
       this.browsers.delete(oldest);
     }
 
-    const token = randomBytes(32).toString('base64url');
+    const token = this.cryptoRepository.randomBytes(32).toString('base64url');
 
     const session: BrowserSession = {
-      csrf: randomBytes(32).toString('base64url'),
+      csrf: this.cryptoRepository.randomBytes(32).toString('base64url'),
       identity: null,
       selected: false,
       pendingImport: null,
@@ -86,7 +80,7 @@ export class SessionsService {
     const expected = Buffer.from(session.csrf);
     const supplied = Buffer.from(token);
 
-    return supplied.length === expected.length && timingSafeEqual(expected, supplied);
+    return supplied.length === expected.length && this.cryptoRepository.timingSafeEqual(expected, supplied);
   }
 
   rider(session: BrowserSession) {
@@ -101,7 +95,7 @@ export class SessionsService {
     try {
       const parsed = identityPayload.parse(JSON.parse(Buffer.from(payload, 'base64url').toString()));
 
-      const identity = verifyIdentity(parsed.session_cookie, this.secret);
+      const identity = this.cryptoRepository.verifyIdentity(parsed.session_cookie, this.secret);
 
       return identity ? this.accounts.identity(identity) : null;
     } catch {
@@ -117,13 +111,13 @@ export class SessionsService {
     const body = Buffer.from(
       JSON.stringify({
         ...values,
-        session_cookie: signIdentity(identity, this.secret),
+        session_cookie: this.cryptoRepository.signIdentity(identity, this.secret),
       }),
     ).toString('base64url');
 
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
 
-    const signature = signToken(`${header}.${body}`);
+    const signature = this.cryptoRepository.signToken(`${header}.${body}`);
 
     return `${header}.${body}.${signature}`;
   }
@@ -132,7 +126,7 @@ export class SessionsService {
     rider: NonNullable<ReturnType<AccountsService['get']>>,
     templates: { access: string; refresh: string; id: string },
   ) {
-    const identity = identityOf(rider);
+    const identity = this.accounts.identityOf(rider);
 
     return {
       access_token: this.token(identity, templates.access),

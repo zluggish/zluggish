@@ -1,27 +1,25 @@
 import type { RepositoryContext } from '#src/context';
 import { SegmentResultSchema } from '#src/protocol/generated/segment-result_pb';
-import { backfillRoutes } from '#src/services/achievement.service';
-import { ProtobufRows } from '#src/repositories/protobuf.repository';
 import { RecordsRepository } from '#src/repositories/records.repository';
+import { AchievementService } from '#src/services/achievement.service';
+import { BaseService } from '#src/services/base.service';
 
-export class RecordsService {
-  constructor(
-    private readonly repository: RecordsRepository,
-    private readonly records: ProtobufRows,
-    private readonly context: RepositoryContext,
-  ) {}
+export class RecordsService extends BaseService {
+  constructor(private readonly context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   updateRouteResult(...values: Parameters<RecordsRepository['updateRouteResult']>) {
-    return this.repository.updateRouteResult(...values);
+    return this.recordsRepository.updateRouteResult(...values);
   }
   listRouteResult(...values: Parameters<RecordsRepository['listRouteResult']>) {
-    return this.repository.listRouteResult(...values);
+    return this.recordsRepository.listRouteResult(...values);
   }
   findPrivateEvent(...values: Parameters<RecordsRepository['findPrivateEvent']>) {
-    return this.repository.findPrivateEvent(...values);
+    return this.recordsRepository.findPrivateEvent(...values);
   }
 
   mine(playerId: number, sport?: string, segment?: string) {
-    return this.records
+    return this.protobufRepository
       .select('segment_result', SegmentResultSchema, BigInt(playerId))
       .filter(
         (result) =>
@@ -31,10 +29,10 @@ export class RecordsService {
   }
 
   segmentLeaderboard(...values: Parameters<RecordsRepository['segmentLeaderboard']>) {
-    return this.repository.segmentLeaderboard(...values);
+    return this.recordsRepository.segmentLeaderboard(...values);
   }
 
   backfillRoutes(id: number) {
-    return backfillRoutes(this.context, id);
+    return new AchievementService(this.repositories).backfillRoutes(this.context, id);
   }
 }

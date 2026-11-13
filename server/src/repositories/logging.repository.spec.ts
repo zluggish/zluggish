@@ -1,18 +1,18 @@
+import { validateConfig } from '#src/config/index';
+import { LoggingRepository } from '#src/repositories/logging.repository';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createLogger } from '#src/logging';
-import { validateConfig } from '#src/config/index';
 
 await test('levels, aliases and independent loggers', () => {
   const lines: string[] = [];
 
-  const info = createLogger({
+  const info = new LoggingRepository({
     sink: (line) => {
       lines.push(line);
     },
   });
 
-  const verbose = createLogger({
+  const verbose = new LoggingRepository({
     level: 'VERBOSE',
     sink: (line) => {
       lines.push(line);
@@ -29,7 +29,7 @@ await test('levels, aliases and independent loggers', () => {
   for (const level of ['WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NOTSET'] as const) {
     const output: string[] = [];
 
-    const log = createLogger({
+    const log = new LoggingRepository({
       level,
       sink: (line) => {
         output.push(line);
@@ -47,7 +47,7 @@ await test('levels, aliases and independent loggers', () => {
 await test('safe serialization and sink failure containment', () => {
   const lines: string[] = [];
 
-  const log = createLogger({
+  const log = new LoggingRepository({
     format: 'json',
     sink: (line) => {
       lines.push(line);
@@ -71,11 +71,34 @@ await test('safe serialization and sink failure containment', () => {
   assert.equal(entry.fields.circular.self, '[truncated]');
   assert.equal(entry.message, 'Save failed next');
   assert.doesNotThrow(() =>
-    createLogger({
+    new LoggingRepository({
       sink: () => {
         throw new Error('broken pipe');
       },
     }).info('ride.started', 'Ride'),
   );
   assert.throws(() => validateConfig({ logging: { rideProgressIntervalSeconds: 1 } }));
+});
+
+await test('children share configuration and retain their own context', () => {
+  const lines: string[] = [];
+
+  const repository = new LoggingRepository({
+    format: 'json',
+    sink: (line) => {
+      lines.push(line);
+    },
+  });
+
+  const child = repository.child({ component: 'import' });
+  repository.configure({ level: 'ERROR' });
+  child.warn('import.warning', 'Hidden');
+  child.error('import.failed', 'Failed', { playerId: 42 });
+  assert.equal(lines.length, 1);
+  assert.deepEqual(JSON.parse(lines[0]!).fields, { component: 'import', playerId: 42 });
+  repository.configure({ level: 'INFO' });
+  child.info('import.finished', 'Finished');
+  repository.info('server.ready', 'Ready');
+  assert.equal(lines.length, 3);
+  assert.deepEqual(JSON.parse(lines[2]!).fields, {});
 });

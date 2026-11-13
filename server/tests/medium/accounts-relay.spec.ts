@@ -1,21 +1,21 @@
-import { z } from 'zod';
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { create, toBinary, fromBinary } from '@bufbuild/protobuf';
-import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/support';
 import {
   LoginRequestSchema,
   LoginResponseSchema,
   RelaySessionRefreshResponseSchema,
 } from '#src/protocol/generated/login_pb';
-import { PlayerStateSchema, RideOnSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
-import { PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
 import { PlaybackDataSchema, PlaybackMetadataSchema } from '#src/protocol/generated/playback_pb';
+import { PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
 import {
   SaveStructuredEventRequestSchema,
   SaveStructuredEventResponseSchema,
 } from '#src/protocol/generated/structured_events_pb';
+import { PlayerStateSchema, RideOnSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
 import { worldTime } from '#src/world/state';
+import { binary, decode, mediumBrowser, mediumFixture } from '#tests/medium/support';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 await test('Calendar clears pending map and climb selections for the launching client', async (t) => {
   const f = await mediumFixture(t);

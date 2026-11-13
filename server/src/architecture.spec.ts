@@ -33,7 +33,8 @@ for (const layer of ['http', 'services', 'repositories']) {
 
         if (layer === 'http') {
           assert.ok(
-            !module.startsWith('#src/repositories/') || module === '#src/repositories/crypto.repository',
+            !module.startsWith('#src/repositories/') ||
+              ['#src/repositories/crypto.repository', '#src/repositories/logging.repository'].includes(module),
             `${file} must use services for ${module}`,
           );
         } else {
@@ -68,6 +69,46 @@ await test('cryptography is centralized in the crypto repository', () => {
       assert.ok(
         !['node:crypto', 'crypto', 'argon2'].includes(statement.moduleSpecifier.text),
         `${file} must use the crypto repository`,
+      );
+    }
+  }
+});
+
+await test('services and repositories expose operations through classes', () => {
+  for (const layer of ['services', 'repositories'])
+    for (const file of sources(new URL(`${layer}/`, import.meta.url).pathname)) {
+      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+
+      for (const statement of source.statements) {
+        const exported =
+          ts.canHaveModifiers(statement) &&
+          ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+
+        if (!exported) continue;
+        assert.ok(!ts.isFunctionDeclaration(statement), `${file} exports a standalone operation`);
+
+        if (layer === 'services' && ts.isClassDeclaration(statement) && statement.name?.text !== 'BaseService')
+          assert.ok(
+            statement.heritageClauses?.some(
+              (clause) =>
+                clause.token === ts.SyntaxKind.ExtendsKeyword &&
+                clause.types.some((type) => type.expression.getText(source) === 'BaseService'),
+            ),
+            `${file} must extend BaseService`,
+          );
+      }
+    }
+});
+
+await test('DTOs do not depend on application implementation layers', () => {
+  for (const file of sources(new URL('dtos/', import.meta.url).pathname)) {
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      assert.ok(
+        !/^#src\/(http|services|repositories)(\/|$)/.test(statement.moduleSpecifier.text),
+        `${file} must not depend on ${statement.moduleSpecifier.text}`,
       );
     }
   }

@@ -1,20 +1,20 @@
-import assert from 'node:assert/strict';
-import type { DescMessage } from '@bufbuild/protobuf';
-import { fromBinary } from '@bufbuild/protobuf';
+import { PrivateEventFeedListProtoSchema } from '#src/protocol/generated/events_pb';
+import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
+import { HashSeedsSchema } from '#src/protocol/generated/hash-seeds_pb';
+import { RelaySessionRefreshResponseSchema } from '#src/protocol/generated/login_pb';
+import { PerSessionInfoSchema, TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
 import {
   PlayerProfileSchema,
   PlayerProfilesSchema,
+  PowerCurveAggregationMsgSchema,
   ProfileEntitlementsSchema,
   StreaksSchema,
-  PowerCurveAggregationMsgSchema,
 } from '#src/protocol/generated/profile_pb';
-import { PrivateEventFeedListProtoSchema } from '#src/protocol/generated/events_pb';
-import { RelaySessionRefreshResponseSchema } from '#src/protocol/generated/login_pb';
-import { DropInWorldSchema, DropInWorldListSchema, TeleportTargetsSchema } from '#src/protocol/generated/world_pb';
-import { TcpConfigSchema, PerSessionInfoSchema } from '#src/protocol/generated/per-session-info_pb';
-import { HashSeedsSchema } from '#src/protocol/generated/hash-seeds_pb';
-import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
 import { LoadPlayerRouteCompletionAchievementsResponseSchema } from '#src/protocol/generated/route-completion-achievement_pb';
+import { DropInWorldListSchema, DropInWorldSchema, TeleportTargetsSchema } from '#src/protocol/generated/world_pb';
+import type { DescMessage } from '@bufbuild/protobuf';
+import { fromBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
 
 const schemas = new Map<string, DescMessage>([
   ['/api/profiles/me', PlayerProfileSchema],

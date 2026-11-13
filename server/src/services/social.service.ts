@@ -1,27 +1,27 @@
 import type { RepositoryContext } from '#src/context';
-import { sendMessage } from '#src/services/message.service';
 import type { SocialRepository } from '#src/repositories/social.repository';
+import { BaseService } from '#src/services/base.service';
+import { MessageService } from '#src/services/message.service';
 
-export class SocialService {
-  constructor(
-    private readonly repository: SocialRepository,
-    private readonly context: RepositoryContext,
-  ) {}
+export class SocialService extends BaseService {
+  constructor(private readonly context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   listUser(...values: Parameters<SocialRepository['listUser']>) {
-    return this.repository.listUser(...values);
+    return this.socialRepository.listUser(...values);
   }
   findActivity(...values: Parameters<SocialRepository['findActivity']>) {
-    return this.repository.findActivity(...values);
+    return this.socialRepository.findActivity(...values);
   }
   insertPlayback(...values: Parameters<SocialRepository['insertPlayback']>) {
-    return this.repository.insertPlayback(...values);
+    return this.socialRepository.insertPlayback(...values);
   }
 
   playbackForSegment(...values: Parameters<SocialRepository['playbackForSegment']>) {
-    return this.repository.playbackForSegment(...values);
+    return this.socialRepository.playbackForSegment(...values);
   }
 
   sendMessage(message: string, recipients?: bigint[], sender = 'Server') {
-    return sendMessage(this.context, message, recipients, sender);
+    return new MessageService(this.repositories).sendMessage(this.context, message, recipients, sender);
   }
 }

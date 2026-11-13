@@ -1,29 +1,19 @@
+import { goalSchema } from '#src/dtos/fitness.dto';
+
+import type { RepositoryContext } from '#src/context';
 import { BestEffortPointMsgSchema, PowerCurveAggregationMsgSchema } from '#src/protocol/generated/profile_pb';
-import type { Profiles } from '#src/repositories/profile.repository';
-import { streaksFor, weekRange } from '#src/services/streak.service';
+import type { FitnessRepository } from '#src/repositories/fitness.repository';
+import { BaseService } from '#src/services/base.service';
+import { StreakService } from '#src/services/streak.service';
 import { create } from '@bufbuild/protobuf';
 import { z } from 'zod';
-import type { FitnessRepository } from '#src/repositories/fitness.repository';
 
-export const goalSchema = z.object({
-  weekGoalTSS: z.number().nonnegative().default(200),
-  weekGoalCalories: z.number().nonnegative().default(2000),
-  weekGoalKjs: z.number().nonnegative().default(2000),
-  weekGoalDistanceKilometers: z.number().nonnegative().default(100),
-  weekGoalDistanceMiles: z.number().nonnegative().default(62.14),
-  weekGoalTimeMinutes: z.number().nonnegative().default(180),
-  currentGoalSetting: z.enum(['TSS', 'KJ', 'CALORIES', 'DISTANCE', 'TIME']).default('DISTANCE'),
-  currentGoalSource: z.string().default('MANUAL'),
-  lastUpdated: z.string().default(() => new Date().toISOString()),
-});
-
-export class FitnessService {
-  constructor(
-    private readonly repository: FitnessRepository,
-    private readonly profiles: Profiles,
-  ) {}
+export class FitnessService extends BaseService {
+  constructor(context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   findActivity(...values: Parameters<FitnessRepository['findActivity']>) {
-    return this.repository.findActivity(...values);
+    return this.fitnessRepository.findActivity(...values);
   }
 
   private totals(id: number, start: number, end: number) {
@@ -36,7 +26,7 @@ export class FitnessService {
         calories: z.number().nullable(),
         tss: z.number().nullable(),
       })
-      .parse(this.repository.findActivity(id, new Date(start).toISOString(), new Date(end).toISOString()));
+      .parse(this.fitnessRepository.findActivity(id, new Date(start).toISOString(), new Date(end).toISOString()));
 
     return {
       distance: row.distance ?? 0,
@@ -64,7 +54,7 @@ export class FitnessService {
   }
 
   week(id: number, date: number) {
-    const range = weekRange(date);
+    const range = StreakService.weekRange(date);
     const sum = this.totals(id, range.start, range.end);
     const end = Math.min(range.end, Date.now());
     const score = this.ewma(id, end, 42);
@@ -90,7 +80,7 @@ export class FitnessService {
       if (!sum.distance) continue;
       const zones = [0, 0, 0, 0, 0, 0, 0];
 
-      for (const row of this.repository.listActivity(
+      for (const row of this.fitnessRepository.listActivity(
         id,
         new Date(start).toISOString(),
         new Date(start + 86_400_000 - 1).toISOString(),
@@ -125,24 +115,24 @@ export class FitnessService {
   }
 
   streaks(id: number) {
-    return streaksFor(this.profiles, id);
+    return new StreakService(this.repositories).streaksFor(this.profileRepository, id);
   }
   metrics(id: number, date: number, historical: boolean) {
     const weeks = [this.week(id, date), this.week(id, date - 604_800_000)];
 
-    const row = this.repository.findGoalMetrics(
+    const row = this.fitnessRepository.findGoalMetrics(
       id,
-      new Date(historical ? weekRange(date).end : Date.now()).toISOString(),
+      new Date(historical ? StreakService.weekRange(date).end : Date.now()).toISOString(),
     );
 
     const goals = goalSchema.parse(row ?? {});
 
-    return { weeks, goals, streak: this.streaks(id).curStreak, useMetric: this.profiles.get(id).useMetric };
+    return { weeks, goals, streak: this.streaks(id).curStreak, useMetric: this.profileRepository.get(id).useMetric };
   }
   saveGoals(id: number, input: z.infer<typeof goalSchema>) {
     const goals = goalSchema.parse(input);
     goals.lastUpdated = new Date().toISOString();
-    this.repository.insertGoalMetrics(
+    this.fitnessRepository.insertGoalMetrics(
       id,
       goals.weekGoalTSS,
       goals.weekGoalCalories,
@@ -160,7 +150,7 @@ export class FitnessService {
     const response = create(PowerCurveAggregationMsgSchema);
 
     for (const time of ['5', '60', '300', '1200']) {
-      const row = this.repository.findPowerCurve(id, time, cutoff);
+      const row = this.fitnessRepository.findPowerCurve(id, time, cutoff);
 
       if (row) response.watts[time] = create(BestEffortPointMsgSchema, { power: z.number().parse(row.power) });
     }

@@ -1,16 +1,16 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { createApp } from '#src/http/app';
+import { LoginResponseSchema } from '#src/protocol/generated/login_pb';
+import { AchievementsSchema, PlayerProfileSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
+import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
+import { Connections } from '#src/repositories/connections.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { mediumBrowser, mediumFixture } from '#tests/medium/support';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { test } from 'node:test';
 import { z } from 'zod';
-import { mediumFixture, mediumBrowser } from '#tests/medium/support';
-import { PlayerProfileSchema, AchievementsSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
-import { LoginResponseSchema } from '#src/protocol/generated/login_pb';
-import { Connections } from '#src/repositories/connections.repository';
-import { writeDurable } from '#src/repositories/files.repository';
-import { createApp } from '#src/http/app';
 
 const cases = [
   {
@@ -59,7 +59,7 @@ for (const item of cases) {
     const other = await mediumBrowser(f, f.other);
     const folder = f.profiles.folder(f.rider.player_id);
     const path = resolve(folder, item.name);
-    writeDurable(path, item.before, true);
+    new AssetFiles().writeDurable(path, item.before, true);
     const account = f.accounts.get(f.rider.player_id);
 
     const upload = async () => {
@@ -154,7 +154,7 @@ await test('F12 app reconstruction rolls back a partially published restore befo
   const folder = f.profiles.folder(f.rider.player_id);
   const original = toBinary(StreaksSchema, create(StreaksSchema, { curStreak: 2 }));
   const incoming = toBinary(StreaksSchema, create(StreaksSchema, { curStreak: 99 }));
-  writeDurable(resolve(folder, 'streaks.bin'), original);
+  new AssetFiles().writeDurable(resolve(folder, 'streaks.bin'), original);
   const files = new FormData();
   files.set('streaks.bin', new File([incoming], 'streaks.bin'));
   const staged = await browser.upload(`/profile/${f.rider.username}/`, files);
@@ -164,9 +164,9 @@ await test('F12 app reconstruction rolls back a partially published restore befo
   const manifestPath = resolve(folder, stage, 'manifest.json');
   const manifest = z.record(z.string(), z.json()).parse(JSON.parse(readFileSync(manifestPath, 'utf8')));
   // Simulate a process stopping between file replacement and journal commit.
-  writeDurable(resolve(folder, stage, 'old-streaks.bin'), original);
-  writeDurable(resolve(folder, 'streaks.bin'), incoming, true);
-  writeDurable(manifestPath, JSON.stringify({ ...manifest, state: 'publishing' }), true);
+  new AssetFiles().writeDurable(resolve(folder, stage, 'old-streaks.bin'), original);
+  new AssetFiles().writeDurable(resolve(folder, 'streaks.bin'), incoming, true);
+  new AssetFiles().writeDurable(manifestPath, JSON.stringify({ ...manifest, state: 'publishing' }), true);
   const restarted = createApp({ gameInfo: '{}', gameInfoHash: '0', variants: '{}' }, f);
   const response = await restarted.request('/api/fitness/streaks', { headers: f.headers() });
   assert.equal(response.status, 200);
@@ -305,7 +305,7 @@ for (const failure of ['login', 'profile', 'invalid profile']) {
     });
     const profilePath = resolve(f.profiles.folder(f.rider.player_id), 'profile.bin');
     const before = toBinary(PlayerProfileSchema, f.profiles.get(f.rider.player_id));
-    writeDurable(profilePath, before);
+    new AssetFiles().writeDurable(profilePath, before);
     let loggedOut = false;
     const calls: string[] = [];
     t.mock.method(globalThis, 'fetch', (input: URL | string) => {

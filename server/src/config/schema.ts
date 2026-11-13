@@ -1,3 +1,4 @@
+import { FeatureMode, LogFormat, LogLevelInput, RiderPosition, StravaMethod } from '#src/enum';
 import { BlockList, isIP } from 'node:net';
 import { z } from 'zod';
 
@@ -50,7 +51,7 @@ export const riderSettingsSchema = z
           .readonly(),
         strava: z
           .strictObject({
-            method: z.enum(['paid', 'free']).default('paid'),
+            method: z.enum(StravaMethod).default('paid'),
           })
           .prefault({})
           .readonly(),
@@ -107,7 +108,7 @@ export const configSchema = z
       .readonly(),
     proxy: z
       .strictObject({
-        mode: z.enum(['auto', 'enabled', 'disabled']).default('auto'),
+        mode: z.enum(FeatureMode).default('auto'),
       })
       .prefault({})
       .readonly(),
@@ -167,10 +168,10 @@ export const configSchema = z
     logging: z
       .strictObject({
         level: z
-          .enum(['VERBOSE', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'CRITICAL', 'NOTSET'])
+          .enum(LogLevelInput)
           .default('INFO')
           .transform((level) => (level === 'DEBUG' ? ('VERBOSE' as const) : level)),
-        format: z.enum(['pretty', 'json']).default('pretty'),
+        format: z.enum(LogFormat).default('pretty'),
         rideProgressIntervalSeconds: z
           .number()
           .int()
@@ -266,7 +267,7 @@ export const configSchema = z
                       .refine((v) => !v.includes('\0'), 'Invalid string')
                       .optional(),
                     isMale: z.boolean().optional(),
-                    position: z.enum(['front', 'middle', 'back', 'any']).optional(),
+                    position: z.enum(RiderPosition).optional(),
                     strength: z.number().optional(),
                     weight: z.number().optional(),
                     height: z.number().optional(),

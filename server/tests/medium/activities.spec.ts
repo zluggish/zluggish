@@ -1,21 +1,21 @@
 import {
-  FitnessPrivacy,
-  ActivitySchema,
-  ActivityListSchema,
   ActivityImageSchema,
+  ActivityListSchema,
   ActivityMediaSaveRequestSchema,
   ActivityMediaSaveResultSchema,
+  ActivitySchema,
+  FitnessPrivacy,
 } from '#src/protocol/generated/activity_pb';
+import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
+import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
 import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
-import { writeDurable } from '#src/repositories/files.repository';
-import { z } from 'zod';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { binary, decode, mediumFixture } from '#tests/medium/support';
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mediumFixture, binary, decode } from '#tests/medium/support';
-import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
-import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 {
   await test('activity create, feeds, details, update, images, signed media and owner-only delete', async (t) => {
@@ -289,7 +289,7 @@ await test('private activities stay out of other riders feeds, lists, details an
       .prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)')
       .run(id).lastInsertRowid;
 
-    writeDurable(resolve(f.config.storageDir, 'activities', String(chart)), '{"heartRate":[150]}');
+    new AssetFiles().writeDurable(resolve(f.config.storageDir, 'activities', String(chart)), '{"heartRate":[150]}');
     const ownerDetail = await f.request(`/api/activities/${id}`);
     assert.equal(ownerDetail.status, 200);
     const detail = z.object({ privacy: z.string() }).parse(await ownerDetail.json());
@@ -353,7 +353,7 @@ for (const discard of [false, true])
       resolve(f.profiles.folder(f.rider.player_id), 'fit', `${id} - ride.fit`),
     ];
 
-    for (const path of paths) writeDurable(path, 'data');
+    for (const path of paths) new AssetFiles().writeDurable(path, 'data');
     const base = `/api/profiles/${f.rider.player_id}/activities/${id}`;
     const wrongOwner = await f.request(base, { method: 'DELETE' }, f.other);
     assert.equal(wrongOwner.status, 401);

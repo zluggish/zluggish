@@ -3,30 +3,29 @@ import type { ResolvedConfig } from '#src/config/index';
 import { packageRoot } from '#src/config/load';
 import type { RepositoryContext } from '#src/context';
 import type { Runtime } from '#src/http/runtime';
+import { LockRepository } from '#src/repositories/lock.repository';
+import { SettingsStore } from '#src/repositories/settings.repository';
 import { AccountsService } from '#src/services/auth.service';
 import { SessionsService } from '#src/services/browser-session.service';
-import { acquireStorageLock } from '#src/repositories/lock.repository';
 import { ImportsService } from '#src/services/profile-import.service';
-import { Profiles } from '#src/repositories/profile.repository';
-import { SettingsStore } from '#src/repositories/settings.repository';
 import { Simulation } from '#src/world/simulation';
 import { World } from '#src/world/state';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-import { startDiscord } from '#src/services/discord.service';
+import { DiscordService } from '#src/services/discord.service';
 
 export async function openRuntime(config: ResolvedConfig, assets: string) {
-  const release = await acquireStorageLock(config.storageDir);
+  const release = await new LockRepository().acquireStorageLock(config.storageDir);
   let accounts: AccountsService | null = null;
   let settings: SettingsStore | null = null;
 
   try {
     accounts = new AccountsService(config.storageDir);
-    settings = new SettingsStore(config.storageDir);
+    settings = accounts.repositories.settingsRepository;
     const sessions = new SessionsService(accounts);
-    const profiles = new Profiles(accounts.storage, accounts.repository);
+    const profiles = accounts.repositories.profileRepository;
     const world = new World();
 
     const tokens = z
@@ -54,7 +53,7 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
 
     if (config.integrations.discord.enabled) {
       try {
-        runtime.discord = startDiscord(runtime);
+        runtime.discord = new DiscordService(runtime.accounts.repositories).startDiscord(runtime);
         world.presence = (id, joining) => runtime.discord?.online(id, joining);
       } catch {
         world.lifecycle.log.warn(

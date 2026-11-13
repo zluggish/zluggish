@@ -1,34 +1,34 @@
 import { type RepositoryContext } from '#src/context';
-import type { Meetup, MeetupInput } from '#src/contracts/meetup';
-import { storedSchema } from '#src/contracts/meetup';
+import type { Meetup, MeetupInput } from '#src/dtos/meetup.dto';
+import { storedSchema } from '#src/dtos/meetup.dto';
 import { ApplicationError } from '#src/errors';
 import { EventSchema, PlayerJoinedEventSchema, PlayerLeftEventSchema } from '#src/protocol/generated/events_pb';
 import { WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { Rider } from '#src/repositories/accounts.repository';
-import { eventJSON, eventsAt } from '#src/services/event-catalog.service';
 import { EventsRepository } from '#src/repositories/events.repository';
+import { BaseService } from '#src/services/base.service';
+import { EventCatalogService } from '#src/services/event-catalog.service';
 import { worldTime } from '#src/world/state';
 import { create, toBinary } from '@bufbuild/protobuf';
 import { z } from 'zod';
 
-export class EventsService {
-  constructor(
-    private readonly repository: EventsRepository,
-    private readonly context: RepositoryContext,
-  ) {}
+export class EventsService extends BaseService {
+  constructor(private readonly context: RepositoryContext) {
+    super(context.accounts.repositories);
+  }
   findPrivateEvent(...values: Parameters<EventsRepository['findPrivateEvent']>) {
-    return this.repository.findPrivateEvent(...values);
+    return this.eventsRepository.findPrivateEvent(...values);
   }
 
   updateNotification(...values: Parameters<EventsRepository['updateNotification']>) {
-    return this.repository.updateNotification(...values);
+    return this.eventsRepository.updateNotification(...values);
   }
 
   notificationsForPlayer(...values: Parameters<EventsRepository['notificationsForPlayer']>) {
-    return this.repository.notificationsForPlayer(...values);
+    return this.eventsRepository.notificationsForPlayer(...values);
   }
   findNotification(...values: Parameters<EventsRepository['findNotification']>) {
-    return this.repository.findNotification(...values);
+    return this.eventsRepository.findNotification(...values);
   }
 
   profile(id: number) {
@@ -52,7 +52,9 @@ export class EventsService {
     return storedSchema.parse(JSON.parse(z.string().parse(row.json)));
   }
   all() {
-    return this.repository.listPrivateEvent().map((row) => storedSchema.parse(JSON.parse(z.string().parse(row.json))));
+    return this.eventsRepository
+      .listPrivateEvent()
+      .map((row) => storedSchema.parse(JSON.parse(z.string().parse(row.json))));
   }
   save(event: Meetup) {
     const accepted = event.eventInvites.filter((invite) => invite.status === 'ACCEPTED');
@@ -61,7 +63,7 @@ export class EventsService {
       (invite) => invite.invitedProfile.id !== event.organizerProfileId,
     ).length;
     event.invitedTotalCount = event.eventInvites.length;
-    this.repository.updatePrivateEvent(JSON.stringify(event), event.id);
+    this.eventsRepository.updatePrivateEvent(JSON.stringify(event), event.id);
   }
   broadcast(event: Meetup) {
     const payload = toBinary(
@@ -103,7 +105,7 @@ export class EventsService {
       );
   }
   notify(event: Meetup, id: number) {
-    const notificationId = Number(this.repository.insertNotification(event.id, id, '').lastInsertRowid);
+    const notificationId = Number(this.eventsRepository.insertNotification(event.id, id, '').lastInsertRowid);
 
     const organizer = this.profile(event.organizerProfileId);
 
@@ -169,21 +171,21 @@ export class EventsService {
   }
 
   private begin() {
-    this.repository.begin();
+    this.eventsRepository.begin();
   }
   private commit() {
-    this.repository.commit();
+    this.eventsRepository.commit();
   }
   private rollback() {
-    this.repository.rollback();
+    this.eventsRepository.rollback();
   }
 
-  eventsAt(...args: Parameters<typeof eventsAt>) {
-    return eventsAt(...args);
+  eventsAt(...args: Parameters<EventCatalogService['eventsAt']>) {
+    return new EventCatalogService(this.repositories).eventsAt(...args);
   }
 
-  eventJSON(...args: Parameters<typeof eventJSON>) {
-    return eventJSON(...args);
+  eventJSON(...args: Parameters<typeof EventCatalogService.eventJSON>) {
+    return EventCatalogService.eventJSON(...args);
   }
   createMeetup(user: Rider, input: MeetupInput) {
     input.invitedProfileIds = [...new Set(input.invitedProfileIds)].filter((id) => id !== user.player_id);
@@ -193,7 +195,7 @@ export class EventsService {
     let event: Meetup;
 
     try {
-      const id = Number(this.repository.insertPrivateEvent('{}').lastInsertRowid);
+      const id = Number(this.eventsRepository.insertPrivateEvent('{}').lastInsertRowid);
 
       const organizer = this.profile(user.player_id);
       event = {
@@ -238,8 +240,8 @@ export class EventsService {
     this.begin();
 
     try {
-      this.repository.deletePrivateEvent(event.id);
-      this.repository.deleteNotification(event.id);
+      this.eventsRepository.deletePrivateEvent(event.id);
+      this.eventsRepository.deleteNotification(event.id);
       this.commit();
     } catch (error) {
       this.rollback();
@@ -268,9 +270,9 @@ export class EventsService {
     try {
       this.save(next);
 
-      for (const row of this.repository.listNotification(event.id)) {
+      for (const row of this.eventsRepository.listNotification(event.id)) {
         if (!update.invitedProfileIds.includes(z.number().parse(row.player_id))) {
-          this.repository.deletePlayerNotification(event.id, z.number().parse(row.player_id));
+          this.eventsRepository.deletePlayerNotification(event.id, z.number().parse(row.player_id));
           continue;
         }
 

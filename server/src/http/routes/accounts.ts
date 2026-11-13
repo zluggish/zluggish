@@ -1,3 +1,4 @@
+import { climbSchema, createUserSchema } from '#src/dtos/accounts.dto';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context, Hono } from 'hono';
@@ -265,7 +266,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     await runtime.services.workouts.syncWorkoutsAutomatically(user.player_id);
 
     const climbs = z
-      .array(z.object({ name: z.string(), road: z.string() }))
+      .array(climbSchema)
       .parse(JSON.parse(runtime.services.files.read(resolve(runtime.assets, 'data/climbs.txt'), 'utf8')));
 
     const settings = runtime.services.settings.resolveRiderSettings(
@@ -469,13 +470,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/users', async (c) => {
     if (!accounts.setupComplete() || !runtime.config.accounts.allowSelfRegistration) throw new HTTPException(403);
 
-    const input = z
-      .object({
-        email: z.email(),
-        password: z.string().min(1),
-        profile: z.object({ firstName: z.string(), lastName: z.string() }),
-      })
-      .parse(await c.req.json());
+    const input = createUserSchema.parse(await c.req.json());
 
     try {
       await accounts.create(`${input.profile.firstName} ${input.profile.lastName}`, input.password, false, input.email);

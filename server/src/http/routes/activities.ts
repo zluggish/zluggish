@@ -1,3 +1,4 @@
+import { activityMediaSchema } from '#src/dtos/activities.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -8,10 +9,10 @@ import {
   ActivityMediaSaveResultSchema,
   ActivitySchema,
 } from '#src/protocol/generated/activity_pb';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomBytes, timingSafeEqual } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -249,7 +250,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const id = service.insertActivityMedia(user.player_id, c.req.param('activityId'), body.contentType).lastInsertRowid;
 
     for (const [key, entry] of mediaTokens) if (entry.expires < Date.now()) mediaTokens.delete(key);
-    const token = randomBytes(32);
+    const token = new CryptoRepository().randomBytes(32);
     const expires = Date.now() + 900_000;
     mediaTokens.set(String(id), { token, expires });
 
@@ -272,17 +273,11 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       !entry ||
       entry.expires < Date.now() ||
       token.length !== entry.token.length ||
-      !timingSafeEqual(token, entry.token)
+      !new CryptoRepository().timingSafeEqual(token, entry.token)
     )
       throw new HTTPException(403);
 
-    const row = z
-      .object({
-        id: z.number(),
-        player_id: z.number(),
-        content_type: z.string(),
-      })
-      .safeParse(service.findActivityMedia(c.req.param('id')));
+    const row = activityMediaSchema.safeParse(service.findActivityMedia(c.req.param('id')));
 
     if (!row.success) throw new HTTPException(404);
 

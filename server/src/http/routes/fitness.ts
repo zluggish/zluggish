@@ -8,7 +8,7 @@ import {
   WeekMetricsSchema,
 } from '#src/protocol/generated/fitness_pb';
 import { PowerCurveAggregationMsgSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { goalSchema } from '#src/services/fitness.service';
+import { goalSchema } from '#src/dtos/fitness.dto';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';

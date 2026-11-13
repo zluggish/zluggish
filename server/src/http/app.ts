@@ -1,5 +1,3 @@
-import { createLogger } from '#src/logging';
-import { randomUUID } from '#src/repositories/crypto.repository';
 import { ApplicationError } from '#src/errors';
 import { parseProtobuf } from '#src/http/protobuf';
 import { accountRoutes, authenticated } from '#src/http/routes/accounts';
@@ -27,6 +25,8 @@ import {
   ValueSchema,
 } from '#src/protocol/generated/variants_pb';
 import type { Rider } from '#src/repositories/accounts.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { LoggingRepository } from '#src/repositories/logging.repository';
 import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -42,9 +42,9 @@ export interface PublicMetadata {
 
 export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   const app = new Hono<RuntimeEnv>();
-  const log = runtime?.world.lifecycle.log ?? createLogger();
+  const log = runtime?.world.lifecycle.log ?? new LoggingRepository();
   app.use('*', async (c, next) => {
-    const requestId = randomUUID();
+    const requestId = new CryptoRepository().randomUUID();
     c.set('requestId', requestId);
     const started = performance.now();
     await next();

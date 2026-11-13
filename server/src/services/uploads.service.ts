@@ -1,19 +1,14 @@
-import { UploadsRepository } from '#src/repositories/uploads.repository';
-import { ActivitiesRepository } from '#src/repositories/activities.repository';
+import { UploadProvider } from '#src/enum';
 import type { RepositoryContext as Runtime } from '#src/context';
 import type { Activity } from '#src/protocol/generated/activity_pb';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import { Connections } from '#src/repositories/connections.repository';
-import { uploadGarmin } from '#src/repositories/garmin.repository';
-import { binaryBlob } from '#src/repositories/session.repository';
-import { resolveRiderSettings } from '#src/services/settings.service';
-import { uploadFree, uploadPaid } from '#src/repositories/strava.repository';
-import type { StoredEntry } from '#src/services/workout.service';
+import { officialRelay } from '#src/repositories/zwift.repository';
+import { BaseService } from '#src/services/base.service';
+import { SettingsService } from '#src/services/settings.service';
+import type { StoredEntry } from '#src/dtos/workout.dto';
 import { WorkoutsService } from '#src/services/workout.service';
-import { officialHeaders, officialLogin, officialRelay } from '#src/repositories/zwift.repository';
 import { clearField, clone, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { existsSync, readFileSync } from '#src/repositories/files.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -25,35 +20,13 @@ const isoDate = (value: string | null | undefined) =>
 const title = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 
 /** Only one planned workout for the activity's day, or an exact unique title, pairs. */
-export function pairedEvent(
-  activity: Pick<Activity, 'name' | 'startDate' | 'date'>,
-  stored: { collection: boolean; entries: StoredEntry[] },
-) {
-  const day = isoDate(activity.startDate) ?? isoDate(activity.date);
 
-  const matches = stored.entries.filter(
-    (entry) => day !== null && isoDate(entry.start_date_local || entry.start_date || entry.synced_for_date) === day,
-  );
-
-  const titled = matches.filter((entry) => title(activity.name) !== '' && title(entry.name) === title(activity.name));
-
-  const unique = matches.length === 1 && !stored.collection ? matches[0] : titled[0];
-
-  const ambiguous = (matches.length !== 1 || stored.collection) && titled.length !== 1;
-
-  return ambiguous ? null : (unique?.event_id ?? unique?.id ?? null);
-}
-
-export class UploadsService {
-  private readonly repository: UploadsRepository;
-  private readonly activities: ActivitiesRepository;
-
+export class UploadsService extends BaseService {
   constructor(
     readonly runtime: Runtime,
     readonly warn: (message: string) => void = () => {},
   ) {
-    this.repository = new UploadsRepository(runtime.accounts.db);
-    this.activities = new ActivitiesRepository(runtime.accounts.db);
+    super(runtime.accounts.repositories);
   }
 
   private pending: Promise<void> | null = null;
@@ -61,11 +34,15 @@ export class UploadsService {
   private timer: NodeJS.Timeout | null = null;
 
   configured(player: number) {
-    const settings = resolveRiderSettings(this.runtime.config.riderDefaults, this.runtime.settings.read(player));
+    const settings = SettingsService.resolveRiderSettings(
+      this.runtime.config.riderDefaults,
+      this.runtime.settings.read(player),
+    );
+
     const providers = [];
 
     if (
-      existsSync(
+      this.filesRepository.existsSync(
         this.credentialFile(
           player,
           settings.uploads.strava.method === 'free' ? 'strava4_session.txt' : 'strava_token.txt',
@@ -74,31 +51,33 @@ export class UploadsService {
     )
       providers.push(settings.uploads.strava.method === 'free' ? 'freeStrava' : 'strava');
 
-    if (existsSync(this.credentialFile(player, 'garth/oauth1_token.json'))) providers.push('garmin');
+    if (this.filesRepository.existsSync(this.credentialFile(player, 'garth/oauth1_token.json')))
+      providers.push('garmin');
 
-    if (existsSync(this.credentialFile(player, 'runalyze_token.txt'))) providers.push('runalyze');
-    const connections = new Connections(this.runtime.config.storageDir);
+    if (this.filesRepository.existsSync(this.credentialFile(player, 'runalyze_token.txt'))) providers.push('runalyze');
+    const connections = this.connectionsRepository;
 
-    if (existsSync(connections.file(player, 'intervals'))) providers.push('intervals');
+    if (this.filesRepository.existsSync(connections.file(player, 'intervals'))) providers.push('intervals');
 
-    if (settings.uploads.zwift.enabled && existsSync(connections.file(player, 'zwift'))) providers.push('zwift');
+    if (settings.uploads.zwift.enabled && this.filesRepository.existsSync(connections.file(player, 'zwift')))
+      providers.push('zwift');
 
     return providers;
   }
   status(player: number) {
-    return this.repository
+    return this.uploadsRepository
       .status(player)
       .map((row) => z.object({ activity_id: z.number(), provider: z.string(), state: z.string() }).parse(row));
   }
   retry(player: number) {
-    this.repository.retry(player);
+    this.uploadsRepository.retry(player);
 
     return this.drain();
   }
 
   start() {
     // A crash after sending but before acknowledgement is ambiguous: require an explicit retry.
-    this.repository.failInterrupted();
+    this.uploadsRepository.failInterrupted();
     this.timer = setInterval(() => {
       void this.drain();
     }, 5000);
@@ -127,7 +106,7 @@ export class UploadsService {
     return this.pending;
   }
   private async deliver() {
-    const jobs = this.repository.pending();
+    const jobs = this.uploadsRepository.pending();
 
     for (const candidate of jobs) {
       if (this.stopped) break;
@@ -135,36 +114,36 @@ export class UploadsService {
       const key = z.object({ activity_id: z.number(), provider: z.string() }).parse(candidate);
 
       // Read each payload only when it is ready to send; another request may delete a queued job.
-      const row = this.repository.ready(key.activity_id, key.provider);
+      const row = this.uploadsRepository.ready(key.activity_id, key.provider);
 
       if (!row) continue;
 
       const job = z
         .object({
           activity_id: z.number(),
-          provider: z.enum(['strava', 'freeStrava', 'garmin', 'runalyze', 'intervals', 'zwift']),
+          provider: z.enum(UploadProvider),
           player_id: z.number(),
           payload: z.instanceof(Uint8Array),
         })
         .parse(row);
 
-      this.repository.setState(job.activity_id, job.provider, 'sending');
+      this.uploadsRepository.setState(job.activity_id, job.provider, 'sending');
 
       try {
         const activity = fromBinary(ActivitySchema, job.payload);
 
         // Resolve credentials at delivery, so revoked connections cannot be used by queued work.
         if (!this.configured(job.player_id).includes(job.provider)) {
-          this.repository.setState(job.activity_id, job.provider, 'cancelled');
+          this.uploadsRepository.setState(job.activity_id, job.provider, 'cancelled');
           continue;
         }
 
         if (job.provider === 'freeStrava') {
           const photos = [
-            ...this.activities
+            ...this.activitiesRepository
               .listActivityImage(job.player_id, job.activity_id)
               .map((photo) => resolve(this.folder(job.player_id), 'images', `${photo.id}.jpg`)),
-            ...this.activities
+            ...this.activitiesRepository
               .listActivityMedia(job.player_id, job.activity_id)
               .map((photo) =>
                 resolve(
@@ -173,18 +152,18 @@ export class UploadsService {
                   `${photo.id}.${photo.content_type.includes('quicktime') ? 'mov' : 'mp4'}`,
                 ),
               ),
-          ].filter((file) => existsSync(file));
+          ].filter((file) => this.filesRepository.existsSync(file));
 
           await this.freeStrava(job.player_id, activity, photos);
         } else await this[job.provider](job.player_id, activity);
-        this.repository.setState(job.activity_id, job.provider, 'sent', 'sending');
+        this.uploadsRepository.setState(job.activity_id, job.provider, 'sent', 'sending');
         this.runtime.world.lifecycle.log.info('upload.succeeded', 'Activity uploaded', {
           playerId: job.player_id,
           activityId: job.activity_id,
           provider: job.provider,
         });
       } catch {
-        this.repository.setState(job.activity_id, job.provider, 'failed', 'sending');
+        this.uploadsRepository.setState(job.activity_id, job.provider, 'failed', 'sending');
         this.runtime.world.lifecycle.log.warn('upload.failed', 'Activity upload failed; retry from rider home', {
           playerId: job.player_id,
           activityId: job.activity_id,
@@ -205,7 +184,10 @@ export class UploadsService {
   }
 
   async run(player: number, activity: Activity, photos: readonly string[]) {
-    const settings = resolveRiderSettings(this.runtime.config.riderDefaults, this.runtime.settings.read(player));
+    const settings = SettingsService.resolveRiderSettings(
+      this.runtime.config.riderDefaults,
+      this.runtime.settings.read(player),
+    );
 
     const steps: [string, () => Promise<void>][] = [
       [
@@ -230,35 +212,45 @@ export class UploadsService {
   }
 
   async strava(player: number, activity: Activity) {
-    await uploadPaid(this.credentialFile(player, 'strava_token.txt'), activity.fit, activity.name);
+    await this.stravaRepository.uploadPaid(
+      this.credentialFile(player, 'strava_token.txt'),
+      activity.fit,
+      activity.name,
+    );
   }
 
   async freeStrava(player: number, activity: Activity, photos: readonly string[]) {
     const file = this.credentialFile(player, 'strava4_session.txt');
 
-    if (!existsSync(file)) return;
-    const cookie = readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '';
+    if (!this.filesRepository.existsSync(file)) return;
+    const cookie = this.filesRepository.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '';
 
-    if (cookie) await uploadFree(cookie, activity.fitFilename, activity.fit, activity.name, photos);
+    if (cookie)
+      await this.stravaRepository.uploadFree(cookie, activity.fitFilename, activity.fit, activity.name, photos);
   }
 
   async garmin(player: number, activity: Activity) {
     const tokens = this.credentialFile(player, 'garth');
 
-    if (!existsSync(resolve(tokens, 'oauth1_token.json'))) return;
+    if (!this.filesRepository.existsSync(resolve(tokens, 'oauth1_token.json'))) return;
 
-    await uploadGarmin(tokens, this.runtime.config.integrations.garmin.domain, activity.fitFilename, activity.fit);
+    await this.garminRepository.uploadGarmin(
+      tokens,
+      this.runtime.config.integrations.garmin.domain,
+      activity.fitFilename,
+      activity.fit,
+    );
   }
 
   async runalyze(player: number, activity: Activity) {
     const file = this.credentialFile(player, 'runalyze_token.txt');
 
-    if (!existsSync(file)) return;
-    const token = readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '';
+    if (!this.filesRepository.existsSync(file)) return;
+    const token = this.filesRepository.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '';
 
     if (!token) return;
     const form = new FormData();
-    form.set('file', binaryBlob(activity.fit), 'file');
+    form.set('file', this.sessionRepository.binaryBlob(activity.fit), 'file');
 
     const response = await fetch('https://runalyze.com/api/v1/activities/uploads', {
       method: 'POST',
@@ -271,19 +263,19 @@ export class UploadsService {
   }
 
   async intervals(player: number, activity: Activity) {
-    const credentials = new Connections(this.runtime.config.storageDir).read(player, 'intervals');
+    const credentials = this.connectionsRepository.read(player, 'intervals');
 
     if (!credentials) return;
     const [athlete, key] = credentials;
 
     if (!/^\d+$/.test(athlete)) throw new Error('Invalid athlete ID');
     const workouts = new WorkoutsService(this.runtime);
-    const paired = pairedEvent(activity, workouts.stored(player));
+    const paired = UploadsService.pairedEvent(activity, workouts.stored(player));
     const query = new URLSearchParams({ name: activity.name });
 
     if (paired !== null) query.set('paired_event_id', String(paired));
     const form = new FormData();
-    form.set('file', binaryBlob(activity.fit), 'file');
+    form.set('file', this.sessionRepository.binaryBlob(activity.fit), 'file');
 
     const response = await fetch(`https://intervals.icu/api/v1/athlete/${athlete}/activities?${query}`, {
       method: 'POST',
@@ -300,12 +292,12 @@ export class UploadsService {
   }
 
   async zwift(player: number, activity: Activity) {
-    const credentials = new Connections(this.runtime.config.storageDir).read(player, 'zwift');
+    const credentials = this.connectionsRepository.read(player, 'zwift');
 
     if (!credentials) return;
 
-    const token = await officialLogin(credentials[0], credentials[1]);
-    const headers = officialHeaders(token);
+    const token = await this.zwiftRepository.officialLogin(credentials[0], credentials[1]);
+    const headers = this.zwiftRepository.officialHeaders(token);
 
     const me = await fetch(`${officialRelay}/api/profiles/me`, {
       headers: { ...headers, Accept: 'application/x-protobuf-lite' },
@@ -352,5 +344,24 @@ export class UploadsService {
     );
 
     if (!uploaded.ok) throw new Error(`HTTP ${uploaded.status}`);
+  }
+
+  static pairedEvent(
+    activity: Pick<Activity, 'name' | 'startDate' | 'date'>,
+    stored: { collection: boolean; entries: StoredEntry[] },
+  ) {
+    const day = isoDate(activity.startDate) ?? isoDate(activity.date);
+
+    const matches = stored.entries.filter(
+      (entry) => day !== null && isoDate(entry.start_date_local || entry.start_date || entry.synced_for_date) === day,
+    );
+
+    const titled = matches.filter((entry) => title(activity.name) !== '' && title(entry.name) === title(activity.name));
+
+    const unique = matches.length === 1 && !stored.collection ? matches[0] : titled[0];
+
+    const ambiguous = (matches.length !== 1 || stored.collection) && titled.length !== 1;
+
+    return ambiguous ? null : (unique?.event_id ?? unique?.id ?? null);
   }
 }

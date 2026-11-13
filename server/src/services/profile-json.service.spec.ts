@@ -1,5 +1,5 @@
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import { companionProfile } from '#src/services/profile-json.service';
+import { ProfileJsonService } from '#src/services/profile-json.service';
 import { create } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -20,7 +20,7 @@ await test('Companion profiles retain DOB age, equipment, attributes and numeric
     privateAttributes: [{ id: 8, stringValue: 'value' }],
   });
 
-  const json = companionProfile(profile, '/avatar');
+  const json = ProfileJsonService.companionProfile(profile, '/avatar', 'Ventum One');
   assert.equal(json.age, 25);
   assert.equal(json.virtualBikeModel, 'Ventum One');
   assert.equal(json.currentActivityId, 9_007_199_254_740_991);
@@ -29,9 +29,9 @@ await test('Companion profiles retain DOB age, equipment, attributes and numeric
   assert.deepEqual(json.publicAttributes, { 7: '123' });
   assert.deepEqual(json.privateAttributes, { 8: 'value' });
   profile.dob = '11/13/2000';
-  assert.equal(companionProfile(profile, null).age, 26);
+  assert.equal(ProfileJsonService.companionProfile(profile, null, 'Ventum One').age, 26);
   profile.dob = '02/30/2000';
-  assert.equal(companionProfile(profile, null).age, profile.age);
+  assert.equal(ProfileJsonService.companionProfile(profile, null, 'Ventum One').age, profile.age);
   profile.currentActivityId = 9_007_199_254_740_992n;
-  assert.throws(() => companionProfile(profile, null), z.ZodError);
+  assert.throws(() => ProfileJsonService.companionProfile(profile, null, 'Ventum One'), z.ZodError);
 });

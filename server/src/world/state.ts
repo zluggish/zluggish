@@ -1,8 +1,8 @@
-import { Lifecycle } from '#src/world/lifecycle';
-import { create, clone, toBinary } from '@bufbuild/protobuf';
-import type { PlayerState, WorldAttribute, ServerToClient } from '#src/protocol/generated/udp-node-msgs_pb';
+import type { PlayerState, ServerToClient, WorldAttribute } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerStateSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { Lifecycle } from '#src/world/lifecycle';
 import type { Simulation } from '#src/world/simulation';
+import { clone, create, toBinary } from '@bufbuild/protobuf';
 
 export function worldTime() {
   return BigInt(Date.now() - 1_414_016_075_000);

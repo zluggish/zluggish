@@ -1,13 +1,13 @@
-import { createLogger } from '#src/logging';
+import { LoggingRepository } from '#src/repositories/logging.repository';
+import type { Answer } from 'dns-packet';
+import { decode, encode, RECURSION_DESIRED } from 'dns-packet';
 import { createSocket, type RemoteInfo } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { decode, encode, RECURSION_DESIRED } from 'dns-packet';
-import type { Answer } from 'dns-packet';
 
 const redirected = new Set(['secure.zwift.com', 'us-or-rly101.zwift.com', 'cdn.zwift.com', 'launcher.zwift.com']);
 
-export function startDns(advertisedIp: string, host: string, port = 53, log = createLogger()) {
+export function startDns(advertisedIp: string, host: string, port = 53, log = new LoggingRepository()) {
   const socket = createSocket(host.includes(':') ? 'udp6' : 'udp4');
   const resolver = new Resolver({ timeout: 2000, tries: 1 });
   resolver.setServers(['8.8.8.8', '8.8.4.4']);

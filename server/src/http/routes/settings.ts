@@ -1,3 +1,4 @@
+import { DownloadFile, StravaMethod } from '#src/enum';
 import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { Hono } from 'hono';
@@ -6,13 +7,7 @@ import { HTTPException } from 'hono/http-exception';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-const downloadable = z.enum([
-  'profile.bin',
-  'achievements.bin',
-  'user_storage.bin',
-  'streaks.bin',
-  'economy_config.txt',
-]);
+const downloadable = z.enum(DownloadFile);
 
 export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.on(['GET', 'POST'], '/settings/:username/', async (c) => {
@@ -24,7 +19,7 @@ export function settingsRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         ...runtime.services.settings.read(rider.player_id),
         'ghosts.enabled': form.enableghosts !== undefined,
         'workouts.trainingpeaks.bridgeFolder': z.string().catch('').parse(form.bridge_folder),
-        'uploads.strava.method': z.enum(['paid', 'free']).parse(form.strava_method ?? 'paid'),
+        'uploads.strava.method': z.enum(StravaMethod).parse(form.strava_method ?? 'paid'),
       });
 
       return c.redirect(`/settings/${rider.username}/`);

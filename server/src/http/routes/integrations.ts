@@ -1,3 +1,4 @@
+import { RemovableCredentialFile, StravaMethod } from '#src/enum';
 import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { RestartScheduler } from '#src/node/lifecycle/restart';
@@ -19,15 +20,7 @@ const token = (c: Env) => html`<input type="hidden" name="csrf_token" value="${c
 
 type Env = Context<RuntimeEnv>;
 
-const removable = z.enum([
-  'zwift_credentials.bin',
-  'intervals_credentials.bin',
-  'strava_api.bin',
-  'strava_token.txt',
-  'strava4_session.txt',
-  'garmin_credentials.bin',
-  'garth/oauth1_token.json',
-]);
+const removable = z.enum(RemovableCredentialFile);
 
 const text = z.string().catch('');
 
@@ -227,7 +220,7 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         message = 'Session cookie saved.';
       } else message = "Session cookie can't be empty.";
     } else if ('method' in form) {
-      const method = z.enum(['paid', 'free']).safeParse(form.method);
+      const method = z.enum(StravaMethod).safeParse(form.method);
 
       if (method.success) {
         runtime.services.settings.save(rider.player_id, {

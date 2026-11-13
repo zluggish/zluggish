@@ -1,14 +1,15 @@
-import { create } from '@bufbuild/protobuf';
+import type { GesturePhase } from '#src/enum';
 import type { PlayerState, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
-import { WorldAttributeSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
+import { WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { Random } from '#src/world/geometry';
+import { create } from '@bufbuild/protobuf';
 
 interface SignallingRider {
   profile: { id: bigint };
   gap: number;
   rate: number;
   dropping: boolean;
-  phase: 'approach' | 'pull' | null;
+  phase: GesturePhase | null;
   state: PlayerState | null;
 }
 

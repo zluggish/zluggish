@@ -1,3 +1,4 @@
+import { ActivitySport, MeetupInviteStatus } from '#src/enum';
 import { z } from 'zod';
 
 export const inputSchema = z.object({
@@ -11,7 +12,7 @@ export const inputSchema = z.object({
   routeId: z.number().int().nonnegative().safe(),
   rubberbanding: z.boolean(),
   showResults: z.boolean(),
-  sport: z.enum(['CYCLING', 'RUNNING']),
+  sport: z.enum(ActivitySport),
   workoutHash: z.number().int().nonnegative().safe(),
 });
 
@@ -29,7 +30,7 @@ const profileSchema = z
 
 const inviteSchema = z.object({
   invitedProfile: profileSchema,
-  status: z.enum(['PENDING', 'ACCEPTED', 'REJECTED']),
+  status: z.enum(MeetupInviteStatus),
 });
 
 export const storedSchema = inputSchema.extend({

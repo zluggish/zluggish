@@ -1,13 +1,13 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { readFileSync, readdirSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { z } from 'zod';
-import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/support';
+import { createCdn } from '#src/node/network/cdn';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { ZFilesProtoSchema } from '#src/protocol/generated/zfiles_pb';
-import { createCdn } from '#src/node/network/cdn';
-import { writeDurable } from '#src/repositories/files.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { binary, decode, mediumBrowser, mediumFixture } from '#tests/medium/support';
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { z } from 'zod';
 
 const xml =
   '<workout_file><name>Medium Tempo</name><sportType>bike</sportType><workout><SteadyState Duration="600" Power="0.8"/></workout></workout_file>';
@@ -136,7 +136,7 @@ await test('F07 automatic login deadline cancels provider work without replacing
   await browser.form(`/intervals/${f.rider.username}/`, { athlete_id: '123', api_key: 'medium-key' });
   const metadata = resolve(f.profiles.folder(f.rider.player_id), 'intervals_icu_workout.json');
   const before = Buffer.from('{"provider":"intervals-icu","workouts":[]}');
-  writeDurable(metadata, before);
+  new AssetFiles().writeDurable(metadata, before);
   const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
   t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
     assert.equal(milliseconds, 5000);
@@ -184,7 +184,7 @@ await test('F07 TrainingPeaks home refresh publishes zfiles and a failed refresh
   const browser = await mediumBrowser(f);
   const folder = resolve(f.config.storageDir, 'bridge');
   mkdirSync(folder);
-  writeDurable(resolve(folder, 'first.zwo'), xml);
+  new AssetFiles().writeDurable(resolve(folder, 'first.zwo'), xml);
   const configured = await browser.form(`/trainingpeaks/${f.rider.username}/`, { bridge_folder: folder });
   assert.equal(configured.status, 200);
   const home = await browser.request(`/user/${f.rider.username}/`);
@@ -196,8 +196,8 @@ await test('F07 TrainingPeaks home refresh publishes zfiles and a failed refresh
   const download = await f.request(`/api/zfiles/${id}/download`);
   assert.equal(await download.text(), xml);
   const before = f.accounts.db.prepare('SELECT * FROM zfile').all();
-  writeDurable(resolve(folder, 'first.zwo'), xml.replace('Medium Tempo', 'Changed'), true);
-  writeDurable(resolve(folder, 'second.zwo'), '<broken>');
+  new AssetFiles().writeDurable(resolve(folder, 'first.zwo'), xml.replace('Medium Tempo', 'Changed'), true);
+  new AssetFiles().writeDurable(resolve(folder, 'second.zwo'), '<broken>');
   const failed = await browser.request(`/user/${f.rider.username}/`);
   assert.equal(failed.status, 200);
   const unchanged = await f.request(`/api/zfiles/${id}/download`);
@@ -303,11 +303,11 @@ await test('TrainingPeaks collisions reject the whole import and preserve existi
   const browser = await mediumBrowser(f);
   const folder = resolve(f.config.storageDir, 'bridge');
   mkdirSync(folder);
-  writeDurable(resolve(folder, 'Tempo A.zwo'), xml);
+  new AssetFiles().writeDurable(resolve(folder, 'Tempo A.zwo'), xml);
   await browser.form(`/trainingpeaks/${f.rider.username}/`, { bridge_folder: folder });
   await browser.form(`/trainingpeaks/${f.rider.username}/sync`);
   const before = f.accounts.db.prepare('SELECT * FROM zfile').all();
-  writeDurable(resolve(folder, 'Tempo-A.zwo'), xml.replace('Medium Tempo', 'Different'));
+  new AssetFiles().writeDurable(resolve(folder, 'Tempo-A.zwo'), xml.replace('Medium Tempo', 'Different'));
   const response = await browser.form(`/trainingpeaks/${f.rider.username}/sync`);
   assert.match(await response.text(), /sync failed/);
   assert.deepEqual(f.accounts.db.prepare('SELECT * FROM zfile').all(), before);

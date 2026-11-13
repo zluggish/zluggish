@@ -1,8 +1,8 @@
+import { PlayerProfileSchema, PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
+import { binary, decode, mediumFixture } from '#tests/medium/support';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { mediumFixture, binary, decode } from '#tests/medium/support';
-import { PlayerProfileSchema, PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
 
 const profileJSON = z.object({
   id: z.number(),

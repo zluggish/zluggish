@@ -1,4 +1,5 @@
-import { inputSchema, type Meetup } from '#src/contracts/meetup';
+import { notificationPayloadSchema, notificationEventSchema, notificationUpdateSchema } from '#src/dtos/events.dto';
+import { inputSchema, type Meetup } from '#src/dtos/meetup.dto';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import {
@@ -207,10 +208,9 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       service.notificationsForPlayer(user.player_id).flatMap((row) => {
         const text = z.string().parse(row.json);
 
-        const notification = z.object({ argString0: z.string() }).parse(JSON.parse(text));
+        const notification = notificationPayloadSchema.parse(JSON.parse(text));
 
-        return z.object({ eventStartDate: z.number() }).parse(JSON.parse(notification.argString0)).eventStartDate *
-          1000 >
+        return notificationEventSchema.parse(JSON.parse(notification.argString0)).eventStartDate * 1000 >
           Date.now() - 1_800_000
           ? text
           : [];
@@ -226,7 +226,7 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const notification = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(row.json)));
 
-    const update = z.object({ read: z.boolean(), readDate: z.string().nullable() }).parse(await c.req.json());
+    const update = notificationUpdateSchema.parse(await c.req.json());
 
     Object.assign(notification, update, { lastModified: update.readDate });
     service.updateNotification(JSON.stringify(notification), c.req.param('id'));

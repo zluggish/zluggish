@@ -12,6 +12,8 @@ const catalogSchema = z.array(
   }),
 );
 
-export function readEventCatalog(assets: string) {
-  return catalogSchema.parse(JSON.parse(readFileSync(resolve(assets, 'data/events.txt'), 'utf8')));
+export class EventCatalogRepository {
+  readEventCatalog(assets: string) {
+    return catalogSchema.parse(JSON.parse(readFileSync(resolve(assets, 'data/events.txt'), 'utf8')));
+  }
 }

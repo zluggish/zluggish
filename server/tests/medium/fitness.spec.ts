@@ -1,11 +1,11 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { create } from '@bufbuild/protobuf';
-import { updateStreaks } from '#src/services/streak.service';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
 import { StreaksSchema } from '#src/protocol/generated/profile_pb';
-import { mediumFixture, decode } from '#tests/medium/support';
+import { StreakService } from '#src/services/streak.service';
+import { decode, mediumFixture } from '#tests/medium/support';
+import { create } from '@bufbuild/protobuf';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
 await test('streak ride timestamps persist when starting, extending and restarting a streak', async (t) => {
   const f = await mediumFixture(t);
@@ -16,7 +16,7 @@ await test('streak ride timestamps persist when starting, extending and restarti
     ['2026-11-09', 2, 9000, '2026-11-09'],
     ['2026-11-30', 1, 3000, '2026-11-30'],
   ] as const) {
-    updateStreaks(
+    new StreakService(f.accounts.repositories).updateStreaks(
       f.profiles,
       f.rider.player_id,
       create(ActivitySchema, { startDate: `${date}T12:00:00Z`, distanceInMeters: 3000 }),

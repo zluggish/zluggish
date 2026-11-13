@@ -1,5 +1,5 @@
-import { randomUUID } from '#src/repositories/crypto.repository';
-import { createLogger, type Logger } from '#src/logging';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { LoggingRepository } from '#src/repositories/logging.repository';
 
 interface Ride {
   rideId: string;
@@ -16,10 +16,10 @@ export class Lifecycle {
   private readonly companions = new Map<bigint, number>();
   private readonly diagnostics = new Map<string, { time: number; suppressed: number }>();
   constructor(
-    public log: Logger = createLogger(),
+    public log: LoggingRepository = new LoggingRepository(),
     public intervalSeconds = 60,
     private readonly now = () => performance.now(),
-    private readonly id = randomUUID,
+    private readonly id = new CryptoRepository().randomUUID,
   ) {}
 
   connected(playerId: bigint) {

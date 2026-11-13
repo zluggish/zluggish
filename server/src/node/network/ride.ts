@@ -1,15 +1,15 @@
-import type { Socket } from 'node:net';
-import { createServer } from 'node:net';
+import type { Runtime } from '#src/http/runtime';
+import type { InitializationVector } from '#src/node/network/packet';
+import { decodePacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
+import { ClientToServerSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { worldTime } from '#src/world/state';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { createSocket } from 'node:dgram';
 import { existsSync, readFileSync } from 'node:fs';
+import type { Socket } from 'node:net';
+import { createServer } from 'node:net';
 import { resolve } from 'node:path';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { ClientToServerSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { worldTime } from '#src/world/state';
-import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
-import type { InitializationVector } from '#src/node/network/packet';
-import type { Runtime } from '#src/http/runtime';
-import { writeDurable } from '#src/repositories/files.repository';
 
 export function startRideListeners(runtime: Runtime) {
   const { world, config } = runtime;
@@ -44,9 +44,9 @@ export function startRideListeners(runtime: Runtime) {
         sequence: relay.udpRead,
       };
 
-      const decoded = decodeLegacyPacket(data, relay.key, iv);
+      const decoded = decodePacket(data, relay.key, iv);
 
-      const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(1, -4));
+      const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(1));
 
       if (incoming.playerId !== id || !incoming.state) return;
 
@@ -136,7 +136,7 @@ export function startRideListeners(runtime: Runtime) {
 
             const current = world.relays.get(playerId);
 
-            if (current) writeDurable(keyPath, current.key, true);
+            if (current) new AssetFiles().writeDurable(keyPath, current.key, true);
             else if (existsSync(keyPath)) world.login(playerId, readFileSync(keyPath));
           }
 
@@ -144,14 +144,14 @@ export function startRideListeners(runtime: Runtime) {
 
           if (!relay) throw new Error('Missing relay key');
 
-          const decoded = decodeLegacyPacket(packet, relay.key, {
+          const decoded = decodePacket(packet, relay.key, {
             device: 1,
             channel: 3,
             connection: relay.tcpConnection,
             sequence: first ? 0 : relay.tcpRead,
           });
 
-          const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(2, -4));
+          const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(2));
 
           if (incoming.playerId !== playerId) throw new Error('Mismatched relay identity');
           world.lifecycle.connected(playerId);

@@ -1,7 +1,7 @@
-import { clone } from '@bufbuild/protobuf';
-import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
-import { course, road, forward } from '#src/world/state';
+import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { course, forward, road } from '#src/world/state';
+import { clone } from '@bufbuild/protobuf';
 
 export const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 

@@ -1,3 +1,4 @@
+import { routeCompletionStatsSchema, meetupStartSchema } from '#src/dtos/records.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -302,13 +303,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const rows = service.listRouteResult(user.player_id);
 
     const stats = rows.map((row) => {
-      const item = z
-        .object({
-          route_hash: z.number(),
-          first: z.number().nullable(),
-          last: z.number().nullable(),
-        })
-        .parse(row);
+      const item = routeCompletionStatsSchema.parse(row);
 
       return {
         routeHash: item.route_hash,
@@ -424,9 +419,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         const meetup = service.findPrivateEvent(id);
 
         if (meetup) {
-          const { eventStart } = z
-            .object({ eventStart: z.iso.datetime() })
-            .parse(JSON.parse(z.string().parse(meetup.json)));
+          const { eventStart } = meetupStartSchema.parse(JSON.parse(z.string().parse(meetup.json)));
 
           entry.activityData.elapsedMs = entry.activityData.time - BigInt(Date.parse(eventStart));
         }

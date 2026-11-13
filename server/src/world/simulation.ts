@@ -1,21 +1,21 @@
-import { clone, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { existsSync, readFileSync, readdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
-import { resolve, basename } from 'node:path';
-import { z } from 'zod';
 import { configSchema } from '#src/config/schema';
-import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import { PlayerStateSchema, GhostSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
-import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { Runtime } from '#src/http/runtime';
-import { writeDurable } from '#src/repositories/files.repository';
-import { resolveRiderSettings } from '#src/services/settings.service';
-import { worldTime, course, road, forward } from '#src/world/state';
-import { clamp, Random } from '#src/world/geometry';
+import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
+import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
+import { GhostSchema, PlayerStateSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { SettingsService } from '#src/services/settings.service';
 import { Blob } from '#src/world/blob';
-import { Peloton } from '#src/world/peloton';
-import type { ReplayRider } from '#src/world/peloton';
-import { RiderPool, ghostAppearanceSchema } from '#src/world/riders';
+import { Random, clamp } from '#src/world/geometry';
 import { GestureDirector, gestureUpdate } from '#src/world/gestures';
+import type { ReplayRider } from '#src/world/peloton';
+import { Peloton } from '#src/world/peloton';
+import { RiderPool, ghostAppearanceSchema } from '#src/world/riders';
+import { course, forward, road, worldTime } from '#src/world/state';
+import { clone, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { appendFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
+import { z } from 'zod';
 
 interface GhostPlayback {
   states: PlayerState[];
@@ -261,7 +261,10 @@ export class Simulation {
       this.loadBlob(id);
     }
 
-    const settings = resolveRiderSettings(this.runtime.config.riderDefaults, this.runtime.settings.read(Number(id)));
+    const settings = SettingsService.resolveRiderSettings(
+      this.runtime.config.riderDefaults,
+      this.runtime.settings.read(Number(id)),
+    );
 
     if (!settings.ghosts.enabled || !state.roadTime) return;
 
@@ -409,7 +412,7 @@ export class Simulation {
       .slice(0, 120);
 
     if (!safe) return;
-    writeDurable(
+    new AssetFiles().writeDurable(
       resolve(
         this.runtime.profiles.folder(Number(state.id)),
         'bookmarks',

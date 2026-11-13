@@ -1,17 +1,17 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { createLogger } from '#src/logging';
+import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
+import { LoggingRepository } from '#src/repositories/logging.repository';
+import { Lifecycle } from '#src/world/lifecycle';
 import { World, worldTime } from '#src/world/state';
 import { create } from '@bufbuild/protobuf';
-import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
-import { Lifecycle } from '#src/world/lifecycle';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
 await test('deduplicate transitions, throttle progress, and release state', () => {
   let now = 0;
   const lines: string[] = [];
 
   const tracker = new Lifecycle(
-    createLogger({
+    new LoggingRepository({
       format: 'json',
       sink: (line) => {
         lines.push(line);
@@ -47,7 +47,7 @@ await test('disabled progress still cleans up; invalid packet diagnostics are bo
   const lines: string[] = [];
 
   const tracker = new Lifecycle(
-    createLogger({
+    new LoggingRepository({
       level: 'VERBOSE',
       sink: (line) => {
         lines.push(line);
@@ -71,7 +71,7 @@ await test('disabled progress still cleans up; invalid packet diagnostics are bo
 await test('world acceptance gates lifecycle events for stale, invalid and out-of-order state', () => {
   const lines: string[] = [];
   const world = new World();
-  world.lifecycle.log = createLogger({
+  world.lifecycle.log = new LoggingRepository({
     format: 'json',
     sink: (line) => {
       lines.push(line);
@@ -95,7 +95,7 @@ await test('inactive handshakes expire without fabricating a ride', () => {
   const lines: string[] = [];
 
   const tracker = new Lifecycle(
-    createLogger({
+    new LoggingRepository({
       sink: (line) => {
         lines.push(line);
       },

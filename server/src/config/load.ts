@@ -1,12 +1,12 @@
-import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, resolve, isAbsolute, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createSecureContext } from 'node:tls';
-import { createJiti } from 'jiti';
-import { z } from 'zod';
-import { configSchema } from '#src/config/schema';
-import { ConfigError, validateConfig, validationError } from '#src/config/index';
 import type { ResolvedConfig } from '#src/config/index';
+import { ConfigError, validateConfig, validationError } from '#src/config/index';
+import { configSchema } from '#src/config/schema';
+import { createJiti } from 'jiti';
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
+import { createSecureContext } from 'node:tls';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
 export const CONFIG_NAME = 'zluggish.config.ts';
 

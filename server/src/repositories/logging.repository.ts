@@ -1,10 +1,11 @@
+import type { LogLevel } from '#src/enum';
 // Serialization is the logging boundary: runtime checks safely encode recursive values.
 /* oxlint-disable anti-slop/no-runtime-typeof */
 import type { ResolvedConfig } from '#src/config/index';
 
 const levels = { NOTSET: 0, VERBOSE: 10, DEBUG: 10, INFO: 20, WARNING: 30, WARN: 30, ERROR: 40, CRITICAL: 50 };
 
-type Level = 'VERBOSE' | 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
+type Level = LogLevel;
 
 type LogValue =
   | string
@@ -57,33 +58,53 @@ function safe(value: LogValue, seen = new WeakSet<object>(), depth = 0): Seriali
   );
 }
 
-export function createLogger(options: Options = {}, context: Fields = {}) {
-  const minimum = levels[options.level ?? 'INFO'];
+export class LoggingRepository {
+  constructor(
+    private readonly options: Options = {},
+    private readonly context: Fields = {},
+  ) {}
 
-  const sink =
-    options.sink ??
-    ((line: string, level: Level) => {
-      if (level === 'WARN') console.warn(line);
-      else if (levels[level] >= levels.ERROR) console.error(line);
-      else console.log(line);
-    });
+  configure(options: Options) {
+    Object.assign(this.options, options);
+  }
 
-  const write = (level: Level, event: string, message: string, fields: Fields = {}) => {
-    if (minimum > levels[level]) return;
+  child(fields: Fields) {
+    return new LoggingRepository(this.options, { ...this.context, ...fields });
+  }
+
+  isLevelEnabled(level: Level) {
+    return levels[this.options.level ?? 'INFO'] <= levels[level];
+  }
+
+  verbose = (event: string, message: string, fields?: Fields) => this.write('VERBOSE', event, message, fields);
+  info = (event: string, message: string, fields?: Fields) => this.write('INFO', event, message, fields);
+  warn = (event: string, message: string, fields?: Fields) => this.write('WARN', event, message, fields);
+  error = (event: string, message: string, fields?: Fields) => this.write('ERROR', event, message, fields);
+  critical = (event: string, message: string, fields?: Fields) => this.write('CRITICAL', event, message, fields);
+
+  private sink(line: string, level: Level) {
+    if (this.options.sink) this.options.sink(line, level);
+    else if (level === 'WARN') console.warn(line);
+    else if (levels[level] >= levels.ERROR) console.error(line);
+    else console.log(line);
+  }
+
+  private write(level: Level, event: string, message: string, fields: Fields = {}) {
+    if (!this.isLevelEnabled(level)) return;
 
     try {
-      const data = safe({ ...context, ...fields });
+      const data = safe({ ...this.context, ...fields });
 
       const entry = {
-        timestamp: (options.clock?.() ?? new Date()).toISOString(),
+        timestamp: (this.options.clock?.() ?? new Date()).toISOString(),
         level,
         event: safe(event),
         message: safe(message),
         fields: data,
       };
 
-      sink(
-        options.format === 'json'
+      this.sink(
+        this.options.format === 'json'
           ? JSON.stringify(entry)
           : `${entry.timestamp} ${level} ${entry.event} ${entry.message} ${JSON.stringify(data)}`,
         level,
@@ -91,32 +112,5 @@ export function createLogger(options: Options = {}, context: Fields = {}) {
     } catch {
       // Logging must never interrupt a request, network callback, or shutdown.
     }
-  };
-
-  return {
-    child: (fields: Fields) => createLogger(options, { ...context, ...fields }),
-    verbose: (event: string, message: string, fields?: Fields) => write('VERBOSE', event, message, fields),
-    info: (event: string, message: string, fields?: Fields) => write('INFO', event, message, fields),
-    warn: (event: string, message: string, fields?: Fields) => write('WARN', event, message, fields),
-    error: (event: string, message: string, fields?: Fields) => write('ERROR', event, message, fields),
-    critical: (event: string, message: string, fields?: Fields) => write('CRITICAL', event, message, fields),
-  };
+  }
 }
-
-export type Logger = ReturnType<typeof createLogger>;
-
-let fallback = createLogger();
-
-export function configureLogging(
-  level: ResolvedConfig['logging']['level'],
-  format: ResolvedConfig['logging']['format'] = 'pretty',
-) {
-  fallback = createLogger({ level, format });
-}
-
-// Compatibility for older diagnostic sites. Do not serialize arbitrary values.
-export const log = {
-  info: (message: string, ..._values: Parameters<typeof console.log>) => fallback.info('diagnostic.info', message),
-  warn: (message: string, ..._values: Parameters<typeof console.log>) => fallback.warn('diagnostic.warning', message),
-  error: (message: string, ..._values: Parameters<typeof console.log>) => fallback.error('diagnostic.error', message),
-};

@@ -1,9 +1,9 @@
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import type { AccountsRepository } from '#src/repositories/accounts.repository';
-import { writeDurable } from '#src/repositories/files.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { clone, create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { randomUUID } from '#src/repositories/crypto.repository';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -39,7 +39,7 @@ export class Profiles {
       id: BigInt(id),
       firstName: user.first_name,
       email: user.username,
-      mixPanelDistinctId: randomUUID(),
+      mixPanelDistinctId: new CryptoRepository().randomUUID(),
       lastName: user.last_name,
       isMale: true,
       useMetric: true,
@@ -51,7 +51,11 @@ export class Profiles {
 
   save(id: number, profile: PlayerProfile) {
     profile.id = BigInt(id);
-    writeDurable(resolve(this.folder(id), 'profile.bin'), toBinary(PlayerProfileSchema, profile), true);
+    new AssetFiles().writeDurable(
+      resolve(this.folder(id), 'profile.bin'),
+      toBinary(PlayerProfileSchema, profile),
+      true,
+    );
     this.accounts.updateName(id, profile.firstName, profile.lastName);
   }
 }

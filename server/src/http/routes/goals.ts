@@ -2,7 +2,7 @@ import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
-import { goalInput, jsonGoal, parseGoal } from '#src/services/goals.service';
+import { goalInput, GoalService } from '#src/services/goals.service';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -19,17 +19,17 @@ export function goalRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (c.req.method === 'POST') {
       const goal = c.req.header('Content-Type')?.includes('application/x-protobuf-lite')
         ? parseProtobuf(GoalSchema, new Uint8Array(await c.req.arrayBuffer()))
-        : parseGoal(goalInput.parse(await c.req.json()));
+        : GoalService.parseGoal(goalInput.parse(await c.req.json()));
 
       service.create(user.player_id, goal);
 
-      return json ? c.json(jsonGoal(goal)) : c.body(toBinary(GoalSchema, goal));
+      return json ? c.json(GoalService.jsonGoal(goal)) : c.body(toBinary(GoalSchema, goal));
     }
 
     const goals = service.list(user.player_id);
 
     return json
-      ? c.json(goals.map((goal) => jsonGoal(goal)))
+      ? c.json(goals.map((goal) => GoalService.jsonGoal(goal)))
       : c.body(toBinary(GoalsSchema, create(GoalsSchema, { goals })));
   });
   app.on(['PUT', 'DELETE'], '/api/profiles/:id/goals/:goalId', async (c) => {
@@ -46,7 +46,7 @@ export function goalRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     }
 
     const body = goalInput.parse(await c.req.json());
-    const goal = parseGoal(body);
+    const goal = GoalService.parseGoal(body);
     service.update(user.player_id, id, goal);
 
     return c.json(body);

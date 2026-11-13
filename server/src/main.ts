@@ -1,19 +1,18 @@
+import { ConfigError } from '#src/config/index';
+import type { LoadOptions } from '#src/config/load';
+import { loadConfig, packageRoot, prepareContainerConfig } from '#src/config/load';
+import { createApp } from '#src/http/app';
+import { startCdn } from '#src/node/network/cdn';
+import { startDns } from '#src/node/network/dns';
+import type { HttpListenerOptions } from '#src/node/network/http';
+import { startHttp } from '#src/node/network/http';
+import { startRideListeners } from '#src/node/network/ride';
+import { openRuntime } from '#src/runtime';
 import { once } from 'node:events';
-import { configureLogging } from '#src/logging';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { loadConfig, packageRoot, prepareContainerConfig } from '#src/config/load';
-import type { LoadOptions } from '#src/config/load';
-import { ConfigError } from '#src/config/index';
-import { startHttp } from '#src/node/network/http';
-import type { HttpListenerOptions } from '#src/node/network/http';
-import { openRuntime } from '#src/runtime';
-import { startRideListeners } from '#src/node/network/ride';
-import { startCdn } from '#src/node/network/cdn';
-import { startDns } from '#src/node/network/dns';
-import { createApp } from '#src/http/app';
 
 const { values } = parseArgs({
   options: { config: { type: 'string' }, 'storage-dir': { type: 'string' } },
@@ -29,8 +28,6 @@ const { config } = await loadConfig(prepareContainerConfig(options));
 
 if (existsSync(resolve(config.storageDir, '.config-migration.json')))
   throw new ConfigError('Interrupted config migration; resume config migrate before starting');
-
-configureLogging(config.logging.level, config.logging.format);
 
 const root = packageRoot();
 
