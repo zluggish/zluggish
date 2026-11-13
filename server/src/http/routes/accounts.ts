@@ -168,9 +168,15 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           maxAge: 86_400,
         });
 
+        runtime.world.lifecycle.log.info('auth.login_succeeded', 'User logged in', {
+          playerId: user.player_id,
+          flow: 'browser',
+        });
+
         return c.redirect(`/user/${encodeURIComponent(user.username)}/`);
       }
 
+      runtime.world.lifecycle.diagnostic('auth.login_failed', 'Login rejected', true);
       error = 'Invalid rider or password.';
     }
 
@@ -431,8 +437,10 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (form.username) {
       user = accounts.byUsername(z.string().parse(form.username));
 
-      if (!user || !(await accounts.verify(user, z.string().catch('').parse(form.password))))
+      if (!user || !(await accounts.verify(user, z.string().catch('').parse(form.password)))) {
+        runtime.world.lifecycle.diagnostic('auth.login_failed', 'Login rejected', true);
         throw new HTTPException(401);
+      }
     } else {
       const token = form.code ? z.string().parse(form.code) : z.string().parse(form.refresh_token);
 
@@ -443,7 +451,19 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (!user) throw new HTTPException(401);
     }
 
-    return c.json(sessions.tokens(user, runtime.tokens));
+    const result = sessions.tokens(user, runtime.tokens);
+
+    if (form.username)
+      runtime.world.lifecycle.log.info('auth.login_succeeded', 'User logged in', {
+        playerId: user.player_id,
+        flow: 'credentials',
+      });
+    else
+      runtime.world.lifecycle.log.verbose('auth.token_exchanged', 'Authentication token exchanged', {
+        playerId: user.player_id,
+      });
+
+    return c.json(result);
   });
 
   app.post('/api/users', async (c) => {
@@ -482,6 +502,9 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     return c.body(null, 204);
   });
   app.get('/logout/:username', (c) => {
+    const user = c.get('rider');
+
+    if (user) runtime.world.lifecycle.log.info('auth.logout', 'User logged out', { playerId: user.player_id });
     sessions.browsers.delete(c.get('browserId'));
 
     return c.redirect('/login/');

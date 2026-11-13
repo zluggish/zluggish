@@ -10,16 +10,17 @@ import { mediumFixture, mediumBrowser, binary, decode } from '#tests/medium/supp
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerProfileSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { Completions } from '#src/repositories/completion.repository';
-import { advancedStreak, streaksFor } from '#src/repositories/streak.repository';
-import { ProfileImports } from '#src/repositories/profile-import.repository';
+import { advancedStreak, streaksFor } from '#src/services/streak.service';
+import { ImportsService } from '#src/services/profile-import.service';
 import { writeDurable } from '#src/repositories/files.repository';
-import { activityChart } from '#src/repositories/fit.repository';
+import { activityChart } from '#src/services/fit.service';
 import { Simulation } from '#src/world/simulation';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { validateConfig } from '#src/config/index';
-import { ActivityUploads } from '#src/repositories/uploads.repository';
-import { Accounts } from '#src/repositories/accounts.repository';
-import { configureLogging, log } from '#src/logging';
+import { UploadsService } from '#src/services/uploads.service';
+import { AccountsService } from '#src/services/auth.service';
+import { configureLogging, createLogger, log } from '#src/logging';
+import { createApp } from '#src/http/app';
 
 await test('deleting a queued activity while another upload is sending prevents its later delivery', async (t) => {
   const f = await mediumFixture(t);
@@ -136,8 +137,8 @@ await test('reopened upload queues require explicit owner retries for interrupte
   f.services.activities.finalize(create(ActivitySchema, { ...data, id: BigInt(id) }));
   f.accounts.db.exec("UPDATE activity_upload SET state='sending'");
   f.accounts.close();
-  const reopened = new Accounts(f.accounts.storage);
-  const queue = new ActivityUploads({ ...f, accounts: reopened });
+  const reopened = new AccountsService(f.accounts.storage);
+  const queue = new UploadsService({ ...f, accounts: reopened });
   t.after(async () => {
     await queue.close();
     reopened.close();
@@ -169,7 +170,13 @@ await test('configured logging level controls request logging and application di
   assert.equal(error.mock.callCount(), 1);
   configureLogging('INFO');
   await f.request('/health');
-  assert.ok(info.mock.callCount() > 0);
+  assert.equal(info.mock.callCount(), 0, 'Routine requests stay quiet at INFO');
+  f.world.lifecycle.log = createLogger({ level: 'VERBOSE' });
+  const verboseApp = createApp({ gameInfo: '{}', gameInfoHash: '0', variants: '{}' }, f);
+  await verboseApp.request('/health?token=never-log-this');
+  assert.equal(info.mock.callCount(), 1);
+  assert.match(String(info.mock.calls[0]?.arguments[0]), /VERBOSE http.completed/);
+  assert.doesNotMatch(String(info.mock.calls[0]?.arguments[0]), /never-log-this/);
 });
 
 await test('charts retain running records with no power and intermittent sensor dropouts', async (t) => {
@@ -256,7 +263,7 @@ await test('import recovery discards preparation without a manifest but preserve
   const folder = resolve(f.profiles.folder(f.rider.player_id), `.ts-import-${'a'.repeat(32)}`);
   mkdirSync(folder);
   writeDurable(resolve(folder, 'profile.bin'), toBinary(PlayerProfileSchema, create(PlayerProfileSchema, { id: 1n })));
-  const imports = new ProfileImports(f.accounts, f.world);
+  const imports = new ImportsService(f.accounts, f.world);
   imports.recover();
   assert.equal(existsSync(folder), false);
   mkdirSync(folder);

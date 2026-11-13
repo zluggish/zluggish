@@ -7,3 +7,7 @@ export const importFilenameSchema = z.enum([
   'user_storage.bin',
   'streaks.bin',
 ]);
+
+export type ImportFile = z.infer<typeof importFilenameSchema>;
+
+export type ImportFiles = Partial<Record<ImportFile, Uint8Array>>;

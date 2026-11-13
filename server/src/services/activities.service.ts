@@ -1,8 +1,7 @@
-import { log } from '#src/logging';
 import { Completions } from '#src/repositories/completion.repository';
 import { ProtobufRows } from '#src/repositories/protobuf.repository';
-import { ActivityUploads } from '#src/repositories/uploads.repository';
-import { resolveRiderSettings } from '#src/repositories/settings.repository';
+import { UploadsService } from '#src/services/uploads.service';
+import { resolveRiderSettings } from '#src/services/settings.service';
 import { GhostSchema, WorldAttributeSchema, WA_TYPE } from '#src/protocol/generated/udp-node-msgs_pb';
 import { course, worldTime } from '#src/world/state';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
@@ -13,8 +12,8 @@ import { FitnessPrivacy } from '#src/protocol/generated/activity_pb';
 import { ActivitySchema, type Activity } from '#src/protocol/generated/activity_pb';
 import { ActivitiesRepository } from '#src/repositories/activities.repository';
 import { existsSync, readdirSync, rmSync, writeDurable } from '#src/repositories/files.repository';
-import { activityChart, savePowerCurve } from '#src/repositories/fit.repository';
-import { advancedStreak, streaksFor, updateStreaks } from '#src/repositories/streak.repository';
+import { activityChart, savePowerCurve } from '#src/services/fit.service';
+import { advancedStreak, streaksFor, updateStreaks } from '#src/services/streak.service';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -37,10 +36,32 @@ export class ActivitiesService {
 
   recover() {
     for (const row of new Completions(this.context.accounts.db).unfinished())
-      this.finalize(fromBinary(ActivitySchema, row.payload));
+      this.finalize(fromBinary(ActivitySchema, row.payload), true);
   }
 
-  finalize(activity: Activity) {
+  finalize(activity: Activity, recovery = false) {
+    if (this.finalized(activity)) return;
+
+    try {
+      this.complete(activity);
+    } catch (error) {
+      this.context.world.lifecycle.log.error('activity.save_failed', 'Activity save failed', {
+        playerId: activity.playerId,
+        activityId: activity.id,
+        recoverable: true,
+        error: error instanceof Error ? error : undefined,
+      });
+      throw error;
+    }
+
+    this.context.world.lifecycle.log.info('activity.saved', 'Activity saved', {
+      playerId: activity.playerId,
+      activityId: activity.id,
+      recovery,
+    });
+  }
+
+  private complete(activity: Activity) {
     if (this.finalized(activity)) return;
     const player = Number(activity.playerId);
     const journal = new Completions(this.context.accounts.db);
@@ -93,13 +114,16 @@ export class ActivitiesService {
         toBinary(GhostSchema, create(GhostSchema, { playerId: player, states: history })),
         true,
       );
-    journal.complete(activity.id, new ActivityUploads(this.context).configured(player), () => {
+    journal.complete(activity.id, new UploadsService(this.context).configured(player), () => {
       new ProtobufRows(this.context.accounts.db).update('activity', activity.id, ActivitySchema, activity, ['fit']);
 
       try {
         this.savePowerCurve(player, activity.fit);
       } catch {
-        log.warn(`Power curve unavailable for activity ${activity.id}`);
+        this.context.world.lifecycle.log.warn('activity.power_curve_unavailable', 'Power curve unavailable', {
+          activityId: activity.id,
+          playerId: activity.playerId,
+        });
       }
     });
 
@@ -273,7 +297,7 @@ export class ActivitiesService {
   }
 
   savePowerCurve(id: number, bytes: Uint8Array) {
-    return savePowerCurve(this.context.accounts, this.context.profiles, id, bytes);
+    return savePowerCurve(this.context.accounts.db, this.context.profiles, id, bytes);
   }
 
   updateStreaks(id: number, activity: Activity) {

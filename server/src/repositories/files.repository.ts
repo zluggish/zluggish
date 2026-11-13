@@ -1,6 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import type { DescMessage } from '@bufbuild/protobuf';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import {
   closeSync,
+  existsSync,
+  readFileSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -49,4 +53,22 @@ export function writeDurable(path: string, text: string | Uint8Array, replace = 
 }
 
 // Shared filesystem primitives for repositories that manage opaque assets.
-export { existsSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs';
+export { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs';
+
+export class AssetFiles {
+  readData<Schema extends DescMessage>(schema: Schema, path: string) {
+    return existsSync(path) ? fromBinary(schema, readFileSync(path)) : create(schema);
+  }
+  saveData<Schema extends DescMessage>(schema: Schema, path: string, value: ReturnType<typeof create<Schema>>) {
+    writeDurable(path, toBinary(schema, value), true);
+  }
+  write(path: string, data: Uint8Array) {
+    writeDurable(path, data, true);
+  }
+  read(path: string) {
+    return existsSync(path) ? readFileSync(path) : null;
+  }
+  remove(path: string) {
+    if (existsSync(path)) unlinkSync(path);
+  }
+}

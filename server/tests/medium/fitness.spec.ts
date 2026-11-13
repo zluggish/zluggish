@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { create } from '@bufbuild/protobuf';
-import { updateStreaks } from '#src/repositories/streak.repository';
+import { updateStreaks } from '#src/services/streak.service';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
 import { StreaksSchema } from '#src/protocol/generated/profile_pb';

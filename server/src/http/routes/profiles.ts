@@ -3,7 +3,7 @@ import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { PlayerProfileSchema, ProfileEntitlementsSchema } from '#src/protocol/generated/profile_pb';
-import type { ImportFiles } from '#src/repositories/profile-import.repository';
+import type { ImportFiles } from '#src/contracts/profile-import';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Context, Hono } from 'hono';
 import { html } from 'hono/html';

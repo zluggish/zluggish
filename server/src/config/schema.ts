@@ -166,7 +166,17 @@ export const configSchema = z
       .readonly(),
     logging: z
       .strictObject({
-        level: z.enum(['DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'CRITICAL', 'NOTSET']).default('INFO'),
+        level: z
+          .enum(['VERBOSE', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'CRITICAL', 'NOTSET'])
+          .default('INFO')
+          .transform((level) => (level === 'DEBUG' ? ('VERBOSE' as const) : level)),
+        format: z.enum(['pretty', 'json']).default('pretty'),
+        rideProgressIntervalSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .refine((value) => value === 0 || value >= 10, 'Use 0 or at least 10 seconds')
+          .default(60),
       })
       .prefault({})
       .readonly(),

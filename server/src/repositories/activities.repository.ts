@@ -1,25 +1,47 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { integer } from '#src/db/values';
+import type { IntegerInput } from '#src/db/values';
+import { query, SqliteExecutor } from '#src/db/query';
+import { sql } from 'kysely';
+import type { DatabaseSync } from 'node:sqlite';
 
 export class ActivitiesRepository {
-  constructor(private readonly db: DatabaseSync) {}
-  listActivityImage(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id FROM activity_image WHERE player_id=? AND activity_id=?').all(...values);
+  private readonly executor: SqliteExecutor;
+  constructor(private readonly db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
   }
-  listActivityMedia(...values: SQLInputValue[]) {
-    return this.db
-      .prepare('SELECT id, content_type FROM activity_media WHERE player_id=? AND activity_id=?')
-      .all(...values);
+
+  listActivityImage(player: number | bigint, activity: IntegerInput) {
+    return this.executor.all(
+      query
+        .selectFrom('activity_image')
+        .select('id')
+        .where('player_id', '=', player)
+        .where('activity_id', '=', integer(activity)),
+    );
   }
-  findActivity(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id FROM activity WHERE id=? AND player_id=?').get(...values);
+  listActivityMedia(player: number | bigint, activity: IntegerInput) {
+    return this.executor.all(
+      query
+        .selectFrom('activity_media')
+        .select(['id', 'content_type'])
+        .where('player_id', '=', player)
+        .where('activity_id', '=', integer(activity)),
+    );
   }
-  deleteActivity(...values: SQLInputValue[]) {
-    return this.db.prepare('DELETE FROM activity WHERE id=? AND player_id=?').run(...values);
+  findActivity(id: IntegerInput, player: number | bigint) {
+    return this.executor.get(
+      query.selectFrom('activity').select('id').where('id', '=', integer(id)).where('player_id', '=', player),
+    );
   }
-  listActivityFile(id: bigint) {
-    return this.db.prepare('SELECT id FROM activity_file WHERE activity_id=?').all(id);
+  deleteActivity(id: IntegerInput, player: number | bigint) {
+    return this.executor.run(
+      query.deleteFrom('activity').where('id', '=', integer(id)).where('player_id', '=', player),
+    );
   }
-  deleteActivityData(id: bigint, player: number) {
+  listActivityFile(id: IntegerInput) {
+    return this.executor.all(query.selectFrom('activity_file').select('id').where('activity_id', '=', integer(id)));
+  }
+  deleteActivityData(id: IntegerInput, player: number | bigint) {
     this.db.exec('BEGIN IMMEDIATE');
 
     try {
@@ -29,8 +51,8 @@ export class ActivitiesRepository {
         'activity_media',
         'activity_upload',
         'activity_completion',
-      ])
-        this.db.prepare(`DELETE FROM ${table} WHERE activity_id=?`).run(id);
+      ] as const)
+        this.executor.run(query.deleteFrom(table).where('activity_id', '=', integer(id)));
       this.deleteActivity(id, player);
       this.db.exec('COMMIT');
     } catch (error) {
@@ -38,55 +60,85 @@ export class ActivitiesRepository {
       throw error;
     }
   }
-  findActivityFile(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id FROM activity_file WHERE activity_id=? AND full=0').get(...values);
-  }
-  insertActivityFile(...values: SQLInputValue[]) {
-    return this.db.prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)').run(...values);
-  }
-  findOwnedActivityFile(...values: SQLInputValue[]) {
-    return this.db
-      .prepare(
-        'SELECT id FROM activity_file WHERE id=? AND activity_id=? AND EXISTS (SELECT 1 FROM activity WHERE activity.id=activity_file.activity_id)',
-      )
-      .get(...values);
-  }
-  insertActivityImage(...values: SQLInputValue[]) {
-    return this.db.prepare('INSERT INTO activity_image (player_id,activity_id) VALUES (?,?)').run(...values);
-  }
-  insertActivityMedia(...values: SQLInputValue[]) {
-    return this.db
-      .prepare('INSERT INTO activity_media (player_id,activity_id,content_type) VALUES (?,?,?)')
-      .run(...values);
-  }
-  findActivityMedia(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT * FROM activity_media WHERE id=?').get(...values);
-  }
-
-  recentActivities(...values: SQLInputValue[]) {
-    const query = this.db.prepare(
-      "SELECT * FROM activity WHERE player_id=? AND date > date('now', '-1 month') AND (player_id=? OR (COALESCE(privateActivity,0)=0 AND COALESCE(privacy,0)=0)) ORDER BY id",
+  findActivityFile(id: IntegerInput) {
+    return this.executor.get(
+      query.selectFrom('activity_file').select('id').where('activity_id', '=', integer(id)).where('full', '=', 0),
     );
-
-    query.setReadBigInts(true);
-
-    return query.all(...values);
   }
-
-  activityById(...values: SQLInputValue[]) {
-    const query = this.db.prepare('SELECT * FROM activity WHERE id=?');
-    query.setReadBigInts(true);
-
-    return query.get(...values);
+  insertActivityFile(id: IntegerInput) {
+    return this.executor.run(query.insertInto('activity_file').values({ activity_id: integer(id), full: 0 }));
   }
-
-  activityFeed(...values: SQLInputValue[]) {
-    const query = this.db.prepare(
-      'SELECT * FROM activity WHERE distanceInMeters>1 AND (? IS NULL OR player_id=?) AND (? IS NULL OR id<?) AND (? OR end_date IS NOT NULL) AND (player_id=? OR (COALESCE(privateActivity,0)=0 AND COALESCE(privacy,0)=0)) ORDER BY date DESC LIMIT ?',
+  findOwnedActivityFile(id: IntegerInput, activity: IntegerInput) {
+    return this.executor.get(
+      query
+        .selectFrom('activity_file')
+        .select('id')
+        .where('id', '=', integer(id))
+        .where('activity_id', '=', integer(activity))
+        .where(({ exists, selectFrom }) =>
+          exists(selectFrom('activity').select('id').whereRef('activity.id', '=', 'activity_file.activity_id')),
+        ),
     );
+  }
+  insertActivityImage(player: number | bigint, activity: IntegerInput) {
+    return this.executor.run(
+      query.insertInto('activity_image').values({ player_id: player, activity_id: integer(activity) }),
+    );
+  }
+  insertActivityMedia(player: number | bigint, activity: IntegerInput, contentType: string) {
+    return this.executor.run(
+      query
+        .insertInto('activity_media')
+        .values({ player_id: player, activity_id: integer(activity), content_type: contentType }),
+    );
+  }
+  findActivityMedia(id: IntegerInput) {
+    return this.executor.get(query.selectFrom('activity_media').selectAll().where('id', '=', integer(id)));
+  }
+  recentActivities(player: number | bigint, viewer: number | bigint) {
+    return this.executor.all(
+      query
+        .selectFrom('activity')
+        .selectAll()
+        .where('player_id', '=', player)
+        .where('date', '>', sql<string>`date('now', '-1 month')`)
+        .where(({ eb, or, and }) =>
+          or([
+            eb('player_id', '=', viewer),
+            and([eb(sql<number>`coalesce(privateActivity, 0)`, '=', 0), eb(sql<number>`coalesce(privacy, 0)`, '=', 0)]),
+          ]),
+        )
+        .orderBy('id'),
+      true,
+    );
+  }
+  activityById(id: IntegerInput) {
+    return this.executor.get(query.selectFrom('activity').selectAll().where('id', '=', integer(id)), true);
+  }
+  activityFeed(
+    player: number | null,
+    before: string | null,
+    includeUnfinished: number,
+    viewer: number | bigint,
+    limit: number,
+  ) {
+    let selection = query
+      .selectFrom('activity')
+      .selectAll()
+      .where('distanceInMeters', '>', 1)
+      .where(({ eb, or, and }) =>
+        or([
+          eb('player_id', '=', viewer),
+          and([eb(sql<number>`coalesce(privateActivity, 0)`, '=', 0), eb(sql<number>`coalesce(privacy, 0)`, '=', 0)]),
+        ]),
+      );
 
-    query.setReadBigInts(true);
+    if (player !== null) selection = selection.where('player_id', '=', player);
 
-    return query.all(...values);
+    if (before !== null) selection = selection.where('id', '<', integer(before));
+
+    if (!includeUnfinished) selection = selection.where('end_date', 'is not', null);
+
+    return this.executor.all(selection.orderBy('date', 'desc').limit(limit), true);
   }
 }

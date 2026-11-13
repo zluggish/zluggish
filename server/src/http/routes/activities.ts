@@ -1,4 +1,3 @@
-import { log } from '#src/logging';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -12,7 +11,7 @@ import {
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -79,7 +78,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (c.req.method === 'DELETE') {
       service.deleteActivity(id, user.player_id);
-      runtime.world.logout(BigInt(user.player_id));
+      runtime.world.logout(BigInt(user.player_id), 'activity_finished');
 
       return c.text('true');
     }
@@ -95,13 +94,18 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       });
 
     if (c.req.query('upload-to-strava') === 'true') {
-      if (activity.distanceInMeters < 1) service.deleteActivity(id, user.player_id);
-      else {
+      if (activity.distanceInMeters < 1) {
+        service.deleteActivity(id, user.player_id);
+        runtime.world.lifecycle.log.info('activity.discarded', 'Activity discarded', {
+          playerId: user.player_id,
+          activityId: id,
+        });
+      } else {
         service.finalize(activity);
         void uploads.drain();
       }
 
-      runtime.world.logout(BigInt(user.player_id));
+      runtime.world.logout(BigInt(user.player_id), 'activity_finished');
     } else records.update('activity', id, ActivitySchema, activity, ['fit']);
 
     return c.body(JSON.stringify({ id: Number(id) }), 200, {
@@ -146,7 +150,9 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
             true,
           );
         } catch {
-          log.warn(`Chart unavailable for activity ${activity.id}`);
+          runtime.world.lifecycle.log.warn('activity.chart_unavailable', 'Activity chart unavailable', {
+            activityId: activity.id,
+          });
         }
       }
 
@@ -191,7 +197,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const before = c.req.query('start_after_activity_id');
 
       const activities = service
-        .activityFeed(id, id, before ?? null, before ?? null, type === 'preview' ? 1 : 0, user.player_id, limit)
+        .activityFeed(id, before ?? null, type === 'preview' ? 1 : 0, user.player_id, limit)
         .map((row) => service.forViewer(records.decode(ActivitySchema, row), user.player_id));
 
       return c.json(activities.map((activity) => service.companion(activity)));

@@ -55,6 +55,14 @@ It should say something like
 zluggish-1  | Zluggish server: https://0.0.0.0:443
 ```
 
+The server image also includes the full admin CLI, with no Node or pnpm installation needed on the host:
+
+```sh
+docker compose -f docker/docker-compose.yml run --rm --no-deps zluggish zluggish --help
+```
+
+It uses the same mounted storage as the server. Stop the server before commands that change accounts, migrate config, or write rider settings. See the [admin CLI guide](server/README.md) for commands and offline operation.
+
 The container creates `storage/zluggish.config.ts` on first startup if it does not exist. Edit this file to change settings, then recreate the container. For example:
 
 ```ts
@@ -254,7 +262,7 @@ For a separate server, set `server.advertisedIp` and allow TCP 80, 443, 3025 and
 Stop the server before using the recovery CLI. Put the new password in a private file, then run from the repository root:
 
 ```sh
-pnpm --dir cli cli --storage-dir /path/to/storage accounts recover --user 1 --password-file /private/path/new-password.txt --admin
+pnpm --dir server cli --storage-dir /path/to/storage accounts recover --user 1 --password-file /private/path/new-password.txt --admin
 ```
 
 Remove the private password file after recovery. Omit `--admin` for password-only recovery. To remove password protection instead, use `--remove-password` without `--password-file`. The CLI revokes existing sessions. It does not prompt interactively for a password. Gmail/SMTP reset links are no longer supported.
@@ -274,8 +282,8 @@ These instructions apply to legacy singleplayer and multiplayer installations. F
 3. For original marker/text/INI/JSON configuration, migrate directly to TypeScript. Choose a new destination that does not already exist:
 
    ```sh
-   pnpm --dir cli cli --storage-dir /path/to/storage config migrate --dry-run
-   pnpm --dir cli cli --storage-dir /path/to/storage config migrate --output /path/to/zluggish.config.ts
+   pnpm --dir server cli --storage-dir /path/to/storage config migrate --dry-run
+   pnpm --dir server cli --storage-dir /path/to/storage config migrate --output /path/to/zluggish.config.ts
    ```
 
    JSONC-only installations must recreate operator settings in `zluggish.config.ts` manually. Neither `storage/config.jsonc` nor the old JSONC example is loaded by this server. See the [typed config example](examples/zluggish.config.ts). Rider preference overrides are stored in `storage/settings.db`, not embedded in operator source.
@@ -283,9 +291,9 @@ These instructions apply to legacy singleplayer and multiplayer installations. F
 4. Convert old accounts explicitly:
 
    ```sh
-   pnpm --dir cli cli --storage-dir /path/to/storage accounts migrate
-   pnpm --dir cli cli --config /path/to/zluggish.config.ts config validate
-   pnpm --dir cli cli --config /path/to/zluggish.config.ts config typecheck
+   pnpm --dir server cli --storage-dir /path/to/storage accounts migrate
+   pnpm --dir server cli --config /path/to/zluggish.config.ts config validate
+   pnpm --dir server cli --config /path/to/zluggish.config.ts config typecheck
    ```
 
    Use `--solo-player 42` on account/config migration when the intended legacy solo profile needs an explicit choice. Use the local folder number, which may differ from an imported official player ID. The old `--settings-source` and `--server-dir` flags are not supported; resolve conflicting preferences explicitly before migration.
@@ -459,7 +467,7 @@ Please join the community supported [Discord](https://discord.gg/GMdn8F8) server
 
 ## Dependencies
 
-Use Docker, or Node 24 and pnpm 10 for a source installation. Runtime dependencies include Hono and its Node adapter, protobuf codecs, SQLite through Node's built-in module, native OS storage locks, Zod, Jiti, the Garmin FIT/Connect libraries and discord.js. Package manifests and lockfiles in `server/` and `cli/` are authoritative. No Python runtime or pip dependencies are required.
+Use Docker, or Node 24 and pnpm 10 for a source installation. Runtime dependencies include Hono and its Node adapter, protobuf codecs, SQLite through Node's built-in module, native OS storage locks, Zod, Jiti, the Garmin FIT/Connect libraries and discord.js. Package manifests and lockfiles in `server/` are authoritative. No Python runtime or pip dependencies are required.
 
 ## Note
 
@@ -491,13 +499,13 @@ If you get this error even though Zluggish is up to date, rename the file `Zwift
 Install [mise](https://mise.jdx.dev/getting-started.html), then run from the repository root:
 
 ```sh
-cd cli
+cd server
 mise install
 mise run install
 mise run check
 ```
 
-For individual pnpm commands and lint provenance, see the [CLI/tooling guide](cli/README.md).
+For individual pnpm commands and lint provenance, see the [CLI/tooling guide](server/README.md).
 
 ## Legal notice
 
@@ -506,3 +514,38 @@ Zluggish is an independent, community-developed project. It is **not affiliated 
 Zluggish is licensed under the **GNU Affero General Public License, version 3 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full terms, including the warranty disclaimer. Third-party components retain their respective licenses and copyright notices. This license does not grant rights to Zwift's proprietary client, game assets, or trademarks.
 
 This project is based on [zwift-offline](https://github.com/zoffline/zwift-offline) and [fatsbrown's fork of zwift-offline](https://github.com/fatsbrown/zwift-offline). Credit for that foundation belongs to their authors and contributors.
+
+## Logging
+
+The default `INFO` level reports user login, game connections, companion registration,
+ride start/progress/end, activity saves, and upload outcomes. Routine HTTP requests
+appear only at `VERBOSE`.
+
+```ts
+logging: {
+  level: 'INFO', // VERBOSE, INFO, WARN, ERROR, CRITICAL, or NOTSET
+  format: 'pretty', // or 'json' for one structured record per line
+  rideProgressIntervalSeconds: 60, // 0 disables progress; otherwise at least 10
+},
+```
+
+`DEBUG` is accepted as a legacy alias for `VERBOSE`, and `WARNING` for `WARN`.
+Each line includes a UTC timestamp, level, event name, message and context. JSON
+records put context in `fields`. INFO/VERBOSE go to stdout; warnings and errors go
+to stderr. Use your process manager for log retention and rotation.
+
+A ride starts on the first accepted world state, including a stationary rider.
+Progress includes elapsed seconds and distance in metres; a counter reset is
+flagged. Reconnecting transport does not start another ride. A ride ends on
+logout, inactivity cleanup, or shutdown; this does not imply that an activity was
+saved. Only successful durable finalization emits `activity.saved`, with recovery
+marked separately. External upload failures require retry from the rider home.
+
+Companion phone registration emits `companion.registered`. It does not establish
+a persistent connection, so logs do not claim a companion disconnect. Repeated
+registrations are deduplicated within a two-minute activity window.
+
+VERBOSE request summaries use route templates and exclude query strings and
+request bodies. Credentials and packet payloads are not logged. Exceptions record
+their type rather than arbitrary provider messages or stacks, which may contain
+credentials. Player IDs identify riders without logging their names or emails.

@@ -95,5 +95,8 @@ await test('unexpected failures are logged while responses omit error details', 
   assert.equal(response.status, 500);
   assert.equal(await response.text(), 'Request failed');
   assert.equal(logged.mock.callCount(), 1);
-  assert.equal(logged.mock.calls[0]?.arguments[0], 'Request failed: GET /api/profiles/me');
+  const line = String(logged.mock.calls[0]?.arguments[0]);
+  assert.match(line, /ERROR http.failed Request failed unexpectedly/);
+  assert.match(line, /requestId/);
+  assert.doesNotMatch(line, /Bearer|access_token|profile.bin/);
 });

@@ -5,7 +5,7 @@ import { ApplicationError } from '#src/errors';
 import { EventSchema, PlayerJoinedEventSchema, PlayerLeftEventSchema } from '#src/protocol/generated/events_pb';
 import { WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { Rider } from '#src/repositories/accounts.repository';
-import { eventJSON, eventsAt } from '#src/repositories/event-catalog.repository';
+import { eventJSON, eventsAt } from '#src/services/event-catalog.service';
 import { EventsRepository } from '#src/repositories/events.repository';
 import { worldTime } from '#src/world/state';
 import { create, toBinary } from '@bufbuild/protobuf';

@@ -1,3 +1,4 @@
+import { query, SqliteExecutor } from '#src/db/query';
 import type { DescMessage } from '@bufbuild/protobuf';
 import { fromJsonString, toJsonString } from '@bufbuild/protobuf';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
@@ -8,7 +9,10 @@ export type ProtobufMessage<Schema extends DescMessage> = ReturnType<typeof from
 export type Table = 'activity' | 'goal' | 'segment_result' | 'route_result';
 
 export class ProtobufRows {
-  constructor(readonly db: DatabaseSync) {}
+  private readonly executor: SqliteExecutor;
+  constructor(readonly db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
+  }
 
   values<Schema extends DescMessage>(
     table: Table,
@@ -66,11 +70,7 @@ export class ProtobufRows {
 
     if (keys.length === 0) throw new Error('Empty database record');
 
-    return this.db
-      .prepare(
-        `INSERT INTO "${table}" (${keys.map((key) => `"${key}"`).join(',')}) VALUES (${keys.map(() => '?').join(',')})`,
-      )
-      .run(...values.values()).lastInsertRowid;
+    return this.executor.run(query.insertInto(table).values(Object.fromEntries(values))).lastInsertRowid;
   }
 
   update<Schema extends DescMessage>(
@@ -83,28 +83,18 @@ export class ProtobufRows {
     const values = this.values(table, schema, message, ['id', ...exclude]);
 
     if (values.size > 0)
-      this.db
-        .prepare(
-          `UPDATE "${table}" SET ${values
-            .keys()
-            .map((key) => `"${key}"=?`)
-            .toArray()
-            .join(',')} WHERE id=?`,
-        )
-        .run(...values.values(), id);
+      this.executor.run(query.updateTable(table).set(Object.fromEntries(values)).where('id', '=', id));
   }
 
   select<Schema extends DescMessage>(table: Table, schema: Schema, playerId: bigint): ProtobufMessage<Schema>[] {
-    const query = this.db.prepare(`SELECT * FROM "${table}" WHERE player_id=? ORDER BY id`);
-
-    query.setReadBigInts(true);
-
-    return query.all(playerId).map((row) => this.decode(schema, row));
+    return this.executor
+      .all(query.selectFrom(table).selectAll().where('player_id', '=', playerId).orderBy('id'), true)
+      .map((row) => this.decode(schema, row));
   }
 
   decode<Schema extends DescMessage>(
     schema: Schema,
-    row: Record<string, import('node:sqlite').SQLOutputValue>,
+    row: Record<string, string | number | bigint | Uint8Array | null>,
   ): ProtobufMessage<Schema> {
     const json: Record<string, z.infer<ReturnType<typeof z.json>>> = {};
 

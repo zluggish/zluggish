@@ -1,10 +1,11 @@
+import { AssetFiles } from '#src/repositories/files.repository';
 import type { RepositoryContext } from '#src/context';
 import { ApplicationError } from '#src/errors';
 import type { Achievements } from '#src/protocol/generated/profile_pb';
 import { AchievementsSchema } from '#src/protocol/generated/profile_pb';
 import type { UserStorage } from '#src/protocol/generated/user_storage_pb';
 import { AttributesSchema, UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
-import { loadAchievements } from '#src/repositories/achievement.repository';
+import { loadAchievements } from '#src/services/achievement.service';
 import { create, isFieldSet } from '@bufbuild/protobuf';
 import { reflect } from '@bufbuild/protobuf/reflect';
 import { resolve } from 'node:path';
@@ -26,6 +27,7 @@ function safeName(value: string) {
 }
 
 export class StorageService {
+  private readonly files = new AssetFiles();
   constructor(
     private readonly repository: StorageRepository,
     private readonly context: RepositoryContext,
@@ -36,15 +38,15 @@ export class StorageService {
   }
   unlock(id: number, incoming: Achievements) {
     const file = resolve(this.context.profiles.folder(id), 'achievements.bin');
-    const achievements = this.repository.readData(AchievementsSchema, file);
+    const achievements = this.files.readData(AchievementsSchema, file);
 
     for (const achievement of incoming.achievements)
       if (achievements.achievements.every((item) => item.id !== achievement.id))
         achievements.achievements.push(achievement);
-    this.repository.saveData(AchievementsSchema, file, achievements);
+    this.files.saveData(AchievementsSchema, file, achievements);
   }
   attributes(id: number, requested: Set<number>) {
-    const storage = this.repository.readData(
+    const storage = this.files.readData(
       UserStorageSchema,
       resolve(this.context.profiles.folder(id), 'user_storage.bin'),
     );
@@ -57,7 +59,7 @@ export class StorageService {
   }
   saveAttributes(id: number, incoming: UserStorage) {
     const file = resolve(this.context.profiles.folder(id), 'user_storage.bin');
-    const storage = this.repository.readData(UserStorageSchema, file);
+    const storage = this.files.readData(UserStorageSchema, file);
 
     for (const attribute of incoming.attributes) {
       const incomingFields = reflect(AttributesSchema, attribute);
@@ -78,14 +80,14 @@ export class StorageService {
       storage.attributes.push(attribute);
     }
 
-    this.repository.saveData(UserStorageSchema, file, storage);
+    this.files.saveData(UserStorageSchema, file, storage);
   }
   upload(id: number, upload: { folder: string; filename: string; file: Uint8Array }) {
     const folder = safeName(upload.folder);
 
     if (folder.startsWith('.')) throw new ApplicationError(400);
     const name = safeName(upload.filename);
-    this.repository.write(resolve(this.context.profiles.folder(id), folder, name), upload.file);
+    this.files.write(resolve(this.context.profiles.folder(id), folder, name), upload.file);
     const existing = this.repository.findZfile(id, folder, name);
     const timestamp = Math.floor(Date.now() / 1000);
 
@@ -109,13 +111,13 @@ export class StorageService {
   }
   delete(id: number, fileId: string) {
     const row = this.owned(id, fileId);
-    this.repository.remove(resolve(this.context.profiles.folder(id), safeName(row.folder), safeName(row.filename)));
+    this.files.remove(resolve(this.context.profiles.folder(id), safeName(row.folder), safeName(row.filename)));
     this.repository.deleteZfile(row.id);
   }
   download(id: number, fileId: string) {
     const row = this.owned(id, fileId);
 
-    const contents = this.repository.read(
+    const contents = this.files.read(
       resolve(this.context.profiles.folder(id), safeName(row.folder), safeName(row.filename)),
     );
 

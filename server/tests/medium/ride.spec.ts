@@ -1,5 +1,5 @@
 import { validateConfig } from '#src/config/index';
-import { Accounts } from '#src/repositories/accounts.repository';
+import { AccountsService } from '#src/services/auth.service';
 import { decodeLegacyPacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import { startRideListeners } from '#src/node/network/ride';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
@@ -382,7 +382,7 @@ await test('activity create, save and restart preserve ownership, FIT bytes and 
 
   assert.equal(attempt.status, 401);
   f.accounts.close();
-  const reopened = new Accounts(f.accounts.storage);
+  const reopened = new AccountsService(f.accounts.storage);
 
   try {
     assert.equal(reopened.db.prepare('SELECT name FROM activity WHERE id=?').get(id)?.name, 'Synthetic ride');

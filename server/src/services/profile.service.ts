@@ -6,7 +6,7 @@ import {
   ProfileEntitlementSchema,
 } from '#src/protocol/generated/profile_pb';
 import { readFileSync } from '#src/repositories/files.repository';
-import { companionProfile, profileAge } from '#src/repositories/profile-json.repository';
+import { companionProfile, profileAge } from '#src/services/profile-json.service';
 import type { Profiles } from '#src/repositories/profile.repository';
 import { create } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';

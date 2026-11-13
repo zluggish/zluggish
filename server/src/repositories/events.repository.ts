@@ -1,44 +1,53 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { integer } from '#src/db/values';
+import type { IntegerInput } from '#src/db/values';
+import { query, SqliteExecutor } from '#src/db/query';
+import type { DatabaseSync } from 'node:sqlite';
 
 export class EventsRepository {
-  constructor(private readonly db: DatabaseSync) {}
-  findPrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT json FROM private_event WHERE id=?').get(...values);
+  private readonly executor: SqliteExecutor;
+  constructor(private readonly db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
   }
-  listPrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT json FROM private_event ORDER BY id DESC LIMIT 100').all(...values);
+  findPrivateEvent(id: IntegerInput) {
+    return this.executor.get(query.selectFrom('private_event').select('json').where('id', '=', integer(id)));
   }
-  updatePrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('UPDATE private_event SET json=? WHERE id=?').run(...values);
+  listPrivateEvent() {
+    return this.executor.all(query.selectFrom('private_event').select('json').orderBy('id', 'desc').limit(100));
   }
-  insertNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('INSERT INTO notification (event_id,player_id,json) VALUES (?,?,?)').run(...values);
+  updatePrivateEvent(json: string, id: IntegerInput) {
+    return this.executor.run(query.updateTable('private_event').set({ json }).where('id', '=', integer(id)));
   }
-  updateNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('UPDATE notification SET json=? WHERE id=?').run(...values);
+  insertNotification(event: number, player: number, json: string) {
+    return this.executor.run(query.insertInto('notification').values({ event_id: event, player_id: player, json }));
   }
-  insertPrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('INSERT INTO private_event (json) VALUES (?)').run(...values);
+  updateNotification(json: string, id: IntegerInput) {
+    return this.executor.run(query.updateTable('notification').set({ json }).where('id', '=', integer(id)));
   }
-  deletePrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('DELETE FROM private_event WHERE id=?').run(...values);
+  insertPrivateEvent(json: string) {
+    return this.executor.run(query.insertInto('private_event').values({ json }));
   }
-  deleteNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('DELETE FROM notification WHERE event_id=?').run(...values);
+  deletePrivateEvent(id: IntegerInput) {
+    return this.executor.run(query.deleteFrom('private_event').where('id', '=', integer(id)));
+  }
+  deleteNotification(event: number) {
+    return this.executor.run(query.deleteFrom('notification').where('event_id', '=', event));
   }
   deletePlayerNotification(event: number, player: number) {
-    this.db.prepare('DELETE FROM notification WHERE event_id=? AND player_id=?').run(event, player);
+    this.executor.run(query.deleteFrom('notification').where('event_id', '=', event).where('player_id', '=', player));
   }
-  listNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT id,player_id,json FROM notification WHERE event_id=?').all(...values);
+  listNotification(event: number) {
+    return this.executor.all(
+      query.selectFrom('notification').select(['id', 'player_id', 'json']).where('event_id', '=', event),
+    );
   }
-  notificationsForPlayer(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT json FROM notification WHERE player_id=?').all(...values);
+  notificationsForPlayer(player: number) {
+    return this.executor.all(query.selectFrom('notification').select('json').where('player_id', '=', player));
   }
-  findNotification(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT json FROM notification WHERE id=? AND player_id=?').get(...values);
+  findNotification(id: IntegerInput, player: number) {
+    return this.executor.get(
+      query.selectFrom('notification').select('json').where('id', '=', integer(id)).where('player_id', '=', player),
+    );
   }
-
   begin() {
     this.db.exec('BEGIN IMMEDIATE');
   }

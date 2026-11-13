@@ -1,6 +1,5 @@
-import { decryptCredentials, encryptCredentials } from '#src/repositories/credentials.repository';
+import { decryptCredentials, encryptCredentials, randomBytes } from '#src/repositories/crypto.repository';
 import { writeDurable } from '#src/repositories/files.repository';
-import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 

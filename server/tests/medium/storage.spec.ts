@@ -1,4 +1,4 @@
-import { ProfileImports } from '#src/repositories/profile-import.repository';
+import { ImportsService } from '#src/services/profile-import.service';
 import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -10,7 +10,7 @@ import { AchievementsSchema, PlayerProfileSchema } from '#src/protocol/generated
 import { UserStorageSchema } from '#src/protocol/generated/user_storage_pb';
 import { RouteResultSaveRequestSchema } from '#src/protocol/generated/route-result_pb';
 import { createCdn } from '#src/node/network/cdn';
-import { Workouts } from '#src/repositories/workout.repository';
+import { WorkoutsService } from '#src/services/workout.service';
 import { writeDurable } from '#src/repositories/files.repository';
 
 for (const companion of [false, true])
@@ -281,7 +281,7 @@ for (const count of [0, 1, 9, 10, 24, 25]) {
 await test('CDN workout endpoint serves exactly the cached XML', async (t) => {
   const f = await mediumFixture(t);
   const id = '84e16aa6-2e13-4cc5-9bea-76595a66abe0';
-  const file = new Workouts(f).file(id);
+  const file = new WorkoutsService(f).file(id);
   assert.ok(file);
   writeDurable(file, '<workout_file><name>Tempo</name></workout_file>');
   const response = await createCdn(f).request(`/tp-workouts/intervalsicu/${id}.zwo`);
@@ -310,5 +310,5 @@ await test('zfile uploads cannot create internal import journals through either 
     }
 
   assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM zfile').get()?.n, 0);
-  assert.doesNotThrow(() => new ProfileImports(f.accounts, f.world).recover());
+  assert.doesNotThrow(() => new ImportsService(f.accounts, f.world).recover());
 });

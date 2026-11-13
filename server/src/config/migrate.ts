@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { basename, dirname, relative, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { z } from 'zod';
 import { parse as parseIni } from 'ini';
@@ -260,9 +260,9 @@ export function migrationCandidate(options: MigrationOptions) {
 
     try {
       for (const preference of preferences) {
-        const row = store.db.prepare('SELECT 1 FROM rider_settings WHERE player_id=?').get(preference.playerId);
+        const exists = store.has(preference.playerId);
 
-        if (row && JSON.stringify(store.read(preference.playerId)) !== JSON.stringify(preference.overrides))
+        if (exists && JSON.stringify(store.read(preference.playerId)) !== JSON.stringify(preference.overrides))
           throw new ConfigError(`Conflicting persisted preferences for rider ${preference.playerId}`);
       }
     } finally {

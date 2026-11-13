@@ -1,15 +1,15 @@
 import type { ResolvedConfig } from '#src/config/index';
-import type { Accounts } from '#src/repositories/accounts.repository';
-import type { Sessions } from '#src/repositories/browser-session.repository';
+import type { AccountsService } from '#src/services/auth.service';
+import type { SessionsService } from '#src/services/browser-session.service';
 import type { Profiles } from '#src/repositories/profile.repository';
 import type { SettingsStore } from '#src/repositories/settings.repository';
 import type { World } from '#src/world/state';
 
 export interface RepositoryContext {
-  discord?: import('#src/repositories/discord.repository').DiscordBridge;
+  discord?: import('#src/services/discord.service').DiscordBridge;
   config: ResolvedConfig;
-  accounts: Accounts;
-  sessions: Sessions;
+  accounts: AccountsService;
+  sessions: SessionsService;
   world: World;
   settings: SettingsStore;
   profiles: Profiles;

@@ -32,10 +32,17 @@ for (const layer of ['http', 'services', 'repositories']) {
         if (typeOnly) continue;
 
         if (layer === 'http') {
-          assert.ok(!module.startsWith('#src/repositories/'), `${file} must use services for ${module}`);
+          assert.ok(
+            !module.startsWith('#src/repositories/') || module === '#src/repositories/crypto.repository',
+            `${file} must use services for ${module}`,
+          );
         } else {
           assert.ok(!module.startsWith('#src/http/') && !module.startsWith('hono'), `${file} depends on HTTP`);
-          assert.ok(!module.startsWith('#src/services/'), `${file} must not call another service`);
+
+          if (layer === 'repositories') {
+            assert.ok(!module.startsWith('#src/services/'), `${file} must not depend on services`);
+            assert.ok(!module.startsWith('#src/world/'), `${file} must not orchestrate world behavior`);
+          }
         }
 
         if (layer !== 'repositories') {
@@ -45,3 +52,23 @@ for (const layer of ['http', 'services', 'repositories']) {
     }
   });
 }
+
+await test('cryptography is centralized in the crypto repository', () => {
+  for (const file of sources(new URL('./', import.meta.url).pathname)) {
+    if (file.endsWith('/repositories/crypto.repository.ts')) continue;
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+
+    for (const statement of source.statements) {
+      if (
+        (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) ||
+        !statement.moduleSpecifier ||
+        !ts.isStringLiteral(statement.moduleSpecifier)
+      )
+        continue;
+      assert.ok(
+        !['node:crypto', 'crypto', 'argon2'].includes(statement.moduleSpecifier.text),
+        `${file} must use the crypto repository`,
+      );
+    }
+  }
+});

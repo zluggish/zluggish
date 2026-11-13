@@ -1,4 +1,5 @@
-import { log, configureLogging } from '#src/logging';
+import { once } from 'node:events';
+import { configureLogging } from '#src/logging';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -29,7 +30,7 @@ const { config } = await loadConfig(prepareContainerConfig(options));
 if (existsSync(resolve(config.storageDir, '.config-migration.json')))
   throw new ConfigError('Interrupted config migration; resume config migrate before starting');
 
-configureLogging(config.logging.level);
+configureLogging(config.logging.level, config.logging.format);
 
 const root = packageRoot();
 
@@ -56,29 +57,75 @@ const server = startHttp(app, listener);
 const cdn = startCdn(owner.runtime);
 const ride = startRideListeners(owner.runtime);
 
-const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host) : null;
+const dns = config.dns.enabled
+  ? startDns(config.server.advertisedIp, config.network.host, 53, owner.runtime.world.lifecycle.log)
+  : null;
 
-log.info(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
+const log = owner.runtime.world.lifecycle.log;
+
+function closeHttp(listener: ReturnType<typeof startHttp>) {
+  return new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
+}
+
+const listeners = [server, cdn, ride.tcp, ride.udp, ...(dns ? [dns.socket] : [])];
+
+try {
+  await Promise.all(listeners.map((listener) => once(listener, 'listening')));
+  log.info('server.ready', 'Zluggish is ready', {
+    host,
+    port: api.port,
+    tls: api.useCert,
+    dns: !!dns,
+    cdnPort: config.network.cdn.port,
+    tcpPort: config.network.tcp.port,
+    udpPort: config.network.udp.port,
+  });
+} catch (error) {
+  log.critical('server.start_failed', 'Required listener could not start', {
+    error: error instanceof Error ? error : undefined,
+  });
+  await Promise.allSettled([
+    closeHttp(server),
+    closeHttp(cdn),
+    Promise.try(() => ride.close()),
+    Promise.try(() => dns?.close()),
+    owner.close(),
+  ]);
+  throw new Error('Required listener could not start', { cause: error });
+}
+
+for (const listener of [server, cdn, ride.tcp])
+  listener.on('error', () => {
+    log.error('server.listener_failed', 'Network listener failed');
+  });
 
 let stopping = false;
 
 function shutdown() {
   if (stopping) return;
   stopping = true;
-  ride.close();
-  cdn.close();
-  dns?.close();
+  log.info('server.stopping', 'Zluggish is stopping');
 
   const timer = setTimeout(() => {
     if ('closeAllConnections' in server) server.closeAllConnections();
+
+    if ('closeAllConnections' in cdn) cdn.closeAllConnections();
+    log.error('server.stop_timeout', 'Shutdown timed out');
     process.exitCode = 1;
   }, 5000);
 
   timer.unref();
-  server.close(() => {
-    clearTimeout(timer);
-    void owner.close();
-  });
+  void Promise.all([closeHttp(server), closeHttp(cdn), ride.close(), dns?.close()])
+    .finally(() => owner.close())
+    .then(() => {
+      clearTimeout(timer);
+      log.info('server.stopped', 'Zluggish stopped');
+    })
+    .catch(() => {
+      clearTimeout(timer);
+      log.error('server.stop_failed', 'Shutdown failed');
+      process.exitCode = 1;
+    });
 }
 
 process.once('SIGINT', shutdown);

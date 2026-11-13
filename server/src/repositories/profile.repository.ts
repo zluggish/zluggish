@@ -1,18 +1,21 @@
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
-import type { Accounts } from '#src/repositories/accounts.repository';
+import type { AccountsRepository } from '#src/repositories/accounts.repository';
 import { writeDurable } from '#src/repositories/files.repository';
 import { clone, create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export class Profiles {
   readonly synthetic = new Map<bigint, PlayerProfile>();
-  constructor(readonly accounts: Accounts) {}
+  constructor(
+    readonly storage: string,
+    private readonly accounts: AccountsRepository,
+  ) {}
 
   folder(id: number) {
-    return resolve(this.accounts.storage, String(id));
+    return resolve(this.storage, String(id));
   }
 
   get(id: number): PlayerProfile {
@@ -49,8 +52,6 @@ export class Profiles {
   save(id: number, profile: PlayerProfile) {
     profile.id = BigInt(id);
     writeDurable(resolve(this.folder(id), 'profile.bin'), toBinary(PlayerProfileSchema, profile), true);
-    this.accounts.db
-      .prepare('UPDATE user SET first_name=?,last_name=? WHERE player_id=?')
-      .run(profile.firstName, profile.lastName, id);
+    this.accounts.updateName(id, profile.firstName, profile.lastName);
   }
 }

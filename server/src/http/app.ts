@@ -1,4 +1,5 @@
-import { log } from '#src/logging';
+import { createLogger } from '#src/logging';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import { ApplicationError } from '#src/errors';
 import { parseProtobuf } from '#src/http/protobuf';
 import { accountRoutes, authenticated } from '#src/http/routes/accounts';
@@ -30,7 +31,6 @@ import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
-import { logger } from 'hono/logger';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -42,10 +42,20 @@ export interface PublicMetadata {
 
 export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   const app = new Hono<RuntimeEnv>();
-  app.use(
-    '*',
-    logger((message) => log.info(message)),
-  );
+  const log = runtime?.world.lifecycle.log ?? createLogger();
+  app.use('*', async (c, next) => {
+    const requestId = randomUUID();
+    c.set('requestId', requestId);
+    const started = performance.now();
+    await next();
+    log.verbose('http.completed', 'Request completed', {
+      requestId,
+      method: c.req.method,
+      route: c.req.routePath === '*' ? 'unmatched' : c.req.routePath,
+      status: c.res.status,
+      durationMs: Math.round(performance.now() - started),
+    });
+  });
   const variants = fromJsonString(FeatureResponseSchema, metadata.variants);
 
   const byName = new Map(variants.variants.map((variant) => [variant.name, variant]));
@@ -104,7 +114,7 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
             .variants)
             known.set(variant.name, variant);
         } catch {
-          log.warn(`Ignoring invalid variants override for ${rider.player_id}`);
+          log.warn('config.variants_invalid', 'Ignoring invalid variants override', { playerId: rider.player_id });
         }
     }
 
@@ -148,7 +158,12 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
 
     if (error instanceof z.ZodError) return c.text('Invalid request', 400);
 
-    log.error(`Request failed: ${c.req.method} ${c.req.path}`, error);
+    log.error('http.failed', 'Request failed unexpectedly', {
+      requestId: c.get('requestId'),
+      method: c.req.method,
+      route: c.req.routePath === '*' ? 'unmatched' : c.req.routePath,
+      error: error instanceof Error ? error : undefined,
+    });
 
     return c.text('Request failed', 500);
   });

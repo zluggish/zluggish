@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv } from 'node:crypto';
+import { encryptPacketPayload, decryptLegacyPacketPayload } from '#src/repositories/crypto.repository';
 
 export interface InitializationVector {
   device: number;
@@ -21,26 +21,6 @@ function nonce(iv: InitializationVector) {
   data.writeInt32BE(iv.sequence, 8);
 
   return data;
-}
-
-function algorithm(key: Uint8Array) {
-  switch (key.length) {
-    case 16: {
-      return 'aes-128-gcm';
-    }
-
-    case 24: {
-      return 'aes-192-gcm';
-    }
-
-    case 32: {
-      return 'aes-256-gcm';
-    }
-
-    default: {
-      throw new Error('Invalid AES key length');
-    }
-  }
 }
 
 export function encodePacket(payload: Uint8Array, key: Uint8Array, iv: InitializationVector, fields: PacketHeader) {
@@ -70,13 +50,7 @@ export function encodePacket(payload: Uint8Array, key: Uint8Array, iv: Initializ
 
   const header = Buffer.concat([Buffer.from([flags]), ...parts]);
 
-  const cipher = createCipheriv(algorithm(key), key, nonce(iv), {
-    authTagLength: 4,
-  });
-
-  cipher.setAAD(header);
-
-  return Buffer.concat([header, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
+  return Buffer.concat([header, encryptPacketPayload(payload, key, nonce(iv), header)]);
 }
 
 /** Preserve the legacy receive contract: decrypted bytes include the four-byte trailer.
@@ -113,16 +87,10 @@ export function decodeLegacyPacket(data: Uint8Array, key: Uint8Array, iv: Initia
 
   if (buffer.length - offset < 4) throw new Error('Missing packet trailer');
 
-  const decipher = createDecipheriv(algorithm(key), key, nonce(actual), {
-    authTagLength: 4,
-  });
-
-  // The Python implementation calls decrypt without verify, including the tag bytes.
-  // No final() call: Node correctly rejects an unauthenticated GCM finalization.
   return {
     fields,
     iv: actual,
-    payload: decipher.update(buffer.subarray(offset)),
+    payload: decryptLegacyPacketPayload(buffer.subarray(offset), key, nonce(actual)),
   };
 }
 

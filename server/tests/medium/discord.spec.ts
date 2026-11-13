@@ -1,5 +1,5 @@
 import { validateConfig } from '#src/config/index';
-import { DiscordBridge } from '#src/repositories/discord.repository';
+import { DiscordBridge } from '#src/services/discord.service';
 import { SocialPlayerActionSchema } from '#src/protocol/generated/tcp-node-msgs_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { runtimeFixture } from '#tests/support/runtime';

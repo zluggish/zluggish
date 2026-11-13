@@ -1,17 +1,17 @@
 import { garminClient } from '#src/repositories/garmin.repository';
-import type { IntegrationsRepository } from '#src/repositories/integrations.repository';
+import type { FitnessRepository } from '#src/repositories/fitness.repository';
 import { downloadOfficialData } from '#src/repositories/profile-download.repository';
 import { authorizationUrl, checkSession, exchangeCode, writeToken } from '#src/repositories/strava.repository';
 import { officialHeaders, officialLogin, officialRelay } from '#src/repositories/zwift.repository';
 
 export class IntegrationsService {
-  constructor(private readonly repository: IntegrationsRepository) {}
-  deletePowerCurve(...values: Parameters<IntegrationsRepository['deletePowerCurve']>) {
+  constructor(private readonly repository: FitnessRepository) {}
+  deletePowerCurve(...values: Parameters<FitnessRepository['deletePowerCurve']>) {
     return this.repository.deletePowerCurve(...values);
   }
 
   request(...args: Parameters<typeof fetch>) {
-    return this.repository.request(...args);
+    return fetch(...args);
   }
 
   garminClient(...args: Parameters<typeof garminClient>) {

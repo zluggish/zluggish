@@ -8,6 +8,15 @@ assert.equal(spawnSync('python3', ['--version']).error?.code, 'ENOENT');
 
 assert.equal(existsSync('legacy'), false);
 
+// Exercise the installed admin command with production dependencies only.
+const help = spawnSync('zluggish', ['--help'], { encoding: 'utf8' });
+assert.equal(help.status, 0, help.stderr);
+assert.match(help.stdout, /Usage: zluggish/);
+const validate = spawnSync('zluggish', ['config', 'validate'], { encoding: 'utf8' });
+assert.equal(validate.status, 0, validate.stderr);
+const typecheck = spawnSync('zluggish', ['config', 'typecheck'], { encoding: 'utf8' });
+assert.equal(typecheck.status, 0, typecheck.stdout + typecheck.stderr);
+
 const storageConfig = '/usr/src/app/zwift-offline/storage/zluggish.config.ts';
 assert.equal(existsSync(storageConfig), false);
 
@@ -56,11 +65,15 @@ async function defaultStartup(expectedIp) {
 await defaultStartup('127.0.0.1');
 assert.ok(existsSync(storageConfig));
 const initialConfig = readFileSync(storageConfig, 'utf8');
-const updatedConfig = initialConfig.replace('127.0.0.1', '192.0.2.25');
+const updatedConfig = initialConfig.replace('127.0.0.1', '192.0.2.25').replace('0.0.0.0', '127.0.0.1');
 assert.notEqual(updatedConfig, initialConfig);
 writeFileSync(storageConfig, updatedConfig);
 await defaultStartup('192.0.2.25');
 assert.equal(readFileSync(storageConfig, 'utf8'), updatedConfig);
+const show = spawnSync('zluggish', ['config', 'show'], { encoding: 'utf8' });
+assert.equal(show.status, 0, show.stderr);
+assert.equal(JSON.parse(show.stdout).path, storageConfig);
+assert.equal(JSON.parse(show.stdout).network.host, '127.0.0.1');
 
 const file = '/tmp/zluggish.config.ts';
 

@@ -1,6 +1,6 @@
 import type { RepositoryContext } from '#src/context';
 import { SegmentResultSchema } from '#src/protocol/generated/segment-result_pb';
-import { backfillRoutes } from '#src/repositories/achievement.repository';
+import { backfillRoutes } from '#src/services/achievement.service';
 import { ProtobufRows } from '#src/repositories/protobuf.repository';
 import { RecordsRepository } from '#src/repositories/records.repository';
 

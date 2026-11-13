@@ -1,5 +1,5 @@
 import { createApp } from '#src/http/app';
-import { ActivityUploads } from '#src/repositories/uploads.repository';
+import { UploadsService } from '#src/services/uploads.service';
 import { Connections } from '#src/repositories/connections.repository';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
@@ -172,7 +172,7 @@ await test('Intervals.icu upload pairs the planned workout and removes only that
 
   const calls = stubFetch(t);
   const warnings: string[] = [];
-  await new ActivityUploads(f, (message) => {
+  await new UploadsService(f, (message) => {
     warnings.push(message);
   }).run(user.player_id, activityWithFit(), []);
 
@@ -218,7 +218,7 @@ await test('an expired Strava token is refreshed before upload and one failing s
   });
 
   const warnings: string[] = [];
-  await new ActivityUploads(f, (message) => {
+  await new UploadsService(f, (message) => {
     warnings.push(message);
   }).run(user.player_id, activityWithFit(), []);
 

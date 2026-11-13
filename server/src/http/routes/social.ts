@@ -14,7 +14,7 @@ import { course, worldTime } from '#src/world/state';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -204,6 +204,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (input.securePort && input.secret) message.zcKey = Buffer.from(input.secret, 'base64');
     runtime.world.phones.set(BigInt(user.player_id), message);
+    runtime.world.lifecycle.companion(BigInt(user.player_id));
 
     return c.body(null, 204);
   });

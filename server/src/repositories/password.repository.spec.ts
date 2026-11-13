@@ -1,4 +1,4 @@
-import { hashPassword, signIdentity, verifyIdentity, verifyPassword } from '#src/repositories/password.repository';
+import { hashPassword, signIdentity, verifyIdentity, verifyPassword } from '#src/repositories/crypto.repository';
 import { pythonFixtures as fixtures } from '#tests/support/python';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

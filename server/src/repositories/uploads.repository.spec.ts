@@ -1,4 +1,4 @@
-import { pairedEvent } from '#src/repositories/uploads.repository';
+import { pairedEvent } from '#src/services/uploads.service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 

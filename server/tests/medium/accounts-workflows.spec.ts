@@ -1,7 +1,7 @@
 import { mediumFixture, mediumBrowser } from '#tests/medium/support';
-import { migrateAccounts } from '#src/repositories/account-migration.repository';
-import { Accounts } from '#src/repositories/accounts.repository';
-import { ProfileImports } from '#src/repositories/profile-import.repository';
+import { migrateAccounts } from '#src/migrations/accounts';
+import { AccountsService } from '#src/services/auth.service';
+import { ImportsService } from '#src/services/profile-import.service';
 import { createApp } from '#src/http/app';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
@@ -173,7 +173,7 @@ await test('active riders cannot launch twice or replace their profile', async (
   await client.form('/login/', { player_id: String(user.player_id) });
   const response7 = await client.request('/ride');
   assert.equal(response7.status, 409);
-  const imports = new ProfileImports(f.accounts, f.world);
+  const imports = new ImportsService(f.accounts, f.world);
   assert.throws(
     () =>
       imports.prepare(user, {
@@ -186,7 +186,7 @@ await test('active riders cannot launch twice or replace their profile', async (
 await test('profile imports stage, preserve unknown fields, normalize IDs and keep passwords', async (t) => {
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Local Rider', 'secret', true);
-  const imports = new ProfileImports(f.accounts, f.world);
+  const imports = new ImportsService(f.accounts, f.world);
 
   const bytes = Buffer.concat([
     toBinary(
@@ -252,7 +252,7 @@ await test('existing Zluggish database is renamed without losing riders', async 
   const legacy = resolve(f.accounts.storage, 'zwift-offline.db');
   assert.ok(existsSync(current));
   renameSync(current, legacy);
-  const reopened = new Accounts(f.accounts.storage);
+  const reopened = new AccountsService(f.accounts.storage);
   t.after(() => reopened.close());
   assert.equal(reopened.get(rider.player_id)?.first_name, 'Existing');
   assert.ok(existsSync(current));
@@ -277,7 +277,7 @@ await test('account migration publishes the renamed database and preserves rider
   const current = resolve(f.accounts.storage, 'zluggish.db');
   const legacy = resolve(f.accounts.storage, 'zwift-offline.db');
   renameSync(current, legacy);
-  assert.throws(() => new Accounts(f.accounts.storage), /upgrade required/);
+  assert.throws(() => new AccountsService(f.accounts.storage), /upgrade required/);
   // SQLite backup work needs a live event loop on newer Node releases.
   const keepAlive = setInterval(() => {}, 1000);
 
@@ -290,7 +290,7 @@ await test('account migration publishes the renamed database and preserves rider
 
   assert.ok(existsSync(current));
   assert.ok(!existsSync(legacy));
-  const reopened = new Accounts(f.accounts.storage);
+  const reopened = new AccountsService(f.accounts.storage);
   assert.equal(reopened.get(rider.player_id)?.first_name, 'Migrated');
 
   for (const previous of [rider, oldScrypt]) {

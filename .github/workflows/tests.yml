@@ -30,42 +30,19 @@ jobs:
       - run: pnpm codegen
       - run: git diff --exit-code -- src/protocol/generated
 
-  cli:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-26.04, windows-latest, macos-latest]
-    defaults:
-      run:
-        working-directory: cli
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - uses: pnpm/action-setup@v6
-        with:
-          version: '10.28.1'
-      - run: pnpm --dir ../server install --frozen-lockfile
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm typecheck
-      - run: pnpm test
-
   quality:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
         with:
-          working_directory: cli
+          working_directory: server
       - run: mise run install
-        working-directory: cli
+        working-directory: server
       - run: mise run lint
-        working-directory: cli
+        working-directory: server
       - run: mise run format
-        working-directory: cli
+        working-directory: server
 
   container:
     runs-on: ubuntu-26.04

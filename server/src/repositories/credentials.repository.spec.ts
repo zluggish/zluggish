@@ -1,4 +1,4 @@
-import { decryptCredentials, encryptCredentials } from '#src/repositories/credentials.repository';
+import { decryptCredentials, encryptCredentials } from '#src/repositories/crypto.repository';
 import { pythonFixtures as fixtures } from '#tests/support/python';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

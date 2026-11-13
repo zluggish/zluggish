@@ -1,0 +1,67 @@
+import type { Activity } from '#src/protocol/generated/activity_pb';
+import { StreaksSchema } from '#src/protocol/generated/profile_pb';
+import { readStreaks, saveStreaks } from '#src/repositories/streak.repository';
+import type { Profiles } from '#src/repositories/profile.repository';
+import { clone, create } from '@bufbuild/protobuf';
+
+export function weekRange(time: number) {
+  const start = new Date(time);
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+
+  return { start: start.getTime(), end: start.getTime() + 604_800_000 - 1000 };
+}
+
+export function streaksFor(profiles: Profiles, id: number) {
+  const persisted = readStreaks(profiles.folder(id));
+
+  if (persisted) return persisted;
+  const profile = profiles.get(id);
+
+  return create(StreaksSchema, {
+    curStreak: profile.curStreak,
+    curStreakDistance: Math.trunc(profile.curStreakDistance),
+    curStreakElevation: Math.trunc(profile.curStreakElevation),
+    curStreakCalories: Math.trunc(profile.curStreakCalories),
+    maxStreak: profile.maxStreak,
+    maxStreakDistance: Math.trunc(profile.maxStreakDistance),
+    maxStreakElevation: Math.trunc(profile.maxStreakElevation),
+    maxStreakCalories: Math.trunc(profile.maxStreakCalories),
+    weekEnd: BigInt(weekRange(Number(profile.curStreakRide) * 1000).end),
+    curStreakRide: profile.curStreakRide * 1000n,
+  });
+}
+
+export function updateStreaks(profiles: Profiles, id: number, activity: Activity) {
+  const streaks = advancedStreak(streaksFor(profiles, id), activity);
+  saveStreaks(profiles.folder(id), streaks);
+}
+
+export function advancedStreak(previous: ReturnType<typeof streaksFor>, activity: Activity) {
+  const streaks = clone(StreaksSchema, previous);
+  const start = Date.parse(activity.startDate);
+
+  if (!Number.isFinite(start)) return streaks;
+
+  if (start > Number(streaks.weekEnd) + 604_800_000) {
+    streaks.curStreak = 1;
+    streaks.curStreakRide = BigInt(start);
+    streaks.curStreakDistance = 0;
+    streaks.curStreakElevation = 0;
+    streaks.curStreakCalories = 0;
+  } else if (start > Number(streaks.weekEnd)) {
+    streaks.curStreak++;
+    streaks.curStreakRide = BigInt(start);
+  }
+
+  streaks.curStreakDistance += Math.trunc(activity.distanceInMeters);
+  streaks.curStreakElevation += Math.trunc(activity.totalElevation);
+  streaks.curStreakCalories += Math.trunc(activity.calories);
+  streaks.maxStreak = Math.max(streaks.maxStreak, streaks.curStreak);
+  streaks.maxStreakDistance = Math.max(streaks.maxStreakDistance, streaks.curStreakDistance);
+  streaks.maxStreakElevation = Math.max(streaks.maxStreakElevation, streaks.curStreakElevation);
+  streaks.maxStreakCalories = Math.max(streaks.maxStreakCalories, streaks.curStreakCalories);
+  streaks.weekEnd = BigInt(weekRange(start).end);
+
+  return streaks;
+}

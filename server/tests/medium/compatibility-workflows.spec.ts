@@ -1,7 +1,6 @@
-import { identityOf } from '#src/repositories/accounts.repository';
-import { ProfileImports } from '#src/repositories/profile-import.repository';
-import { syncWorkoutsAutomatically } from '#src/repositories/automatic-workout.repository';
-import { Workouts } from '#src/repositories/workout.repository';
+import { identityOf } from '#src/services/auth.service';
+import { ImportsService } from '#src/services/profile-import.service';
+import { syncWorkoutsAutomatically, WorkoutsService } from '#src/services/workout.service';
 import { Connections } from '#src/repositories/connections.repository';
 import { writeDurable } from '#src/repositories/files.repository';
 import { LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
@@ -17,7 +16,7 @@ import { test } from 'node:test';
 await test('all rider state files stage, cancel, publish and recover with durable backups', async (t) => {
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Import Rider', '', true);
-  const imports = new ProfileImports(f.accounts, f.world);
+  const imports = new ImportsService(f.accounts, f.world);
 
   const files = {
     'profile.bin': toBinary(PlayerProfileSchema, create(PlayerProfileSchema, { id: 99n, firstName: 'Imported' })),
@@ -54,7 +53,7 @@ await test('all rider state files stage, cancel, publish and recover with durabl
   writeDurable(resolve(folder, 'old-streaks.bin'), files['streaks.bin']);
   writeDurable(resolve(folder, 'manifest.json'), JSON.stringify({ ...manifest, state: 'publishing' }), true);
   writeDurable(resolve(f.profiles.folder(user.player_id), 'streaks.bin'), old, true);
-  new ProfileImports(f.accounts, f.world).recover();
+  new ImportsService(f.accounts, f.world).recover();
   assert.equal(
     fromBinary(StreaksSchema, readFileSync(resolve(f.profiles.folder(user.player_id), 'streaks.bin'))).curStreak,
     3,
@@ -215,7 +214,7 @@ await test('automatic home and Android login sync coalesce, preserve UUIDs and e
   assert.match(await homeResponse.text(), /select name="climb"/);
   assert.equal(loginResponse.status, 200);
   assert.equal(eventRequests, 1);
-  const workouts = new Workouts(f);
+  const workouts = new WorkoutsService(f);
   const id = workouts.list(user.player_id)[0]?.id;
   assert.ok(id);
   f.world.logout(BigInt(user.player_id));
@@ -297,7 +296,7 @@ await test('a failed TrainingPeaks refresh retains all previously published file
   mkdirSync(folder);
   writeDurable(resolve(folder, 'first.zwo'), xml);
   f.settings.save(user.player_id, { 'workouts.trainingpeaks.bridgeFolder': folder });
-  const workouts = new Workouts(f);
+  const workouts = new WorkoutsService(f);
   await workouts.sync(user.player_id);
   const target = resolve(f.profiles.folder(user.player_id), 'customworkouts/trainingpeaks-first.zwo');
   const before = readFileSync(target);
@@ -313,7 +312,7 @@ await test('automatic sync deadline aborts provider work and never publishes a l
   const f = runtimeFixture(t);
   const user = await f.accounts.create('Deadline Rider', '', true);
   new Connections(f.config.storageDir).save(user.player_id, 'intervals', ['123', 'key']);
-  const workouts = new Workouts(f);
+  const workouts = new WorkoutsService(f);
   const before = Buffer.from('{"provider":"intervals-icu","workouts":[]}');
   writeDurable(workouts.metadataFile(user.player_id), before);
   const timeout = AbortSignal.timeout.bind(AbortSignal);

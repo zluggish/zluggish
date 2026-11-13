@@ -1,11 +1,11 @@
 import { log } from '#src/logging';
 import { EconomyConfigSchema, LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
-import type { ImportFiles } from '#src/repositories/profile-import.repository';
+import type { ImportFiles } from '#src/contracts/profile-import';
 import { officialHeaders, officialRelay, officialTokens } from '#src/repositories/zwift.repository';
 import { create, fromBinary, toBinary, toJsonString } from '@bufbuild/protobuf';
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from '#src/repositories/crypto.repository';
 
-/** Download into memory only; the browser must review and publish through ProfileImports. */
+/** Download into memory only; the browser must review and publish through ImportsService. */
 export async function downloadOfficialData(
   username: string,
   password: string,

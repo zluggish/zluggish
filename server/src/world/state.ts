@@ -1,3 +1,4 @@
+import { Lifecycle } from '#src/world/lifecycle';
 import { create, clone, toBinary } from '@bufbuild/protobuf';
 import type { PlayerState, WorldAttribute, ServerToClient } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerStateSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
@@ -30,6 +31,7 @@ export interface Relay {
 }
 
 export class World {
+  readonly lifecycle = new Lifecycle();
   presence: ((id: bigint, joining: boolean) => void) | undefined;
   simulation: Simulation | undefined;
   readonly personal = new Map<bigint, Map<bigint, PlayerState>>();
@@ -68,7 +70,8 @@ export class World {
     return relay;
   }
 
-  logout(playerId: bigint) {
+  logout(playerId: bigint, reason = 'logout') {
+    this.lifecycle.end(playerId, reason);
     this.simulation?.logout(playerId);
     const wasOnline = this.online.delete(playerId);
 
@@ -91,6 +94,7 @@ export class World {
     const snapshot = clone(PlayerStateSchema, state);
     snapshot.id = playerId;
     this.online.set(playerId, snapshot);
+    this.lifecycle.receive(playerId, snapshot.distance, course(snapshot), BigInt(snapshot.route), snapshot.sport);
 
     if (!previous) this.presence?.(playerId, true);
     this.simulation?.receive(playerId, snapshot);

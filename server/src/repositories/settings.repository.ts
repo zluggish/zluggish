@@ -1,5 +1,5 @@
-import type { RiderSettings } from '#src/config/index';
-import { ConfigError, validateRiderSettings } from '#src/config/index';
+import { query, SqliteExecutor } from '#src/db/query';
+import { ConfigError } from '#src/config/index';
 import { riderSettingsSchema } from '#src/config/schema';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -27,34 +27,11 @@ export const preferenceSchema = z.object({
 
 export type Preference = z.infer<typeof preferenceSchema>;
 
-export function resolveRiderSettings(defaults: RiderSettings, overrides: Overrides) {
-  return validateRiderSettings({
-    ghosts: { enabled: overrides['ghosts.enabled'] ?? defaults.ghosts.enabled },
-    uploads: {
-      zwift: {
-        enabled: overrides['uploads.zwift.enabled'] ?? defaults.uploads.zwift.enabled,
-      },
-      strava: {
-        method: overrides['uploads.strava.method'] ?? defaults.uploads.strava.method,
-      },
-    },
-    devices: {
-      zwiftClick: {
-        enabled: overrides['devices.zwiftClick.enabled'] ?? defaults.devices.zwiftClick.enabled,
-      },
-    },
-    workouts: {
-      trainingpeaks: {
-        bridgeFolder: overrides['workouts.trainingpeaks.bridgeFolder'] ?? defaults.workouts.trainingpeaks.bridgeFolder,
-      },
-    },
-  });
-}
-
 const rowSchema = z.object({ value: z.string() });
 
 export class SettingsStore {
   readonly db: DatabaseSync;
+  private readonly executor: SqliteExecutor;
 
   constructor(storage: string, readOnly = false) {
     const path = resolve(storage, 'settings.db');
@@ -64,6 +41,7 @@ export class SettingsStore {
     if (!readOnly) mkdirSync(storage, { recursive: true });
 
     this.db = new DatabaseSync(path, { readOnly, timeout: 5000 });
+    this.executor = new SqliteExecutor(this.db);
 
     const version = z
       .object({ user_version: z.number() })
@@ -85,8 +63,14 @@ export class SettingsStore {
     }
   }
 
+  has(playerId: number) {
+    return !!this.executor.get(
+      query.selectFrom('rider_settings').select('player_id').where('player_id', '=', playerId),
+    );
+  }
+
   read(playerId: number): Overrides {
-    const row = this.db.prepare('SELECT value FROM rider_settings WHERE player_id=?').get(playerId);
+    const row = this.executor.get(query.selectFrom('rider_settings').select('value').where('player_id', '=', playerId));
 
     if (!row) return {};
 
@@ -95,18 +79,24 @@ export class SettingsStore {
 
   save(playerId: number, overrides: Overrides) {
     const candidate = preferenceSchema.parse({ playerId, overrides });
-    this.db
-      .prepare('INSERT INTO rider_settings VALUES (?, ?) ON CONFLICT(player_id) DO UPDATE SET value=excluded.value')
-      .run(candidate.playerId, JSON.stringify(candidate.overrides));
+    const value = JSON.stringify(candidate.overrides);
+    this.executor.run(
+      query
+        .insertInto('rider_settings')
+        .values({ player_id: candidate.playerId, value })
+        .onConflict((conflict) => conflict.column('player_id').doUpdateSet({ value })),
+    );
   }
 
   import(id: string, preferences: Preference[]) {
     this.db.exec('BEGIN IMMEDIATE');
 
     try {
-      if (!this.db.prepare('SELECT 1 FROM config_migration WHERE id=?').get(id)) {
+      if (!this.executor.get(query.selectFrom('config_migration').select('id').where('id', '=', id))) {
         for (const preference of preferences) {
-          const row = this.db.prepare('SELECT value FROM rider_settings WHERE player_id=?').get(preference.playerId);
+          const row = this.executor.get(
+            query.selectFrom('rider_settings').select('value').where('player_id', '=', preference.playerId),
+          );
 
           if (row && JSON.stringify(this.read(preference.playerId)) !== JSON.stringify(preference.overrides))
             throw new ConfigError(`Conflicting persisted preferences for rider ${preference.playerId}`);
@@ -114,7 +104,7 @@ export class SettingsStore {
           this.save(preference.playerId, preference.overrides);
         }
 
-        this.db.prepare('INSERT INTO config_migration VALUES (?)').run(id);
+        this.executor.run(query.insertInto('config_migration').values({ id }));
       }
 
       this.db.exec('COMMIT');
@@ -127,27 +117,30 @@ export class SettingsStore {
   world(id: string) {
     if (!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='world_settings'").get()) return {};
 
-    const row = this.db.prepare('SELECT value FROM world_settings WHERE id=?').get(id);
+    const row = this.executor.get(query.selectFrom('world_settings').select('value').where('id', '=', id));
 
     return row ? z.record(z.string(), z.json()).parse(JSON.parse(rowSchema.parse(row).value)) : {};
   }
 
   worldIds() {
-    return this.db
-      .prepare('SELECT id FROM world_settings ORDER BY id')
-      .all()
+    return this.executor
+      .all(query.selectFrom('world_settings').select('id').orderBy('id'))
       .map((row) => z.string().parse(row.id));
   }
 
   saveWorld(id: string, value: Record<string, z.infer<ReturnType<typeof z.json>>>) {
     const checked = z.record(z.string(), z.json()).parse(value);
-    this.db
-      .prepare('INSERT INTO world_settings VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value')
-      .run(id, JSON.stringify(checked));
+    const serialized = JSON.stringify(checked);
+    this.executor.run(
+      query
+        .insertInto('world_settings')
+        .values({ id, value: serialized })
+        .onConflict((conflict) => conflict.column('id').doUpdateSet({ value: serialized })),
+    );
   }
 
   resetWorld(id: string) {
-    this.db.prepare('DELETE FROM world_settings WHERE id=?').run(id);
+    this.executor.run(query.deleteFrom('world_settings').where('id', '=', id));
   }
 
   close() {
@@ -163,7 +156,7 @@ export function checkRider(storage: string, playerId: number) {
   const db = new DatabaseSync(path, { readOnly: true });
 
   try {
-    if (!db.prepare('SELECT player_id FROM user WHERE player_id=?').get(playerId))
+    if (!new SqliteExecutor(db).get(query.selectFrom('user').select('player_id').where('player_id', '=', playerId)))
       throw new ConfigError('Unknown rider');
   } finally {
     db.close();

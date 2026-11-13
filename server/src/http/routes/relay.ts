@@ -22,7 +22,7 @@ import { course, worldTime } from '#src/world/state';
 import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { randomInt } from 'node:crypto';
+import { randomInt } from '#src/repositories/crypto.repository';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 

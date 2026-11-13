@@ -14,6 +14,7 @@ COPY --from=build /usr/src/app/zwift-offline/server/dist ./dist
 COPY assets ../assets
 COPY examples ../examples
 COPY examples/container/zluggish.config.ts ./zluggish.config.ts
+RUN chmod +x dist/src/cli/bin.js && ln -s /usr/src/app/zwift-offline/server/dist/src/cli/bin.js /usr/local/bin/zluggish
 ENV ZLUGGISH_CONTAINER_STORAGE_DIR=/usr/src/app/zwift-offline/storage
 EXPOSE 443 80 3024/udp 3025 53/udp
 VOLUME /usr/src/app/zwift-offline/storage

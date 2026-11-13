@@ -1,25 +1,48 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { query, SqliteExecutor } from '#src/db/query';
+import type { DatabaseSync } from 'node:sqlite';
 
 export class RecordsRepository {
-  constructor(private readonly db: DatabaseSync) {}
-  updateRouteResult(...values: SQLInputValue[]) {
-    return this.db.prepare('UPDATE route_result SET player_id=? WHERE id=?').run(...values);
+  private readonly executor: SqliteExecutor;
+  constructor(db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
   }
-  listRouteResult(...values: SQLInputValue[]) {
-    return this.db
-      .prepare(
-        'SELECT route_hash, min(world_time) AS first, max(world_time) AS last FROM route_result WHERE player_id=? GROUP BY route_hash',
-      )
-      .all(...values);
+  updateRouteResult(player: number, id: number | bigint) {
+    return this.executor.run(query.updateTable('route_result').set({ player_id: player }).where('id', '=', id));
   }
-  findPrivateEvent(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT json FROM private_event WHERE id=?').get(...values);
+  listRouteResult(player: number) {
+    return this.executor.all(
+      query
+        .selectFrom('route_result')
+        .select('route_hash')
+        .select(({ fn }) => [fn.min('world_time').as('first'), fn.max('world_time').as('last')])
+        .where('player_id', '=', player)
+        .groupBy('route_hash'),
+    );
+  }
+  findPrivateEvent(id: number | bigint) {
+    return this.executor.get(query.selectFrom('private_event').select('json').where('id', '=', id));
+  }
+  routeBadgeCount(player: number) {
+    return (
+      this.executor.get(
+        query
+          .selectFrom('route_result')
+          .select(({ fn }) => fn.countAll<number>().as('count'))
+          .where('player_id', '=', player)
+          .where('route_hash', '>=', 10_000)
+          .where('route_hash', '<=', 11_000),
+      )?.count ?? 0
+    );
+  }
+  ensureRoute(player: number, hash: number) {
+    const existing = this.executor.get(
+      query.selectFrom('route_result').select('id').where('player_id', '=', player).where('route_hash', '=', hash),
+    );
+
+    if (!existing) this.executor.run(query.insertInto('route_result').values({ player_id: player, route_hash: hash }));
   }
 
-  segmentLeaderboard(...values: SQLInputValue[]) {
-    const query = this.db.prepare('SELECT * FROM segment_result ORDER BY elapsed_ms');
-    query.setReadBigInts(true);
-
-    return query.all(...values);
+  segmentLeaderboard() {
+    return this.executor.all(query.selectFrom('segment_result').selectAll().orderBy('elapsed_ms'), true);
   }
 }

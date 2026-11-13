@@ -1,43 +1,39 @@
-import { writeDurable } from '#src/repositories/files.repository';
-import type { DescMessage } from '@bufbuild/protobuf';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { query, SqliteExecutor } from '#src/db/query';
+import { integer } from '#src/db/values';
+import type { DatabaseSync } from 'node:sqlite';
 
 export class StorageRepository {
-  constructor(private readonly db: DatabaseSync) {}
-  findZfile(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT * FROM zfile WHERE player_id=? AND folder=? AND filename=?').get(...values);
+  private readonly executor: SqliteExecutor;
+  constructor(db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
   }
-  insertZfile(...values: SQLInputValue[]) {
-    return this.db.prepare('INSERT INTO zfile (player_id,folder,filename,timestamp) VALUES (?,?,?,?)').run(...values);
+  findZfile(player: number, folder: string, filename: string) {
+    return this.executor.get(
+      query
+        .selectFrom('zfile')
+        .selectAll()
+        .where('player_id', '=', player)
+        .where('folder', '=', folder)
+        .where('filename', '=', filename),
+    );
   }
-  updateZfileTimestamp(...values: SQLInputValue[]) {
-    return this.db.prepare('UPDATE zfile SET timestamp=? WHERE id=?').run(...values);
+  insertZfile(player: number, folder: string, filename: string, timestamp: number) {
+    return this.executor.run(query.insertInto('zfile').values({ player_id: player, folder, filename, timestamp }));
   }
-  listZfile(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT * FROM zfile WHERE player_id=? AND folder=?').all(...values);
+  updateZfileTimestamp(timestamp: number, id: number) {
+    return this.executor.run(query.updateTable('zfile').set({ timestamp }).where('id', '=', id));
   }
-  findZfileRow(...values: SQLInputValue[]) {
-    return this.db.prepare('SELECT * FROM zfile WHERE id=? AND player_id=?').get(...values);
+  listZfile(player: number, folder: string) {
+    return this.executor.all(
+      query.selectFrom('zfile').selectAll().where('player_id', '=', player).where('folder', '=', folder),
+    );
   }
-  deleteZfile(...values: SQLInputValue[]) {
-    return this.db.prepare('DELETE FROM zfile WHERE id=?').run(...values);
+  findZfileRow(id: string, player: number) {
+    return this.executor.get(
+      query.selectFrom('zfile').selectAll().where('id', '=', integer(id)).where('player_id', '=', player),
+    );
   }
-
-  readData<Schema extends DescMessage>(schema: Schema, path: string) {
-    return existsSync(path) ? fromBinary(schema, readFileSync(path)) : create(schema);
-  }
-  saveData<Schema extends DescMessage>(schema: Schema, path: string, value: ReturnType<typeof create<Schema>>) {
-    writeDurable(path, toBinary(schema, value), true);
-  }
-  write(path: string, data: Uint8Array) {
-    writeDurable(path, data, true);
-  }
-  read(path: string) {
-    return existsSync(path) ? readFileSync(path) : null;
-  }
-  remove(path: string) {
-    if (existsSync(path)) unlinkSync(path);
+  deleteZfile(id: number) {
+    return this.executor.run(query.deleteFrom('zfile').where('id', '=', id));
   }
 }

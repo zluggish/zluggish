@@ -1,4 +1,3 @@
-import { log } from '#src/logging';
 import type { Socket } from 'node:net';
 import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
@@ -19,7 +18,13 @@ export function startRideListeners(runtime: Runtime) {
 
   const udp = createSocket((config.network.udp.host ?? host).includes(':') ? 'udp6' : 'udp4');
 
-  udp.on('error', (error) => log.error('UDP listener:', error.message));
+  let udpListening = false;
+  udp.once('listening', () => {
+    udpListening = true;
+  });
+  udp.on('error', (error) => {
+    if (udpListening) world.lifecycle.log.error('network.udp_failed', 'UDP listener failed', { error });
+  });
   udp.on('message', (data, address) => {
     try {
       const endpoint = `${address.address}:${address.port}`;
@@ -51,6 +56,7 @@ export function startRideListeners(runtime: Runtime) {
       clients.set(endpoint, id);
       relay.udpConnection = decoded.iv.connection;
       relay.udpRead = decoded.fields.sequence ?? relay.udpRead + 1;
+      world.lifecycle.connected(id);
       world.receive(id, incoming.state);
 
       for (const payload of world.responses(id, incoming.state, incoming.worldTime)) {
@@ -66,6 +72,7 @@ export function startRideListeners(runtime: Runtime) {
         udp.send(packet, address.port, address.address);
       }
     } catch {
+      world.lifecycle.diagnostic('network.udp_rejected', 'Dropped invalid datagram');
       /* Malformed/unordered datagrams must not terminate the ride listener. */
     }
   });
@@ -147,10 +154,16 @@ export function startRideListeners(runtime: Runtime) {
           const incoming = fromBinary(ClientToServerSchema, decoded.payload.subarray(2, -4));
 
           if (incoming.playerId !== playerId) throw new Error('Mismatched relay identity');
+          world.lifecycle.connected(playerId);
           const hello = first || decoded.fields.connection !== undefined;
 
           if (hello) {
             const previous = active.get(playerId);
+
+            world.lifecycle.log.verbose('network.tcp_connected', 'Validated relay connection', {
+              playerId,
+              replaced: !!previous && previous !== socket,
+            });
 
             if (previous && previous !== socket) previous.destroy();
             active.set(playerId, socket);
@@ -242,11 +255,16 @@ export function startRideListeners(runtime: Runtime) {
           }
         }
       } catch {
+        world.lifecycle.diagnostic('network.tcp_rejected', 'Closed invalid relay stream');
         socket.destroy();
       }
     });
     socket.on('error', () => {});
     socket.on('close', () => {
+      world.lifecycle.log.verbose('network.tcp_closed', 'Relay socket closed', {
+        playerId,
+        superseded: playerId !== null && active.get(playerId) !== socket,
+      });
       sockets.delete(socket);
 
       if (playerId !== null && active.get(playerId) === socket) active.delete(playerId);
@@ -258,7 +276,10 @@ export function startRideListeners(runtime: Runtime) {
   tcp.listen(config.network.tcp.port, config.network.tcp.host ?? host);
 
   const cleanup = setInterval(() => {
-    for (const [id, state] of world.online) if (worldTime() > state.worldTime + 30_000n) world.logout(id);
+    world.lifecycle.prune();
+
+    for (const [id, state] of world.online)
+      if (worldTime() > state.worldTime + 30_000n) world.logout(id, 'inactivity_timeout');
 
     for (const [endpoint, id] of clients) if (!world.relays.has(id)) clients.delete(endpoint);
   }, 5000);
@@ -266,12 +287,15 @@ export function startRideListeners(runtime: Runtime) {
   return {
     tcp,
     udp,
-    close: () => {
+    close: async () => {
+      world.lifecycle.close();
       clearInterval(cleanup);
 
       for (const socket of sockets) socket.destroy();
-      tcp.close();
-      udp.close();
+      await Promise.all([
+        new Promise<void>((resolve, reject) => tcp.close((error) => (error ? reject(error) : resolve()))),
+        new Promise<void>((resolve) => udp.close(resolve)),
+      ]);
     },
   };
 }

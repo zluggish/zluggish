@@ -1,6 +1,6 @@
 import { writeDurable } from '#src/repositories/files.repository';
 import { binaryBlob, CookieSession, unescapeHtml } from '#src/repositories/session.repository';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '#src/repositories/crypto.repository';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { z } from 'zod';

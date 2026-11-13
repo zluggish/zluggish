@@ -1,5 +1,5 @@
 import type { RepositoryContext } from '#src/context';
-import { sendMessage } from '#src/repositories/message.repository';
+import { sendMessage } from '#src/services/message.service';
 import type { SocialRepository } from '#src/repositories/social.repository';
 
 export class SocialService {

@@ -1,4 +1,4 @@
-import { log } from '#src/logging';
+import { createLogger } from '#src/logging';
 import { createSocket, type RemoteInfo } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -7,7 +7,7 @@ import type { Answer } from 'dns-packet';
 
 const redirected = new Set(['secure.zwift.com', 'us-or-rly101.zwift.com', 'cdn.zwift.com', 'launcher.zwift.com']);
 
-export function startDns(advertisedIp: string, host: string, port = 53) {
+export function startDns(advertisedIp: string, host: string, port = 53, log = createLogger()) {
   const socket = createSocket(host.includes(':') ? 'udp6' : 'udp4');
   const resolver = new Resolver({ timeout: 2000, tries: 1 });
   resolver.setServers(['8.8.8.8', '8.8.4.4']);
@@ -79,14 +79,21 @@ export function startDns(advertisedIp: string, host: string, port = 53) {
   socket.on('message', (bytes, peer) => {
     void handleMessage(bytes, peer);
   });
-  socket.on('error', (error) => log.error('DNS listener:', error.message));
+  let listening = false;
+  socket.once('listening', () => {
+    listening = true;
+  });
+  socket.on('error', (error) => {
+    if (listening) log.error('network.dns_failed', 'DNS listener failed', { error });
+  });
   socket.bind(port, host);
 
   return {
     socket,
     close: () => {
       resolver.cancel();
-      socket.close();
+
+      return new Promise<void>((resolve) => socket.close(resolve));
     },
   };
 }

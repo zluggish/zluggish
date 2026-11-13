@@ -1,4 +1,4 @@
-import { Workouts, workoutDetails } from '#src/repositories/workout.repository';
+import { WorkoutsService, workoutDetails } from '#src/services/workout.service';
 import { Connections } from '#src/repositories/connections.repository';
 import { writeDurable } from '#src/repositories/files.repository';
 import { PrivateEventProtoSchema } from '#src/protocol/generated/events_pb';
@@ -90,7 +90,7 @@ await test('workout ramps split at power boundaries and cached schedules retain 
   );
   assert.deepEqual(details?.zonePercentages, [7, 27, 53, 13, 0, 0]);
   assert.throws(() => workoutDetails('<!DOCTYPE foo><workout_file/>'));
-  const workouts = new Workouts(f);
+  const workouts = new WorkoutsService(f);
   const id = '84e16aa6-2e13-4cc5-9bea-76595a66abe0';
   const file = workouts.file(id);
   assert.ok(file);

@@ -1,20 +1,15 @@
+import { createLogger } from '#src/logging';
 import type { RepositoryContext } from '#src/context';
 import { ActivitiesRepository } from '#src/repositories/activities.repository';
 import { Connections } from '#src/repositories/connections.repository';
 import { EventsRepository } from '#src/repositories/events.repository';
 import { FitnessRepository } from '#src/repositories/fitness.repository';
 import { GoalRepository } from '#src/repositories/goal.repository';
-import { IntegrationsRepository } from '#src/repositories/integrations.repository';
-import { ProfileImports } from '#src/repositories/profile-import.repository';
 import { ProtobufRows } from '#src/repositories/protobuf.repository';
 import { RecordsRepository } from '#src/repositories/records.repository';
 import { SocialRepository } from '#src/repositories/social.repository';
 import { StorageRepository } from '#src/repositories/storage.repository';
-import { ActivityUploads } from '#src/repositories/uploads.repository';
-import { Workouts } from '#src/repositories/workout.repository';
-import { AccountsService } from '#src/services/accounts.service';
 import { ActivitiesService } from '#src/services/activities.service';
-import { SessionsService } from '#src/services/browser-session.service';
 import { ConnectionsService } from '#src/services/connections.service';
 import { EventsService } from '#src/services/events.service';
 import { FilesService } from '#src/services/files.service';
@@ -32,19 +27,23 @@ import { UploadsService } from '#src/services/uploads.service';
 import { WorkoutsService } from '#src/services/workout.service';
 
 export function createServices(context: RepositoryContext) {
+  const fitness = new FitnessRepository(context.accounts.db);
+  context.world.lifecycle.log = createLogger(context.config.logging, { component: 'server' });
+  context.world.lifecycle.intervalSeconds = context.config.logging.rideProgressIntervalSeconds;
+
   return {
-    accounts: new AccountsService(context.accounts),
-    sessions: new SessionsService(context.sessions),
+    accounts: context.accounts,
+    sessions: context.sessions,
     profiles: new ProfilesService(context.profiles, context),
     settings: new SettingsService(context.settings),
     connections: new ConnectionsService(new Connections(context.config.storageDir)),
-    imports: new ImportsService(new ProfileImports(context.accounts, context.world)),
-    workouts: new WorkoutsService(new Workouts(context), context),
-    uploads: new UploadsService(new ActivityUploads(context)),
+    imports: new ImportsService(context.accounts, context.world),
+    workouts: new WorkoutsService(context),
+    uploads: new UploadsService(context),
     files: new FilesService(),
     recordData: new RecordDataService(new ProtobufRows(context.accounts.db)),
-    goals: new GoalService(new GoalRepository(context.accounts)),
-    fitness: new FitnessService(new FitnessRepository(context.accounts.db), context.profiles),
+    goals: new GoalService(new GoalRepository(context.accounts.db)),
+    fitness: new FitnessService(fitness, context.profiles),
     storage: new StorageService(new StorageRepository(context.accounts.db), context),
     records: new RecordsService(
       new RecordsRepository(context.accounts.db),
@@ -54,7 +53,7 @@ export function createServices(context: RepositoryContext) {
     events: new EventsService(new EventsRepository(context.accounts.db), context),
     activities: new ActivitiesService(new ActivitiesRepository(context.accounts.db), context),
     social: new SocialService(new SocialRepository(context.accounts.db), context),
-    integrations: new IntegrationsService(new IntegrationsRepository(context.accounts.db)),
+    integrations: new IntegrationsService(fitness),
   };
 }
 

@@ -1,4 +1,3 @@
-import { log } from '#src/logging';
 import { clone, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { existsSync, readFileSync, readdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
@@ -9,7 +8,7 @@ import { PlayerStateSchema, GhostSchema, UserBikeAction } from '#src/protocol/ge
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { Runtime } from '#src/http/runtime';
 import { writeDurable } from '#src/repositories/files.repository';
-import { resolveRiderSettings } from '#src/repositories/settings.repository';
+import { resolveRiderSettings } from '#src/services/settings.service';
 import { worldTime, course, road, forward } from '#src/world/state';
 import { clamp, Random } from '#src/world/geometry';
 import { Blob } from '#src/world/blob';
@@ -120,7 +119,7 @@ export class Simulation {
             folder: basename(resolve(file, '..')),
           });
       } catch {
-        log.warn(`Skipping invalid RoboPacer: ${basename(resolve(file, '..'))}`);
+        this.runtime.world.lifecycle.log.warn('simulation.invalid_pacer', 'Skipping invalid RoboPacer');
       }
     }
 
@@ -150,7 +149,7 @@ export class Simulation {
 
             index++;
           } catch {
-            log.warn(`Skipping invalid bot recording: ${basename(file)}`);
+            this.runtime.world.lifecycle.log.warn('simulation.invalid_bot', 'Skipping invalid bot recording');
           }
         }
       }
@@ -323,7 +322,7 @@ export class Simulation {
               this.pool.customizeGhost(profile, this.ghostAppearance);
               this.runtime.profiles.synthetic.set(ghostId, profile);
             } catch {
-              log.warn('Skipping an invalid ghost recording');
+              this.runtime.world.lifecycle.log.warn('simulation.invalid_ghost', 'Skipping an invalid ghost recording');
             }
           }
         }
@@ -394,7 +393,7 @@ export class Simulation {
         state.id = 9_000_000n + (id % 1000n) * 1000n + BigInt(bookmarks.size + 1);
         bookmarks.set(state.id, { state, name: basename(file, '.bin') });
       } catch {
-        log.warn('Skipping an invalid bookmark');
+        this.runtime.world.lifecycle.log.warn('simulation.invalid_bookmark', 'Skipping an invalid bookmark');
       }
     }
 

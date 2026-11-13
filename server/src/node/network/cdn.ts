@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 import { startHttp } from '#src/node/network/http';
 import type { Runtime } from '#src/http/runtime';
-import { Workouts } from '#src/repositories/workout.repository';
+import { WorkoutsService } from '#src/services/workout.service';
 
 const contentTypes = new Map([
   ['.xml', 'text/xml'],
@@ -21,7 +21,7 @@ export function createCdn(runtime: Runtime) {
   const app = new Hono();
   const root = resolve(runtime.assets, 'cdn');
   app.get('/tp-workouts/intervalsicu/:id', (c) => {
-    const file = new Workouts(runtime).file(c.req.param('id').replace(/\.zwo$/, ''));
+    const file = new WorkoutsService(runtime).file(c.req.param('id').replace(/\.zwo$/, ''));
 
     return file && existsSync(file)
       ? c.body(readFileSync(file), 200, { 'Content-Type': 'application/xml' })

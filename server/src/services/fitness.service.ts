@@ -1,6 +1,6 @@
 import { BestEffortPointMsgSchema, PowerCurveAggregationMsgSchema } from '#src/protocol/generated/profile_pb';
 import type { Profiles } from '#src/repositories/profile.repository';
-import { streaksFor, weekRange } from '#src/repositories/streak.repository';
+import { streaksFor, weekRange } from '#src/services/streak.service';
 import { create } from '@bufbuild/protobuf';
 import { z } from 'zod';
 import type { FitnessRepository } from '#src/repositories/fitness.repository';

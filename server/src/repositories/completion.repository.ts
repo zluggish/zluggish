@@ -1,15 +1,6 @@
+import { query, SqliteExecutor } from '#src/db/query';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-
-export const completionSchemaSQL = `
-CREATE TABLE IF NOT EXISTS activity_completion (
- activity_id INTEGER PRIMARY KEY, player_id INTEGER NOT NULL, payload BLOB NOT NULL,
- streak BLOB, done INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS activity_upload (
- activity_id INTEGER NOT NULL, provider TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
- PRIMARY KEY(activity_id, provider)
-);`;
 
 const completion = z.object({
   activity_id: z.number(),
@@ -20,23 +11,26 @@ const completion = z.object({
 });
 
 export class Completions {
-  constructor(readonly db: DatabaseSync) {}
+  private readonly executor: SqliteExecutor;
+  constructor(readonly db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
+  }
   get(id: bigint) {
-    const row = this.db.prepare('SELECT * FROM activity_completion WHERE activity_id=?').get(id);
+    const row = this.executor.get(query.selectFrom('activity_completion').selectAll().where('activity_id', '=', id));
 
     return row ? completion.parse(row) : null;
   }
   prepare(id: bigint, player: number, payload: Uint8Array, streak: Uint8Array | null) {
-    this.db
-      .prepare('INSERT INTO activity_completion (activity_id,player_id,payload,streak) VALUES (?,?,?,?)')
-      .run(id, player, payload, streak);
+    this.executor.run(
+      query.insertInto('activity_completion').values({ activity_id: id, player_id: player, payload, streak }),
+    );
   }
   unfinished() {
-    return this.db
-      .prepare('SELECT * FROM activity_completion WHERE done=0 ORDER BY activity_id')
-      .all()
+    return this.executor
+      .all(query.selectFrom('activity_completion').selectAll().where('done', '=', 0).orderBy('activity_id'))
       .map((row) => completion.parse(row));
   }
+
   complete(id: bigint, providers: string[], save: () => void) {
     this.db.exec('BEGIN IMMEDIATE');
 
@@ -44,8 +38,13 @@ export class Completions {
       save();
 
       for (const provider of providers)
-        this.db.prepare('INSERT OR IGNORE INTO activity_upload (activity_id,provider) VALUES (?,?)').run(id, provider);
-      this.db.prepare('UPDATE activity_completion SET done=1 WHERE activity_id=?').run(id);
+        this.executor.run(
+          query
+            .insertInto('activity_upload')
+            .values({ activity_id: id, provider })
+            .onConflict((conflict) => conflict.doNothing()),
+        );
+      this.executor.run(query.updateTable('activity_completion').set({ done: 1 }).where('activity_id', '=', id));
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');

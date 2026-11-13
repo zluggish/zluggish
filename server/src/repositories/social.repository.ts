@@ -1,32 +1,68 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { integer } from '#src/db/values';
+import type { IntegerInput } from '#src/db/values';
+import { query, SqliteExecutor } from '#src/db/query';
+import { sql } from 'kysely';
+import type { DatabaseSync } from 'node:sqlite';
 
 export class SocialRepository {
-  constructor(private readonly db: DatabaseSync) {}
-  listUser(...values: SQLInputValue[]) {
-    return this.db
-      .prepare('SELECT player_id FROM user WHERE first_name LIKE ? OR last_name LIKE ? LIMIT ? OFFSET ?')
-      .all(...values);
+  private readonly executor: SqliteExecutor;
+  constructor(db: DatabaseSync) {
+    this.executor = new SqliteExecutor(db);
   }
-  findActivity(...values: SQLInputValue[]) {
-    return this.db
-      .prepare(
-        'SELECT SUM(CAST((julianday(date)-julianday(start_date))*1440 AS INTEGER)) AS timeRiddenInMinutes, SUM(distanceInMeters) AS distanceRiddenInMeters, SUM(calories) AS caloriesBurned, SUM(total_elevation) AS heightClimbedInMeters FROM activity WHERE player_id=? AND julianday(start_date)>=julianday(?)',
-      )
-      .get(...values);
-  }
-  insertPlayback(...values: SQLInputValue[]) {
-    return this.db
-      .prepare('INSERT INTO playback (player_id,uuid,segment_id,time,world_time,type) VALUES (?,?,?,?,?,?)')
-      .run(...values);
-  }
-
-  playbackForSegment(...values: SQLInputValue[]) {
-    const query = this.db.prepare(
-      'SELECT * FROM playback WHERE player_id=? AND segment_id=? AND type=? AND (? OR world_time>?) AND (? OR world_time<?) ORDER BY CASE WHEN ? THEN time ELSE -world_time END LIMIT 1',
+  listUser(first: string, last: string, limit: number, offset: number) {
+    return this.executor.all(
+      query
+        .selectFrom('user')
+        .select('player_id')
+        .where(({ eb, or }) => or([eb('first_name', 'like', first), eb('last_name', 'like', last)]))
+        .limit(limit)
+        .offset(offset),
     );
+  }
+  findActivity(player: IntegerInput, since: string) {
+    return this.executor.get(
+      query
+        .selectFrom('activity')
+        .select([
+          sql<number | null>`sum(cast((julianday(date) - julianday(start_date)) * 1440 as integer))`.as(
+            'timeRiddenInMinutes',
+          ),
+          sql<number | null>`sum(distanceInMeters)`.as('distanceRiddenInMeters'),
+          sql<number | null>`sum(calories)`.as('caloriesBurned'),
+          sql<number | null>`sum(total_elevation)`.as('heightClimbedInMeters'),
+        ])
+        .where('player_id', '=', integer(player))
+        .where(sql<number>`julianday(start_date)`, '>=', sql<number>`julianday(${since})`),
+    );
+  }
+  insertPlayback(player: number, uuid: string, segment: bigint, time: number, worldTime: bigint, type: number) {
+    return this.executor.run(
+      query
+        .insertInto('playback')
+        .values({ player_id: player, uuid, segment_id: segment, time, world_time: worldTime, type }),
+    );
+  }
+  playbackForSegment(
+    player: number,
+    segment: bigint,
+    type: number,
+    ignoreStart: number,
+    start: bigint,
+    ignoreEnd: number,
+    end: bigint,
+    fastest: number,
+  ) {
+    let selection = query
+      .selectFrom('playback')
+      .selectAll()
+      .where('player_id', '=', player)
+      .where('segment_id', '=', segment)
+      .where('type', '=', type);
 
-    query.setReadBigInts(true);
+    if (!ignoreStart) selection = selection.where('world_time', '>', start);
 
-    return query.get(...values);
+    if (!ignoreEnd) selection = selection.where('world_time', '<', end);
+
+    return this.executor.get(selection.orderBy(fastest ? sql`time` : sql`-world_time`).limit(1), true);
   }
 }
