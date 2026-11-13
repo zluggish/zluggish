@@ -170,7 +170,7 @@ To restore the original Zwift usage, comment out or remove the line added to the
 file before starting Zwift. Then ensure Zwift is fully closed (right click
 the Zwift system tray icon and exit) and restart Zwift.
 
-### Step 3 [OPTIONAL]: Import your official Zwift profile
+## Importing your official Zwift profile
 
 Create/select the destination local rider first, then use **Import Zwift profile** on rider home or **Settings → Zwift**. Download selected data with official credentials, or upload previously exported `profile.bin`, `achievements.bin` and `economy_config.txt` files. The former Python `get_profile.py` helper has been removed; use the built-in import form.
 
@@ -180,7 +180,7 @@ Official credentials do not become a local password and are not saved by importi
 
 Do not copy files blindly into `storage/<local-player-id>` or a folder named after the official player ID. Use the rider-targeted import form so files are validated and IDs/names are normalized. Official downloads need access to Zwift services; client redirection may need to be disabled on the machine used for official login.
 
-### Step 4 [OPTIONAL]: Upload activities
+## Sharing activities
 
 Connections belong to the selected local rider. Completed activities are saved locally before uploads; one failing provider does not lose the saved activity. Live provider authorization and delivery still need verification for this TypeScript migration.
 
@@ -219,7 +219,7 @@ The Runalyze adapter reads the rider's existing `storage/<local-player-id>/runal
 
 </details>
 
-### Step 5 [OPTIONAL]: Install Zwift Companion App
+## The Zwift Companion app
 
 <details><summary>Android (non-rooted device)</summary>
 
@@ -241,23 +241,13 @@ The Runalyze adapter reads the rider's existing `storage/<local-player-id>/runal
 
 </details>
 
-### Rider accounts and household riding
-
-Every installation uses local rider accounts, whether one person or several people ride. Each desktop launcher startup shows **Who’s riding?**, including when only one rider exists. Select a rider, choose ride options, then **Start Zwift**. **Switch rider** returns to the picker. Progress, workouts, ghosts, activities and integrations remain separate.
-
-The account and activity database is `storage/zluggish.db`. Existing Zluggish databases named `zwift-offline.db` are renamed on startup; legacy databases are renamed after `accounts migrate` succeeds.
-
-On a fresh installation, the launcher opens the **Add rider** screen directly. The same **Add rider** form is used for the first and later riders: enter a name and optionally a local password. The first rider is the owner/admin; later riders are regular accounts. An official Zwift account is optional. Without importing a profile, Zwift collects physical profile details when you first ride.
-
-Riders with passwords show a password prompt when selected. Riders without passwords can be selected by anyone who can reach the server, including an owner left without a password. In **Settings → Local password**, add protection, or confirm the current password to change/remove it. Changing protection revokes previous sessions, including game refresh tokens. Local passwords are independent of official Zwift and integration credentials.
-
-**Add rider** appears on the picker by default. Disable anonymous registration with `accounts.allowSelfRegistration: false` in `zluggish.config.ts` and restart; signed-in admins can still add riders. Duplicate display names are allowed; cards show rider numbers. Two devices can ride as different users concurrently. Starting another ride as a rider already active is rejected; switching the launcher does not stop an existing game.
+## Android passwords (TODO)
 
 Android uses native credential login, so set a local password for that rider and use the login handle shown in Settings. There is no passwordless native picker.
 
 For a separate server, set `server.advertisedIp` and allow TCP 80, 443, 3025 and UDP 3024 on the local network. This enables private household riding, not access to Zwift’s public multiplayer world.
 
-### Password recovery
+## Password recovery
 
 Stop the server before using the recovery CLI. Put the new password in a private file, then run from the repository root:
 
@@ -267,7 +257,7 @@ pnpm --dir cli cli --storage-dir /path/to/storage accounts recover --user 1 --pa
 
 Remove the private password file after recovery. Omit `--admin` for password-only recovery. To remove password protection instead, use `--remove-password` without `--password-file`. The CLI revokes existing sessions. It does not prompt interactively for a password. Gmail/SMTP reset links are no longer supported.
 
-### Step 6 [OPTIONAL]: Enable IPv6
+## IPv6 (Optional)
 
 Set `network.host: '::'` in `zluggish.config.ts`, or choose per-listener `host` values under `network.api`, `network.cdn`, `network.tcp` and `network.udp`. Configure a client-reachable `server.advertisedIp` and matching firewall/host mappings. IPv6 behavior still needs target-platform testing; the old `ZOFFLINE_SERVER_HOST` variable and Python `run_ipv6.bat` startup path are not used by Node.
 
