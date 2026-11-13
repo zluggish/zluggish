@@ -203,11 +203,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     });
 
     if (input.securePort && input.secret) message.zcKey = Buffer.from(input.secret, 'base64');
-    const replaced = runtime.world.phones.has(BigInt(user.player_id));
     runtime.world.phones.set(BigInt(user.player_id), message);
-    console.info(
-      `Companion registration queued: rider=${user.player_id} address=${JSON.stringify(input.phoneAddress)} port=${port} secure=${!!input.securePort} replaced=${replaced} relay=${runtime.world.relays.has(BigInt(user.player_id))}`,
-    );
 
     return c.body(null, 204);
   });

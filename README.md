@@ -55,7 +55,7 @@ It should say something like
 zluggish-1  | Zluggish server: https://0.0.0.0:443
 ```
 
-If you want to change settings, that is done by editing `storage/zluggish.config.ts`.
+The container creates `storage/zluggish.config.ts` on first startup if it does not exist. Edit this file to change settings, then recreate the container. For example:
 
 ```ts
 import { defineConfig } from 'zluggish/config';
@@ -66,6 +66,8 @@ export default defineConfig({
   network: { host: '0.0.0.0', api: { port: 443, useCert: true } },
 });
 ```
+
+`server.advertisedIp` must be a non-wildcard IP address reachable by the game. Listener hosts must be non-empty IP addresses or hostnames; use `0.0.0.0` to listen on all IPv4 interfaces. Invalid or unknown settings prevent startup.
 
 You are now ready to connect the client
 

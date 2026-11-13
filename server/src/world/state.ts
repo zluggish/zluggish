@@ -77,8 +77,7 @@ export class World {
     this.updates.delete(playerId);
     this.news.delete(playerId);
     this.personal.delete(playerId);
-
-    if (this.phones.delete(playerId)) console.info(`Companion registration discarded on logout: rider=${playerId}`);
+    this.phones.delete(playerId);
   }
 
   receive(playerId: bigint, state: PlayerState) {

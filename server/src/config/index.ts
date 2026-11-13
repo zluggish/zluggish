@@ -33,7 +33,9 @@ export function validateConfig(value: ConfigInput): ResolvedConfig {
 }
 
 export function validationError(error: z.ZodError): ConfigError {
-  return new ConfigError(error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.code}`).join('; '));
+  return new ConfigError(
+    error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.code === 'custom' ? i.message : i.code}`).join('; '),
+  );
 }
 
 export function validateRiderSettings(value: z.input<typeof riderSettingsSchema>) {

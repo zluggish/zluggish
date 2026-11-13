@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { loadConfig, packageRoot } from '#src/config/load';
+import { loadConfig, packageRoot, prepareContainerConfig } from '#src/config/load';
 import type { LoadOptions } from '#src/config/load';
 import { ConfigError } from '#src/config/index';
 import { startHttp } from '#src/node/network/http';
@@ -23,7 +23,7 @@ if (values.config !== undefined) options.path = values.config;
 
 if (values['storage-dir'] !== undefined) options.storageDir = values['storage-dir'];
 
-const { config } = await loadConfig(options);
+const { config } = await loadConfig(prepareContainerConfig(options));
 
 if (existsSync(resolve(config.storageDir, '.config-migration.json')))
   throw new ConfigError('Interrupted config migration; resume config migrate before starting');
@@ -40,7 +40,7 @@ const variants = readFileSync(resolve(assets, 'data/variants.txt'), 'utf8');
 const owner = await openRuntime(config, assets);
 const app = createApp({ gameInfo, gameInfoHash, variants }, owner.runtime);
 const api = config.network.api;
-const host = api.host ?? (config.network.host || '127.0.0.1');
+const host = api.host ?? config.network.host;
 const listener: HttpListenerOptions = { port: api.port, host };
 
 if (api.useCert)
@@ -53,7 +53,7 @@ const server = startHttp(app, listener);
 const cdn = startCdn(owner.runtime);
 const ride = startRideListeners(owner.runtime);
 
-const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host || '127.0.0.1') : null;
+const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host) : null;
 
 console.log(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
 

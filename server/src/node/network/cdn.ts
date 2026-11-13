@@ -77,7 +77,7 @@ export function createCdn(runtime: Runtime) {
 
 export function startCdn(runtime: Runtime) {
   return startHttp(createCdn(runtime), {
-    host: runtime.config.network.cdn.host ?? (runtime.config.network.host || '127.0.0.1'),
+    host: runtime.config.network.cdn.host ?? runtime.config.network.host,
     port: runtime.config.network.cdn.port,
   });
 }

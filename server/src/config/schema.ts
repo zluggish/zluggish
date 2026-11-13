@@ -1,4 +1,29 @@
+import { BlockList, isIP } from 'node:net';
 import { z } from 'zod';
+
+const unspecifiedAddresses = new BlockList();
+
+unspecifiedAddresses.addAddress('0.0.0.0', 'ipv4');
+
+unspecifiedAddresses.addAddress('::', 'ipv6');
+
+const advertisedIp = z.string().refine((value) => {
+  const family = isIP(value);
+
+  return family !== 0 && !unspecifiedAddresses.check(value, family === 4 ? 'ipv4' : 'ipv6');
+}, 'Expected a non-wildcard IP address');
+
+const listenerHost = z.string().refine((value) => {
+  if (isIP(value)) return true;
+
+  if (/^[\d.]+$/.test(value)) return false;
+
+  if (value.length > 253) return false;
+
+  const labels = (value.endsWith('.') ? value.slice(0, -1) : value).split('.');
+
+  return labels.every((label) => /^[a-z\d_](?:[a-z\d_-]{0,61}[a-z\d_])?$/i.test(label));
+}, 'Expected a non-empty IP address or hostname');
 
 export const riderSettingsSchema = z
   .strictObject({
@@ -58,10 +83,7 @@ export const configSchema = z
   .strictObject({
     server: z
       .strictObject({
-        advertisedIp: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default('127.0.0.1'),
+        advertisedIp: advertisedIp.default('127.0.0.1'),
       })
       .prefault({})
       .readonly(),
@@ -158,34 +180,31 @@ export const configSchema = z
       .readonly(),
     network: z
       .strictObject({
-        host: z
-          .string()
-          .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default('127.0.0.1'),
+        host: listenerHost.default('127.0.0.1'),
         cdn: z
           .strictObject({
-            host: z.union([z.string().refine((v) => !v.includes('\0'), 'Invalid string'), z.null()]).default(null),
+            host: listenerHost.nullable().default(null),
             port: z.number().int().safe().min(1).max(65_535).default(80),
           })
           .prefault({})
           .readonly(),
         tcp: z
           .strictObject({
-            host: z.union([z.string().refine((v) => !v.includes('\0'), 'Invalid string'), z.null()]).default(null),
+            host: listenerHost.nullable().default(null),
             port: z.number().int().safe().min(1).max(65_535).default(3025),
           })
           .prefault({})
           .readonly(),
         udp: z
           .strictObject({
-            host: z.union([z.string().refine((v) => !v.includes('\0'), 'Invalid string'), z.null()]).default(null),
+            host: listenerHost.nullable().default(null),
             port: z.number().int().safe().min(1).max(65_535).default(3024),
           })
           .prefault({})
           .readonly(),
         api: z
           .strictObject({
-            host: z.union([z.string().refine((v) => !v.includes('\0'), 'Invalid string'), z.null()]).default(null),
+            host: listenerHost.nullable().default(null),
             port: z.number().int().safe().min(1).max(65_535).default(443),
             useCert: z.boolean().default(true),
           })

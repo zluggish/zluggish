@@ -161,7 +161,7 @@ export async function run(argv: string[], output: (message: string) => void = co
           module: ts.ModuleKind.NodeNext,
           moduleResolution: ts.ModuleResolutionKind.NodeNext,
           paths: { 'zluggish/config': [resolve(packageRoot(), 'src/config/index.ts')] },
-          types: [],
+          types: ['node'],
         });
 
         const diagnostics = ts.getPreEmitDiagnostics(program);

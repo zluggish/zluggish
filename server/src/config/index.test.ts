@@ -31,3 +31,27 @@ await test('runtime validation rejects unknown, non-finite, invalid ranges and d
   assert.equal(envBoolean('false'), false);
   assert.equal(envInteger('8080', 1), 8080);
 });
+
+await test('network configuration rejects invalid advertised IPs and listener hosts', () => {
+  for (const address of ['', ' ', 'server.local', '999.0.0.1', '0.0.0.0', '::', '0:0:0:0:0:0:0:0']) {
+    assert.throws(() => validateConfig({ server: { advertisedIp: address } }), /server\.advertisedIp/);
+  }
+
+  for (const host of ['', ' ', 'server name', 'https://localhost', 'invalid:123', '999.0.0.1']) {
+    assert.throws(() => validateConfig({ network: { host } }), /network\.host/);
+
+    for (const listener of ['api', 'cdn', 'tcp', 'udp'] as const)
+      assert.throws(
+        () => validateConfig({ network: { [listener]: { host } } }),
+        new RegExp(String.raw`network\.${listener}\.host`),
+      );
+  }
+
+  for (const address of ['127.0.0.1', '192.0.2.1', '::1', '2001:db8::1'])
+    assert.equal(validateConfig({ server: { advertisedIp: address } }).server.advertisedIp, address);
+
+  for (const host of ['127.0.0.1', '0.0.0.0', '::', 'localhost', 'my_server.local'])
+    assert.equal(validateConfig({ network: { host } }).network.host, host);
+
+  assert.equal(validateConfig({ network: { tcp: { host: null } } }).network.tcp.host, null);
+});

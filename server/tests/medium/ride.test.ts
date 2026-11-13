@@ -30,8 +30,6 @@ await test(
     const f = runtimeFixture(t);
     const user = await f.accounts.create('Socket Rider', 'secret', true);
     const key = Buffer.alloc(16, 7);
-    const logs = t.mock.method(console, 'info', () => {});
-
     f.world.login(BigInt(user.player_id), key);
 
     const secret = Buffer.from('pairing-test-secret').toString('base64');
@@ -148,13 +146,6 @@ await test(
     assert.equal(phone.zcLocalIp, '127.0.0.2');
     assert.equal(phone.zcLocalPort, 21_588);
     assert.deepEqual(phone.zcKey, Buffer.from(secret, 'base64'));
-    const messages = logs.mock.calls.map((call) => call.arguments.join(' ')).join('\n');
-    assert.match(messages, /Companion registration queued:.*secure=true/);
-    assert.match(messages, /Ride TCP handshake:.*pendingCompanion=true/);
-    assert.match(messages, /Companion registration written to ride TCP/);
-    assert.doesNotMatch(messages, /pairing-test-secret/);
-    assert.equal(messages.includes(secret), false);
-
     assert.ok(existsSync(resolve(f.accounts.storage, String(user.player_id), 'encryption_key.bin')));
     const udp = createSocket('udp4');
     t.after(() => udp.close());

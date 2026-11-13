@@ -1,10 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve, isAbsolute, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
 import { z } from 'zod';
 import { configSchema } from '#src/config/schema';
-import { ConfigError, validateConfig } from '#src/config/index';
+import { ConfigError, validateConfig, validationError } from '#src/config/index';
 import type { ResolvedConfig } from '#src/config/index';
 
 export const CONFIG_NAME = 'zluggish.config.ts';
@@ -39,6 +39,24 @@ export interface LoadOptions {
   path?: string;
   storageDir?: string;
   env?: NodeJS.ProcessEnv;
+}
+
+export function prepareContainerConfig(options: LoadOptions): LoadOptions {
+  const env = options.env ?? process.env;
+  const defaultStorage = env.ZLUGGISH_CONTAINER_STORAGE_DIR;
+
+  if (!defaultStorage || options.path !== undefined || env.ZLUGGISH_CONFIG !== undefined) return options;
+  const storage = resolve(options.storageDir ?? env.ZLUGGISH_STORAGE_DIR ?? defaultStorage);
+  const path = resolve(storage, CONFIG_NAME);
+  mkdirSync(storage, { recursive: true });
+
+  try {
+    copyFileSync(resolve(packageRoot(), '../examples/container/zluggish.config.ts'), path, constants.COPYFILE_EXCL);
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
+  }
+
+  return { ...options, path };
 }
 
 export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfig> {
@@ -82,8 +100,7 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
       throw new ConfigError('Async configuration is not supported');
     const parsed = configSchema.safeParse(evaluated);
 
-    if (!parsed.success)
-      throw new ConfigError(parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.code}`).join('; '));
+    if (!parsed.success) throw validationError(parsed.error);
 
     config = parsed.data;
   } catch (error) {

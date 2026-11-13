@@ -1,7 +1,7 @@
 import { defineConfig, validateConfig } from '#src/config/index';
-import { loadConfig } from '#src/config/load';
+import { loadConfig, prepareContainerConfig } from '#src/config/load';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
@@ -57,6 +57,43 @@ await test('defaults and explicit bootstrap overrides are deterministic', async 
   assert.equal(defineConfig({ bots: { multiplier: 2 } }).bots.multiplier, 2);
 });
 
+await test('container creates and loads its storage config without overwriting existing files', async (t) => {
+  const root = fixture(t);
+  const storage = resolve(root, 'storage');
+  const env = { ZLUGGISH_CONTAINER_STORAGE_DIR: storage };
+  const path = resolve(storage, 'zluggish.config.ts');
+  const options = prepareContainerConfig({ env });
+  assert.equal(options.path, path);
+  assert.ok(existsSync(path));
+  const initial = await loadConfig(options);
+  assert.equal(initial.config.storageDir, storage);
+  assert.equal(initial.config.network.host, '0.0.0.0');
+
+  const updated = `export default { server: { advertisedIp: '192.0.2.25' }, network: { host: '0.0.0.0' } }`;
+  writeFileSync(path, updated);
+  const next = await loadConfig(prepareContainerConfig({ env }));
+  assert.equal(next.config.server.advertisedIp, '192.0.2.25');
+  assert.equal(readFileSync(path, 'utf8'), updated);
+
+  writeFileSync(path, `export default { network: { host: '' } }`);
+  await assert.rejects(loadConfig(prepareContainerConfig({ env })), /network\.host/);
+});
+
+await test('container respects explicit config and storage overrides', async (t) => {
+  const root = fixture(t);
+  const storage = resolve(root, 'default-storage');
+  const customStorage = resolve(root, 'custom-storage');
+  const explicit = resolve(root, 'external', 'zluggish.config.ts');
+  const env = { ZLUGGISH_CONTAINER_STORAGE_DIR: storage };
+  assert.equal(prepareContainerConfig({ path: explicit, env }).path, explicit);
+  assert.equal(prepareContainerConfig({ env: { ...env, ZLUGGISH_CONFIG: explicit } }).path, undefined);
+  assert.equal(existsSync(storage), false);
+  const options = prepareContainerConfig({ storageDir: customStorage, env });
+  assert.equal(options.path, resolve(customStorage, 'zluggish.config.ts'));
+  const loaded = await loadConfig(options);
+  assert.equal(loaded.config.storageDir, customStorage);
+});
+
 await test('invalid operator values and loader errors do not reveal secrets or create state', async (t) => {
   const root = fixture(t);
   const path = resolve(root, 'zluggish.config.ts');
@@ -71,6 +108,28 @@ await test('invalid operator values and loader errors do not reveal secrets or c
     (error) => error instanceof Error && !error.message.includes('operator-secret'),
   );
   assert.deepEqual(readdirSync(root), ['zluggish.config.ts']);
+});
+
+await test('invalid network settings and unknown config keys fail at file load', async (t) => {
+  const root = fixture(t);
+  const path = resolve(root, 'zluggish.config.ts');
+  writeFileSync(path, `export default { network: { host: '', tcp: { host: '' } } }`);
+  await assert.rejects(loadConfig({ path }), (error) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /network\.host: Expected a non-empty IP address or hostname/);
+    assert.match(error.message, /network\.tcp\.host: Expected a non-empty IP address or hostname/);
+
+    return true;
+  });
+  writeFileSync(path, `export default { userDefaults: {}, server: { advertisedIp: 'secret-value' } }`);
+  await assert.rejects(loadConfig({ path }), (error) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /server\.advertisedIp: Expected a non-wildcard IP address/);
+    assert.match(error.message, /<root>: unrecognized_keys/);
+    assert.doesNotMatch(error.message, /secret-value/);
+
+    return true;
+  });
 });
 
 await test('filename is explicit, async factories rejected, and successive loads do not use stale config', async (t) => {
