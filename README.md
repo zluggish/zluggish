@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/zluggish/zluggish/main/media/zluggish.svg" alt="An orange snail with a Z" height="200">
+
 # Zluggish
 
 Zluggish is a self-hosted, open source server implementation of [Zwift](http://zwift.com) written in typescript that implements several features not available in the official app.
@@ -23,64 +25,37 @@ Note that Zluggish is offline-only: there is no connection to Zwift's public mul
 
 ## Requirements
 
-Zluggish requires technical know-how to set up. The **server** stores progress and runs ride services; the **client** is the device running the Zwift app. They can run on the same machine or separate machines on your local network.
+Zluggish requires technical know-how to set up, so it is not for everyone. The **server** stores progress and runs ride services; the **client** is the device running the Zwift app. They can run on the same machine, or be on separated systems as long as they can be reached over the network.
 
 ### Server requirements
 
-- Docker Compose is the recommended deployment method.
-- Source installations require Node **24.15+ within 24.x** and pnpm **10**.
-- Linux, Windows and macOS are target platforms; the TypeScript migration's full runtime verification matrix remains open.
-- Keep the entire `storage/` directory across upgrades. It contains rider data, databases and encryption/signing keys.
+- A machine running either Linux, Windows or macOS
+- Performance requirements are very low
+- Docker compose is used to run the software
 
 ### Client requirements
 
-Windows and macOS are the primary supported clients. Android requires the advanced patching setup below. See Zwift's [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB). iPhone and iPad clients are not supported by this setup.
+You will need a patched Zwift client so the easiest method is to run it on Windows or macOS. Android is supported but [requires manual patching](#step-2-configure-zwift-client-to-use-zluggish). iPhone and iPad clients are not supported.
 
-## Install
+See Zwift's [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB) for more complete system requirements. 
 
-There are two main steps: start the Zluggish server, then configure Zwift to connect to it. If you are upgrading from legacy zwift-offline, first follow [Migration → Old storage](#old-storage).
+## Server install
 
-### Step 1: Install and run Zluggish
+If you are upgrading from legacy zwift-offline, first follow [Migration → Old storage](#old-storage).
 
-<details open><summary>Docker Compose</summary>
-
-Clone this repository and run from its root, replacing the address with the server's LAN IP:
+Download the [Docker Compose file](docker/docker-compose.yml) to a suitable location on the server. 
 
 ```sh
-docker compose up --build -d
-docker compose logs -f zluggish
+docker compose up --build
 ```
 
-Compose builds `server/Dockerfile` using `server/` as its build context and mounts root `storage/` at `/usr/src/app/zwift-offline/storage`. It publishes TCP 80, 443 and 3025, UDP 3024, and optional DNS UDP 53. DNS is disabled by default. Allow the required ports through the server's local firewall.
-
-The bundled container configuration is `server/examples/container/zluggish.config.ts`. To customize it, copy it to your own `zluggish.config.ts`, mount that file read-only, and select it with `ZLUGGISH_CONFIG`. For example, add these entries to the service in `docker-compose.yml`, retaining the existing storage mount:
-
-```yaml
-volumes:
-  - ./storage/:/usr/src/app/zwift-offline/storage
-  - ./zluggish.config.ts:/etc/zluggish/zluggish.config.ts:ro
-environment:
-  ZLUGGISH_CONFIG: /etc/zluggish/zluggish.config.ts
-```
-
-Set `storageDir: '/usr/src/app/zwift-offline/storage'` in an external container config; relative paths resolve against the config file's directory. Set `network.host: '0.0.0.0'` for container listeners. The image supplies bundled TLS certificates unless you configure replacements.
-
-The `/etc/localtime` mount in the supplied Compose file uses the Linux host timezone. On Docker Desktop, remove that mount if unavailable and set `TZ` instead. `restart: unless-stopped` starts the service again after a host restart. Stop with `docker compose down`; retain `storage/` when upgrading.
-
-</details>
-
-<details><summary>Linux, Windows or macOS from source</summary>
-
-Install Node 24 and pnpm 10, clone the repository, then run from its root:
+It should say something like
 
 ```sh
-pnpm --dir server install --frozen-lockfile
-pnpm --dir cli install --frozen-lockfile
-pnpm --dir cli build
-pnpm --dir cli cli config validate
+zluggish-1  | Zluggish server: https://0.0.0.0:443
 ```
 
-Edit `server/zluggish.config.ts` before connecting a real client. The checked-in config uses HTTP on loopback port 8787 for development. For normal client connections, use HTTPS 443 and the standard CDN/relay ports:
+If you want to change settings, that is done by editing `storage/zluggish.config.ts`.
 
 ```ts
 import { defineConfig } from 'zluggish/config';
@@ -92,40 +67,11 @@ export default defineConfig({
 });
 ```
 
-Start and stop with:
+You are now ready to connect the client
 
-```sh
-pnpm --dir server start
-# Press Ctrl+C when finished.
-```
+## Client configuration
 
-Binding ports 80 and 443 may require OS permissions on Unix; Docker handles those host port mappings for you. Use `--config` or `ZLUGGISH_CONFIG` for an external config. Paths inside it resolve relative to that file, so use an explicit storage path when moving it elsewhere.
-
-This migration does not provide a Windows `zoffline.exe`. Upstream Python executables and their startup scripts are not launchers for this Node server.
-
-</details>
-
-Wait for the server to finish starting before opening Zwift. On fresh storage, open the printed first-rider setup link; account setup is described below.
-
-### Configuration
-
-Operator configuration is trusted executable TypeScript in **`zluggish.config.ts`**. It can export an object or a synchronous `defineConfig(({ env, configDir }) => (...))` function. Restart after editing it. No JSONC file is read or generated.
-
-Config selection is `--config`, then `ZLUGGISH_CONFIG`, then `server/zluggish.config.ts`. There is no parent-directory discovery. Storage selection is `--storage-dir`, then `ZLUGGISH_STORAGE_DIR`, then the config's `storageDir`. The default config keeps rider data in root `storage/`.
-
-Rider preferences and live group changes persist in SQLite rather than rewriting TypeScript. For example:
-
-```sh
-pnpm --dir cli cli settings show --user 42
-pnpm --dir cli cli settings set --user 42 ghosts.enabled true
-pnpm --dir cli cli settings reset --user 42 ghosts.enabled
-```
-
-See the [server guide](server/README.md) for config initialization, validation, typechecking and precedence.
-
-### Step 2: Configure Zwift client to use Zluggish
-
-<details><summary>Windows Instructions</summary>
+### Windows 
 
 - Install Zwift if not already installed
 - **NOTE:** instead of performing the steps below you can instead just run the **configure_client** script from https://github.com/oldnapalm/zoffline-helper/releases/latest
@@ -147,9 +93,7 @@ Why: We need to redirect Zwift to use Zluggish and convince Windows and Zwift to
 accept Zluggish’s self signed certificates for Zwift's domain names. Feel free
 to generate your own certificates and do the same.
 
-</details>
-
-<details><summary>macOS Instructions</summary>
+### macOS
 
 - Install Zwift if not already installed
 - On your Mac machine running Zwift, copy the file [server/assets/ssl/cert-zwift-com.pem](server/assets/ssl/cert-zwift-com.pem) in this repo to a known location.
@@ -166,9 +110,7 @@ Why: We need to redirect Zwift to use Zluggish and convince macOS and Zwift to
 accept Zluggish’s self signed certificates for Zwift's domain names. Feel free
 to generate your own certificates and do the same.
 
-</details>
-
-<details><summary>Android (non-rooted device)</summary>
+### Android (non-rooted)
 
 - Install required apps:
   - Download and install `ZofflineObb.apk` from [here](https://github.com/fatsbrown/ZofflineObbAndroid/releases/latest)
@@ -197,9 +139,7 @@ to generate your own certificates and do the same.
 Why: We need to redirect Zwift to use Zluggish (this is done by the Virtual Hosts app) and convince Zwift to
 accept Zluggish’s self signed certificates for Zwift's domain names (this is done by the patch tool ZofflineObb).
 
-</details>
-
-<details><summary>Android (rooted device)</summary>
+#### Android (rooted)
 
 - Install Zwift on the device
 - Open Zwift once to complete installation (i.e download all extra files).
@@ -224,11 +164,9 @@ Why: We need to redirect Zwift to use Zluggish and convince Zwift to
 accept Zluggish’s self signed certificates for Zwift's domain names. Feel free
 to generate your own certificates and do the same.
 
-</details>
+## Uninstalling Zluggish
 
-#### Enabling/disabling client redirection
-
-To use Zwift online like normal, comment out or remove the line added to the `hosts`
+To restore the original Zwift usage, comment out or remove the line added to the `hosts`
 file before starting Zwift. Then ensure Zwift is fully closed (right click
 the Zwift system tray icon and exit) and restart Zwift.
 
