@@ -29,7 +29,7 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
 
     const tokens = z
       .object({ access: z.string(), refresh: z.string(), id: z.string() })
-      .parse(JSON.parse(readFileSync(resolve(packageRoot(), 'assets/tokens.json'), 'utf8')));
+      .parse(JSON.parse(readFileSync(resolve(packageRoot(), '../assets/tokens.json'), 'utf8')));
 
     const runtime: Runtime = {
       config,

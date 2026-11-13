@@ -1,6 +1,8 @@
+import { reflect } from '@bufbuild/protobuf/reflect';
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { create, fromBinary, toBinary, toJsonString, isFieldSet } from '@bufbuild/protobuf';
+import { create, fromBinary, toBinary, isFieldSet } from '@bufbuild/protobuf';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -42,7 +44,7 @@ export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       ? fromBinary(AchievementsSchema, readFileSync(file))
       : create(AchievementsSchema);
 
-    const incoming = fromBinary(AchievementsSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const incoming = parseProtobuf(AchievementsSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     for (const achievement of incoming.achievements)
       if (achievements.achievements.every((item) => item.id !== achievement.id))
@@ -57,45 +59,25 @@ export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     const file = resolve(runtime.profiles.folder(user.player_id), 'user_storage.bin');
 
-    const storage = existsSync(file) ? fromBinary(UserStorageSchema, readFileSync(file)) : create(UserStorageSchema);
-
     if (c.req.method === 'POST') {
-      const incoming = fromBinary(UserStorageSchema, new Uint8Array(await c.req.arrayBuffer()));
-
-      const attributeSchema = UserStorageSchema.field.attributes.message;
-
-      if (!attributeSchema) throw new Error('Missing user storage descriptor');
+      const incoming = parseProtobuf(UserStorageSchema, new Uint8Array(await c.req.arrayBuffer()));
+      const storage = existsSync(file) ? fromBinary(UserStorageSchema, readFileSync(file)) : create(UserStorageSchema);
 
       for (const attribute of incoming.attributes) {
-        const keys = attributeSchema.fields.filter((field) => isFieldSet(attribute, field));
-
-        const incomingValues = z.record(z.string(), z.object({ signature: z.string().optional() }).passthrough()).parse(
-          JSON.parse(
-            toJsonString(AttributesSchema, attribute, {
-              useProtoFieldName: true,
-            }),
-          ),
-        );
+        const incomingFields = reflect(AttributesSchema, attribute);
 
         storage.attributes = storage.attributes.filter((old) => {
-          const existingValues = z
-            .record(z.string(), z.object({ signature: z.string().optional() }).passthrough())
-            .parse(
-              JSON.parse(
-                toJsonString(AttributesSchema, old, {
-                  useProtoFieldName: true,
-                }),
-              ),
-            );
+          const existing = reflect(AttributesSchema, old);
 
-          return keys.every(
-            (field) =>
-              !(
-                isFieldSet(old, field) &&
-                (!field.message?.fields.some((nested) => nested.name === 'signature') ||
-                  existingValues[field.name]?.signature === incomingValues[field.name]?.signature)
-              ),
-          );
+          for (const field of AttributesSchema.fields) {
+            if (field.fieldKind !== 'message' || !incomingFields.isSet(field) || !existing.isSet(field)) continue;
+            const signature = field.message.fields.find((nested) => nested.name === 'signature');
+
+            if (!signature || existing.get(field).get(signature) === incomingFields.get(field).get(signature))
+              existing.clear(field);
+          }
+
+          return AttributesSchema.fields.some((field) => existing.isSet(field)) || !!existing.getUnknown()?.length;
         });
         storage.attributes.push(attribute);
       }
@@ -105,14 +87,12 @@ export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return c.body(null, 202);
     }
 
+    const storage = existsSync(file) ? fromBinary(UserStorageSchema, readFileSync(file)) : create(UserStorageSchema);
     const requested = new Set((c.req.queries('n') ?? []).map(Number));
-    const attributeSchema = UserStorageSchema.field.attributes.message;
-
-    if (!attributeSchema) throw new Error('Missing user storage descriptor');
 
     const response = create(UserStorageSchema, {
       attributes: storage.attributes.filter((attribute) =>
-        attributeSchema.fields.some((field) => requested.has(field.number) && isFieldSet(attribute, field)),
+        AttributesSchema.fields.some((field) => requested.has(field.number) && isFieldSet(attribute, field)),
       ),
     });
 
@@ -121,7 +101,7 @@ export function storageRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/zfiles', async (c) => {
     const user = authenticated(c);
 
-    const upload = fromBinary(ZFileProtoSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const upload = parseProtobuf(ZFileProtoSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     const folder = safeName(upload.folder);
     const name = safeName(upload.filename);

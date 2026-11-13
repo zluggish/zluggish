@@ -1,4 +1,4 @@
-// Adapted from immich-app/immich server/eslint.config.mjs; see ../server/docs/linting.md.
+// Adapted from immich-app/immich server/eslint.config.mjs; see README.md.
 import { fileURLToPath } from 'node:url';
 import js from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
@@ -20,7 +20,7 @@ export default defineConfig([
           '**/node_modules/**',
           'server/src/protocol/generated/**',
           'cli/tools/**',
-          'server/assets/**',
+          'assets/**',
           'server/scripts/**',
           'server/examples/**',
           'server/zluggish.config.ts',

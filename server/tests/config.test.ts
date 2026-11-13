@@ -50,7 +50,9 @@ await test('defaults and explicit bootstrap overrides are deterministic', async 
   });
 
   assert.equal(result.config.storageDir, resolve(root, 'cli'));
+  assert.equal(result.config.network.host, '127.0.0.1');
   assert.equal(result.config.network.api.port, 443);
+  assert.equal(validateConfig({ network: { host: '0.0.0.0' } }).network.host, '0.0.0.0');
   assert.equal(result.config.riderDefaults.ghosts.enabled, false);
   assert.equal(result.config.soloBlob.riders, 8);
   assert.equal(defineConfig({ bots: { multiplier: 2 } }).bots.multiplier, 2);

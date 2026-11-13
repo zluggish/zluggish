@@ -6,7 +6,7 @@ build/
 dist/
 *.egg-info/
 .venv/
-server/assets/
+assets/
 cli/tools/oxlint/anti-slop/
 server/src/protocol/generated/
 server/node_modules/

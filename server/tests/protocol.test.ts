@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fromBinary, toBinary } from '@bufbuild/protobuf';
+import { fromBinary, toBinary, isFieldSet } from '@bufbuild/protobuf';
 import { z } from 'zod';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import type { PacketHeader } from '#src/node/network/packet';
@@ -95,6 +95,8 @@ await test('proto2 64-bit values, explicit false presence and unknown fields sur
   const encoded = toBinary(PlayerProfileSchema, profile);
   const decoded = fromBinary(PlayerProfileSchema, encoded);
   assert.equal(decoded.firstName, 'Updated');
+  assert.equal(decoded.isMale, false);
+  assert.ok(isFieldSet(decoded, PlayerProfileSchema.field.isMale));
   assert.deepEqual(
     decoded.$unknown?.map((field) => ({
       ...field,

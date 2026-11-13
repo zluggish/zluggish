@@ -1,5 +1,6 @@
 import { request } from 'node:https';
 import { Resolver } from 'node:dns';
+import { Readable } from 'node:stream';
 
 const resolver = new Resolver();
 
@@ -30,6 +31,7 @@ export async function fetchCdn(path: string): Promise<Response> {
         },
       },
       (response) => {
+        response.once('error', fail);
         const headers = new Headers();
 
         for (const [name, value] of Object.entries(response.headers)) {
@@ -39,32 +41,16 @@ export async function fetchCdn(path: string): Promise<Response> {
           else headers.set(name, value);
         }
 
-        let cancelled = false;
+        const status = response.statusCode ?? 502;
 
-        const body = new ReadableStream<Uint8Array>({
-          start(controller) {
-            response.on('data', (chunk: Buffer) => {
-              controller.enqueue(chunk);
-
-              if ((controller.desiredSize ?? 0) <= 0) response.pause();
-            });
-            response.on('end', () => {
-              if (!cancelled) controller.close();
-            });
-            response.on('error', (error) => {
-              if (!cancelled) controller.error(error);
-            });
-          },
-          pull() {
-            response.resume();
-          },
-          cancel() {
-            cancelled = true;
-            response.destroy();
-          },
-        });
-
-        done(new Response(body, { status: response.statusCode ?? 502, headers }));
+        if ([204, 205, 304].includes(status)) {
+          response.resume();
+          done(new Response(null, { status, headers }));
+        } else {
+          // SAFETY: Node returns a WHATWG byte stream; Node and DOM stream declarations differ in their BYOB overloads.
+          const body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+          done(new Response(body, { status, headers }));
+        }
       },
     );
 

@@ -14,7 +14,7 @@ import { writeDurable } from '#src/node/persistence/files';
 export function startRideListeners(runtime: Runtime) {
   const { world, config } = runtime;
   const clients = new Map<string, bigint>();
-  const host = config.network.host || '0.0.0.0';
+  const host = config.network.host || '127.0.0.1';
 
   const udp = createSocket((config.network.udp.host ?? host).includes(':') ? 'udp6' : 'udp4');
 
@@ -156,8 +156,8 @@ export function startRideListeners(runtime: Runtime) {
                 : config.server.advertisedIp;
 
             const addresses = [
-              { lbRealm: 1, lbCourse: 6, ip, port: 3022 },
-              { lbRealm: 0, lbCourse: 0, ip, port: 3022 },
+              { lbRealm: 1, lbCourse: 6, ip, port: config.network.udp.port },
+              { lbRealm: 0, lbCourse: 0, ip, port: config.network.udp.port },
             ];
 
             const response = create(ServerToClientSchema, {
@@ -175,7 +175,7 @@ export function startRideListeners(runtime: Runtime) {
                   lbCourse: address.lbCourse,
                   relayAddresses: [address],
                 })),
-                port: 3022,
+                port: config.network.udp.port,
               },
             });
 

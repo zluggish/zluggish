@@ -1,8 +1,9 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import {
   SaveStructuredEventRequestSchema,
   SaveStructuredEventResponseSchema,
@@ -32,7 +33,7 @@ const contracts = z.array(
 
 export function staticRoutes(app: Hono<RuntimeEnv>) {
   const routes = contracts.parse(
-    JSON.parse(readFileSync(resolve(packageRoot(), 'assets/static-responses.json'), 'utf8')),
+    JSON.parse(readFileSync(resolve(packageRoot(), '../assets/static-responses.json'), 'utf8')),
   );
 
   for (const route of routes)
@@ -52,7 +53,7 @@ export function staticRoutes(app: Hono<RuntimeEnv>) {
     return c.json(path === 'carousels/home-challenges' ? { items: [] } : path === 'crm' ? {} : []);
   });
   app.post('/api/actions-service/structured-events/batch', async (c) => {
-    const request = fromBinary(SaveStructuredEventRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const request = parseProtobuf(SaveStructuredEventRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     return c.body(
       toBinary(

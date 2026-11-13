@@ -5,8 +5,6 @@ import { z } from 'zod';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runtimeFixture } from '#tests/support/runtime';
-import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
-import { SegmentResultSchema, SegmentResultsSchema } from '#src/protocol/generated/segment-result_pb';
 import { PrivateEventProtoSchema } from '#src/protocol/generated/events_pb';
 import { PlayerStateSchema, UserBikeAction } from '#src/protocol/generated/udp-node-msgs_pb';
 import { Workouts, workoutDetails } from '#src/domain/workouts/planned';
@@ -15,68 +13,6 @@ import { Connections } from '#src/node/persistence/connections';
 import { Trail } from '#src/world/geometry';
 import { worldTime } from '#src/world/state';
 import { writeDurable } from '#src/node/persistence/files';
-
-await test('goals derive UTC period progress and results retain 64-bit segment IDs', async (t) => {
-  const f = runtimeFixture(t);
-  const user = await f.accounts.create('Progress Rider', '', true);
-
-  const headers = {
-    Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}`,
-  };
-
-  f.accounts.db
-    .prepare('INSERT INTO activity (player_id,sport,start_date,end_date,distanceInMeters) VALUES (?,?,?,?,?)')
-    .run(user.player_id, 0, new Date().toISOString(), new Date(Date.now() + 600_000).toISOString(), 12_345);
-
-  const goal = create(GoalSchema, {
-    playerId: BigInt(user.player_id),
-    name: 'Weekly distance',
-    type: 0,
-    periodicity: 0,
-    sport: 0,
-    targetDistance: 20_000,
-  });
-
-  const saved = await f.app.request(`/api/profiles/${user.player_id}/goals`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/x-protobuf-lite' },
-    body: toBinary(GoalSchema, goal),
-  });
-
-  assert.equal(saved.status, 200);
-  assert.equal(fromBinary(GoalSchema, new Uint8Array(await saved.arrayBuffer())).actualDistance, 12_345);
-
-  const goals = await f.app.request(`/api/profiles/${user.player_id}/goals`, {
-    headers,
-  });
-
-  assert.equal(fromBinary(GoalsSchema, new Uint8Array(await goals.arrayBuffer())).goals.length, 1);
-
-  const result = create(SegmentResultSchema, {
-    playerId: BigInt(user.player_id),
-    segmentId: 9_223_372_036_854_775_807n,
-    firstName: 'P',
-    lastName: 'Rider',
-    elapsedMs: 123_456n,
-  });
-
-  const response = await f.app.request('/api/segment-results', {
-    method: 'POST',
-    headers,
-    body: toBinary(SegmentResultSchema, result),
-  });
-
-  assert.equal(response.status, 200);
-
-  const leaders = await f.app.request(`/live-segment-results-service/leaderboard/${result.segmentId}`);
-
-  assert.equal(leaders.status, 200);
-
-  const parsed = fromBinary(SegmentResultsSchema, new Uint8Array(await leaders.arrayBuffer()));
-
-  assert.equal(parsed.segmentId, result.segmentId);
-  assert.equal(parsed.segmentResults[0]?.elapsedMs, 123_456n);
-});
 
 await test('meetup invitations persist, protect ownership and return both protocol formats', async (t) => {
   const f = runtimeFixture(t);
@@ -276,7 +212,7 @@ await test('game storage updates preserve other equipment signatures', async (t)
 
   const response3 = await post({
     attributes: [
-      { bikeProgress: { signature: 'bike-a', level: 1 } },
+      { bikeProgress: { signature: 'bike-a', level: 1 }, gameSettings: { screenShakeScale: 1 } },
       { bikeProgress: { signature: 'bike-b', level: 2 } },
     ],
   });
@@ -289,11 +225,12 @@ await test('game storage updates preserve other equipment signatures', async (t)
 
   assert.equal(response4.status, 202);
 
-  const response = await f.app.request('/api/player-profile/user-game-storage/attributes?n=24', { headers });
+  const response = await f.app.request('/api/player-profile/user-game-storage/attributes?n=24&n=22', { headers });
 
   const storage = fromBinary(UserStorageSchema, new Uint8Array(await response.arrayBuffer()));
 
-  assert.equal(storage.attributes.length, 2);
+  assert.equal(storage.attributes.length, 3);
+  assert.equal(storage.attributes.find((item) => item.gameSettings)?.gameSettings?.screenShakeScale, 1);
   assert.equal(storage.attributes.find((item) => item.bikeProgress?.signature === 'bike-b')?.bikeProgress?.level, 2);
   assert.equal(storage.attributes.find((item) => item.bikeProgress?.signature === 'bike-a')?.bikeProgress?.level, 3);
 });

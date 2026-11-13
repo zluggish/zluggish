@@ -1,4 +1,3 @@
-// Authoritative TypeScript configuration schemas. No JSONC runtime dependency.
 import { z } from 'zod';
 
 export const riderSettingsSchema = z
@@ -162,7 +161,7 @@ export const configSchema = z
         host: z
           .string()
           .refine((v) => !v.includes('\0'), 'Invalid string')
-          .default(''),
+          .default('127.0.0.1'),
         cdn: z
           .strictObject({
             host: z.union([z.string().refine((v) => !v.includes('\0'), 'Invalid string'), z.null()]).default(null),

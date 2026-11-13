@@ -1,3 +1,4 @@
+import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
 import { runtimeFixture } from '#tests/support/runtime';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -278,4 +279,37 @@ await test('account migration publishes the renamed database and preserves rider
   const reopened = new Accounts(f.accounts.storage);
   assert.equal(reopened.get(rider.player_id)?.first_name, 'Migrated');
   reopened.close();
+});
+
+await test('login and both TCP config endpoints advertise configured ports', async (t) => {
+  const f = runtimeFixture(t);
+  const user = await f.accounts.create('Port Rider', '', true);
+
+  for (const port of [f.config.network.tcp.port, 4025]) {
+    const app = createApp(
+      { gameInfo: '{}', gameInfoHash: '0', variants: '{}' },
+      {
+        ...f,
+        config: { ...f.config, network: { ...f.config.network, tcp: { ...f.config.network.tcp, port } } },
+      },
+    );
+
+    const login = await app.request('/api/users/login', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}` },
+      body: toBinary(LoginRequestSchema, create(LoginRequestSchema, { key: new Uint8Array(16) })),
+    });
+
+    assert.equal(login.status, 200);
+    assert.equal(
+      fromBinary(LoginResponseSchema, new Uint8Array(await login.arrayBuffer())).info?.nodes?.nodes[0]?.port,
+      port,
+    );
+
+    for (const path of ['/api/tcp-config', '/relay/tcp-config']) {
+      const response = await app.request(path);
+      assert.equal(response.status, 200);
+      assert.equal(fromBinary(TcpConfigSchema, new Uint8Array(await response.arrayBuffer())).nodes[0]?.port, port);
+    }
+  }
 });

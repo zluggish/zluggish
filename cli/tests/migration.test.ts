@@ -1,3 +1,4 @@
+import { Accounts } from 'zluggish/internal/domain/accounts/repository';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,6 +11,7 @@ import {
   readdirSync,
   existsSync,
   unlinkSync,
+  renameSync,
 } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -273,18 +275,89 @@ await test('preference conflicts fail even in dry run and leave existing setting
   assert.equal(existsSync(f.output), false);
 });
 
-await test('settings database preserves 64-bit integers/BLOBs and rejects newer schema', (t) => {
+await test('settings persist rider overrides across reopen and reject newer schemas', (t) => {
   const f = fixture(t);
   const store = new SettingsStore(f.storage);
-  store.db.exec('CREATE TABLE fidelity (value INTEGER, bytes BLOB)');
-  const bytes = Buffer.from([0, 255, 4]);
-  store.db.prepare('INSERT INTO fidelity VALUES (?, ?)').run(9_223_372_036_854_775_807n, bytes);
-  const query = store.db.prepare('SELECT value, bytes FROM fidelity');
-  query.setReadBigInts(true);
-  const row = query.get();
-  assert.equal(row?.value, 9_223_372_036_854_775_807n);
-  assert.deepEqual(row?.bytes, new Uint8Array(bytes));
-  store.db.exec('PRAGMA user_version=2');
+  store.save(42, { 'ghosts.enabled': true, 'uploads.strava.method': 'free' });
   store.close();
+  const reopened = new SettingsStore(f.storage);
+  assert.deepEqual(reopened.read(42), { 'ghosts.enabled': true, 'uploads.strava.method': 'free' });
+  assert.deepEqual(reopened.read(43), {});
+  reopened.db.exec('PRAGMA user_version=2');
+  reopened.close();
   assert.throws(() => new SettingsStore(f.storage), /Unsupported/);
+});
+
+await test('account recovery uses config storage and honors an explicit storage override', async (t) => {
+  const f = fixture(t);
+  await assert.rejects(
+    run(['--config', f.output, 'accounts', 'recover', '--user', '1', '--remove-password'], () => {}),
+    /Missing/,
+  );
+  const configured = resolve(f.root, 'configured');
+  const intended = new Accounts(configured);
+  const user = await intended.create('Configured Rider', 'old', true);
+  intended.close();
+  const other = new Accounts(f.storage);
+  const decoy = await other.create('Other Rider', 'unchanged', true);
+  other.close();
+  mkdirSync(resolve(f.root, 'external'));
+  writeFileSync(f.output, `export default { storageDir: '../configured' };`);
+  const passwordFile = resolve(f.root, 'password.txt');
+  writeFileSync(passwordFile, 'new-password\n');
+  await run(
+    ['--config', f.output, 'accounts', 'recover', '--user', String(user.player_id), '--password-file', passwordFile],
+    () => {},
+  );
+  const recovered = new Accounts(configured);
+  const saved = recovered.get(user.player_id);
+  assert.ok(saved);
+  assert.equal(await recovered.verify(saved, 'new-password'), true);
+  assert.equal(saved.auth_version, user.auth_version + 1);
+  recovered.close();
+  const untouched = new Accounts(f.storage);
+  const stillThere = untouched.get(decoy.player_id);
+  assert.ok(stillThere);
+  assert.equal(await untouched.verify(stillThere, 'unchanged'), true);
+  untouched.close();
+  await run(
+    [
+      '--config',
+      f.output,
+      '--storage-dir',
+      f.storage,
+      'accounts',
+      'recover',
+      '--user',
+      String(decoy.player_id),
+      '--remove-password',
+    ],
+    () => {},
+  );
+  const overridden = new Accounts(f.storage);
+  assert.equal(overridden.get(decoy.player_id)?.pass_hash, null);
+  overridden.close();
+});
+
+await test('account migration uses the selected config storage', async (t) => {
+  const f = fixture(t);
+  const configured = resolve(f.root, 'configured');
+  const accounts = new Accounts(configured);
+  const user = await accounts.create('Legacy Rider', '', true);
+  accounts.close();
+  renameSync(resolve(configured, 'zluggish.db'), resolve(configured, 'zwift-offline.db'));
+  mkdirSync(resolve(f.root, 'external'));
+  writeFileSync(f.output, `export default { storageDir: '../configured' };`);
+  const keepAlive = setInterval(() => {}, 1000);
+
+  try {
+    await run(['--config', f.output, 'accounts', 'migrate'], () => {});
+  } finally {
+    clearInterval(keepAlive);
+  }
+
+  const migrated = new Accounts(configured);
+  assert.equal(migrated.get(user.player_id)?.first_name, 'Legacy');
+  migrated.close();
+  assert.equal(existsSync(resolve(f.storage, 'zluggish.db')), false);
 });

@@ -22,6 +22,9 @@ import { z } from 'zod';
 export const HELP = `Usage: zluggish [--config PATH] [--storage-dir DIR] config init|validate|show|typecheck|migrate
        zluggish [--config PATH] settings show|set|reset --user ID [KEY] [VALUE]
 
+accounts recover --user ID --password-file PATH  Change a rider password offline
+accounts recover --user ID --remove-password     Remove a rider password offline
+accounts migrate [--solo-player ID]          Convert the legacy account database offline
 config migrate --dry-run                     Preview direct legacy -> zluggish.config.ts migration
 config migrate --output PATH [--solo-player ID]  Migrate offline, preserving original files
 config init                                 Create a default typed config; never overwrite
@@ -63,11 +66,18 @@ export async function run(argv: string[], output: (message: string) => void = co
   if (extra.length > 0) throw new ConfigError('Unexpected arguments');
   const selected = selectConfigPath(values.config);
 
-  const storage = resolve(
+  let storage = resolve(
     values['storage-dir'] ?? process.env.ZLUGGISH_STORAGE_DIR ?? resolve(packageRoot(), '../storage'),
   );
 
   if (group === 'accounts') {
+    if (values['storage-dir'] === undefined && !process.env.ZLUGGISH_STORAGE_DIR && existsSync(selected)) {
+      const loaded = await loadConfig({ path: selected });
+      storage = loaded.config.storageDir;
+    } else if ((values.config !== undefined || process.env.ZLUGGISH_CONFIG !== undefined) && !existsSync(selected)) {
+      throw new ConfigError(`Missing ${selected}`);
+    }
+
     const release = await acquireStorageLock(storage);
 
     try {
@@ -147,11 +157,10 @@ export async function run(argv: string[], output: (message: string) => void = co
           noEmit: true,
           strict: true,
           skipLibCheck: true,
-          target: ts.ScriptTarget.ES2023,
+          target: ts.ScriptTarget.ES2024,
           module: ts.ModuleKind.NodeNext,
           moduleResolution: ts.ModuleResolutionKind.NodeNext,
-          baseUrl: packageRoot(),
-          paths: { 'zluggish/config': ['src/config/index.ts'] },
+          paths: { 'zluggish/config': [resolve(packageRoot(), 'src/config/index.ts')] },
           types: [],
         });
 

@@ -1,6 +1,7 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import type { Activity } from '#src/protocol/generated/activity_pb';
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -116,7 +117,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (c.req.method === 'POST') {
       if (id !== BigInt(user.player_id)) throw new HTTPException(401);
 
-      const activity = fromBinary(ActivitySchema, new Uint8Array(await c.req.arrayBuffer()));
+      const activity = parseProtobuf(ActivitySchema, new Uint8Array(await c.req.arrayBuffer()));
 
       activity.playerId = id;
 
@@ -159,7 +160,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     }
 
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const activity = fromBinary(ActivitySchema, bytes);
+    const activity = parseProtobuf(ActivitySchema, bytes);
     activity.playerId = BigInt(user.player_id);
     activity.id = id;
     records.update('activity', id, ActivitySchema, activity, ['fit']);
@@ -343,7 +344,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       .prepare('INSERT INTO activity_image (player_id,activity_id) VALUES (?,?)')
       .run(user.player_id, c.req.param('activityId')).lastInsertRowid;
 
-    const image = fromBinary(ActivityImageSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const image = parseProtobuf(ActivityImageSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     writeDurable(resolve(runtime.profiles.folder(user.player_id), 'images', `${id}.jpg`), image.jpg, true);
 
@@ -354,7 +355,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
-    const body = fromBinary(ActivityMediaSaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const body = parseProtobuf(ActivityMediaSaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     const id = db
       .prepare('INSERT INTO activity_media (player_id,activity_id,content_type) VALUES (?,?,?)')

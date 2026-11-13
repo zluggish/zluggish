@@ -1,3 +1,4 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import type { Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -18,7 +19,7 @@ import { assetRoutes } from '#src/http/routes/assets';
 import { relayRoutes } from '#src/http/routes/relay';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { clone, create, fromBinary, fromJsonString, toBinary } from '@bufbuild/protobuf';
+import { clone, create, fromJsonString, toBinary } from '@bufbuild/protobuf';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Rider } from '#src/domain/accounts/repository';
@@ -37,7 +38,6 @@ export interface PublicMetadata {
   variants: string;
 }
 
-/** HTTP composition has no file/database/listener side effects. */
 export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   const app = new Hono<RuntimeEnv>();
   const variants = fromJsonString(FeatureResponseSchema, metadata.variants);
@@ -74,13 +74,7 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
   app.get('/api/game_info', (c) => c.body(metadata.gameInfo, 200, { 'Content-Type': 'application/json' }));
 
   function variantResponse(bytes: Uint8Array, known: Map<string, FeatureResponse_Params>) {
-    let request;
-
-    try {
-      request = fromBinary(FeatureRequestSchema, bytes);
-    } catch {
-      throw new HTTPException(400, { message: 'Invalid request' });
-    }
+    const request = parseProtobuf(FeatureRequestSchema, bytes);
 
     const response = create(FeatureResponseSchema);
 
@@ -139,6 +133,8 @@ export function createApp(metadata: PublicMetadata, runtime?: Runtime) {
     if (error instanceof HTTPException) return error.getResponse();
 
     if (error instanceof z.ZodError) return c.text('Invalid request', 400);
+
+    console.error(`Request failed: ${c.req.method} ${c.req.path}`, error);
 
     return c.text('Request failed', 500);
   });

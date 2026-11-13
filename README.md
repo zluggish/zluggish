@@ -37,16 +37,16 @@ Zluggish requires technical know-how to set up, so it is not for everyone. The *
 
 You will need a patched Zwift client so the easiest method is to run it on Windows or macOS. Android is supported but [requires manual patching](#step-2-configure-zwift-client-to-use-zluggish). iPhone and iPad clients are not supported.
 
-See Zwift's [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB) for more complete system requirements. 
+See Zwift's [official system requirements](https://support.zwift.com/en_us/supported-devices-to-run-zwift-H1Cj9QbeB) for more complete system requirements.
 
 ## Server install
 
 If you are upgrading from legacy zwift-offline, first follow [Migration → Old storage](#old-storage).
 
-Download the [Docker Compose file](docker/docker-compose.yml) to a suitable location on the server. 
+Clone this repository on the server, then run the [Docker Compose file](docker/docker-compose.yml) from the repository root.
 
 ```sh
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 It should say something like
@@ -71,18 +71,18 @@ You are now ready to connect the client
 
 ## Client configuration
 
-### Windows 
+### Windows
 
 - Install Zwift if not already installed
 - **NOTE:** instead of performing the steps below you can instead just run the **configure_client** script from https://github.com/oldnapalm/zoffline-helper/releases/latest
 - On your Windows machine running Zwift, copy the following files in this repo to a known location:
-  - [server/assets/ssl/cert-zwift-com.p12](server/assets/ssl/cert-zwift-com.p12)
-  - [server/assets/ssl/cert-zwift-com.pem](server/assets/ssl/cert-zwift-com.pem)
+  - [assets/ssl/cert-zwift-com.p12](assets/ssl/cert-zwift-com.p12)
+  - [assets/ssl/cert-zwift-com.pem](assets/ssl/cert-zwift-com.pem)
 - Open Command Prompt as an admin, cd to that location and run
   - `certutil.exe -importpfx Root cert-zwift-com.p12`
   - If you're prompted for a password, just leave it blank. There is no password.
 - Open Notepad as an admin and open `C:\Program Files (x86)\Zwift\data\cacert.pem`
-  - Append the contents of `server/assets/ssl/cert-zwift-com.pem` to cacert.pem
+  - Append the contents of `assets/ssl/cert-zwift-com.pem` to cacert.pem
 - Open Notepad as an admin and open `C:\Windows\System32\Drivers\etc\hosts`
   - Append this line: `<server-ip> us-or-rly101.zwift.com secure.zwift.com cdn.zwift.com launcher.zwift.com`
     <br />(Where `<server-ip>` is the ip address of the machine running Zluggish. If
@@ -96,7 +96,7 @@ to generate your own certificates and do the same.
 ### macOS
 
 - Install Zwift if not already installed
-- On your Mac machine running Zwift, copy the file [server/assets/ssl/cert-zwift-com.pem](server/assets/ssl/cert-zwift-com.pem) in this repo to a known location.
+- On your Mac machine running Zwift, copy the file [assets/ssl/cert-zwift-com.pem](assets/ssl/cert-zwift-com.pem) in this repo to a known location.
 - Open Keychain Access, select "System" under "Keychains", select "Certificates" under "Category"
   - Click "File - Import Items..." and import cert-zwift-com.pem
   - Right click "\*.zwift.com", select "Get Info" and under "Trust" choose "When using this certificate: Always Trust".
@@ -143,10 +143,10 @@ accept Zluggish’s self signed certificates for Zwift's domain names (this is d
 
 - Install Zwift on the device
 - Open Zwift once to complete installation (i.e download all extra files).
-- Append the contents of `server/assets/ssl/cert-zwift-com.pem` to `/data/data/com.zwift.zwiftgame/dataES/cacert.pem` on the device
+- Append the contents of `assets/ssl/cert-zwift-com.pem` to `/data/data/com.zwift.zwiftgame/dataES/cacert.pem` on the device
   - Note: this file will only exist after the first run of Zwift since it's downloaded after the initial install
   - Simple approach to achieve this if your device doesn't have a text editor:
-    - `adb push server/assets/ssl/cert-zwift-com.pem /data/data/com.zwift.zwiftgame/dataES/`
+    - `adb push assets/ssl/cert-zwift-com.pem /data/data/com.zwift.zwiftgame/dataES/`
     - In `adb shell`: `cd /data/data/com.zwift.zwiftgame/dataES/`
     - In `adb shell`: `cat cert-zwift-com.pem >> cacert.pem`
     - However you do it, ensure the permissions and ownership of the file remains the same.
@@ -294,7 +294,7 @@ Config migration does not create accounts or modify the original activity databa
 
 A durable `.config-migration.json` journal makes config publication resumable. If interrupted, rerun the same command with the same destination; do not delete the journal or overwrite a subsequently edited config. Account database backups use `.accounts-<timestamp>.bak` suffixes. Preserve original marker/credential files until the migrated setup has been tested.
 
-Rollback means stopping Node and restoring a matching pre-migration storage/config snapshot for the old release. Running an old binary against the new database is not rollback. Restoring an older snapshot discards subsequent progress; retain later FIT files separately. Follow the [cutover and rollback runbook](server/docs/cutover.md).
+Rollback means stopping Node and restoring a matching pre-migration storage/config snapshot for the old release. Running an old binary against the new database is not rollback. Restoring an older snapshot discards subsequent progress; retain later FIT files separately.
 
 ## Extra features
 
@@ -413,7 +413,7 @@ export default defineConfig({
 <details><summary>CDN proxy</summary>
 
 - `proxy.mode` accepts `'auto'` (default), `'enabled'` or `'disabled'` in `zluggish.config.ts`.
-- Bundled files are served from `server/assets/cdn/`. Missing game assets can be requested from Zwift through the proxy; upstream resolution uses Google public DNS independently of client host redirects. Use `'disabled'` for local-only assets. Live proxy behavior remains part of manual verification.
+- Bundled files are served from `assets/cdn/`. Missing game assets can be requested from Zwift through the proxy; upstream resolution uses Google public DNS independently of client host redirects. Use `'disabled'` for local-only assets. Live proxy behavior remains part of manual verification.
 - The former `get_gameassets.py` downloader is no longer included. Preserve any existing asset cache under the new CDN asset directory and rebuild the image after changing bundled files.
 
 </details>
@@ -468,9 +468,9 @@ Keep Zluggish on a trusted local network; it is not designed for public Internet
 <details><summary>If Zluggish is behind the official client</summary>
 Updating the advertised client version may let a newer client start, but does not establish protocol compatibility.
 
-- Windows: copy `C:\Program Files (x86)\Zwift\Zwift_ver_cur.xml` to Zluggish's `server/assets/cdn/gameassets/Zwift_Updates_Root/` overwriting the existing file.
-- macOS: copy `~/Library/Application Support/Zwift/ZwiftMac_ver_cur.xml` to Zluggish's `server/assets/cdn/gameassets/Zwift_Updates_Root/` overwriting the existing file.
-- Linux/server-only deployments: obtain the version XML from the client installation and place it in the same `server/assets/cdn/gameassets/Zwift_Updates_Root/` directory. Historical upstream version-update helpers assume the old directory layout.
+- Windows: copy `C:\Program Files (x86)\Zwift\Zwift_ver_cur.xml` to Zluggish's `assets/cdn/gameassets/Zwift_Updates_Root/` overwriting the existing file.
+- macOS: copy `~/Library/Application Support/Zwift/ZwiftMac_ver_cur.xml` to Zluggish's `assets/cdn/gameassets/Zwift_Updates_Root/` overwriting the existing file.
+- Linux/server-only deployments: obtain the version XML from the client installation and place it in the same `assets/cdn/gameassets/Zwift_Updates_Root/` directory. Historical upstream version-update helpers assume the old directory layout.
 
 There is no guarantee that an untested Zwift update will work. Rebuild the Docker image after updating bundled assets, and verify client compatibility before changing a working installation.
 
@@ -497,7 +497,7 @@ mise run check
 
 Mise manages Node 24 and pnpm 10. Its configuration and tasks are in `cli/mise.toml`. The check task builds both packages, runs ESLint and anti-slop Oxlint rules, typechecks, runs server and CLI tests, and checks formatting. Use `mise run server-dev` for the development server, `mise run test` for tests, or `mise run format-fix` to format supported files. Generated protobuf codecs and bundled assets are excluded from lint/format checks.
 
-For individual pnpm commands and lint provenance, see the [CLI/tooling guide](cli/README.md) and [lint documentation](server/docs/linting.md).
+For individual pnpm commands and lint provenance, see the [CLI/tooling guide](cli/README.md).
 
 ## Legal notice
 

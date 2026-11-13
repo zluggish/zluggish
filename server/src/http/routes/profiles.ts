@@ -1,8 +1,9 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { html } from 'hono/html';
 import { z } from 'zod';
-import { create, toBinary, fromBinary } from '@bufbuild/protobuf';
+import { create, toBinary, merge } from '@bufbuild/protobuf';
 import {
   PlayerProfileSchema,
   ProfileEntitlementsSchema,
@@ -237,9 +238,15 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (String(user.player_id) !== c.req.param('id')) throw new HTTPException(401);
 
-    const profile = fromBinary(PlayerProfileSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const profile = parseProtobuf(PlayerProfileSchema, new Uint8Array(await c.req.arrayBuffer()));
 
-    runtime.profiles.save(user.player_id, profile);
+    if (c.req.path.endsWith('/in-game-fields')) {
+      const existing = runtime.profiles.get(user.player_id);
+      merge(PlayerProfileSchema, existing, profile);
+      runtime.profiles.save(user.player_id, existing);
+    } else {
+      runtime.profiles.save(user.player_id, profile);
+    }
 
     return c.body(null, 204);
   });

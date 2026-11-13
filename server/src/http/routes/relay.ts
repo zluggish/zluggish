@@ -1,3 +1,4 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { HashSeedsSchema } from '#src/protocol/generated/hash-seeds_pb';
@@ -8,7 +9,7 @@ import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { create, fromBinary, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
+import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
 import {
   LoginRequestSchema,
   LoginResponseSchema,
@@ -31,7 +32,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/users/login', async (c) => {
     const user = authenticated(c);
 
-    const request = fromBinary(LoginRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const request = parseProtobuf(LoginRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     if (runtime.world.active(user.player_id)) throw new HTTPException(409);
 
@@ -88,7 +89,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           todaysplanUrl: 'https://whats.todaysplan.com.au',
           trainingpeaksUrl: 'https://api.trainingpeaks.com',
         },
-        nodes: { nodes: [{ ip, port: 3023 }] },
+        nodes: { nodes: [{ ip, port: runtime.config.network.tcp.port }] },
       },
       relaySessionId: user.player_id,
       expiration: 70,
@@ -122,7 +123,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       toBinary(
         TcpConfigSchema,
         create(TcpConfigSchema, {
-          nodes: [{ ip: runtime.config.server.advertisedIp, port: 3023 }],
+          nodes: [{ ip: runtime.config.server.advertisedIp, port: runtime.config.network.tcp.port }],
         }),
       ),
     ),
@@ -132,7 +133,7 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       toBinary(
         TcpConfigSchema,
         create(TcpConfigSchema, {
-          nodes: [{ ip: runtime.config.server.advertisedIp, port: 3023 }],
+          nodes: [{ ip: runtime.config.server.advertisedIp, port: runtime.config.network.tcp.port }],
         }),
       ),
     ),

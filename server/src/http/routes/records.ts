@@ -1,3 +1,4 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { create, clone, clearField, fromBinary, fromJsonString, toBinary } from '@bufbuild/protobuf';
@@ -66,13 +67,12 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/segment-results', async (c) => {
     const user = authenticated(c);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const result = fromBinary(SegmentResultSchema, bytes);
+    const result = parseProtobuf(SegmentResultSchema, bytes);
 
     if (result.segmentId === 1n) throw new HTTPException(400);
     result.playerId = BigInt(user.player_id);
     result.worldTime = worldTime();
     result.finishTimeStr = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-    result.sport = 0;
     result.id = BigInt(records.insert('segment_result', SegmentResultSchema, result));
     const sender = runtime.world.online.get(result.playerId);
 
@@ -81,7 +81,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         create(WorldAttributeSchema, {
           serverRealm: 1n,
           waType: WA_TYPE.WAT_SR,
-          payload: bytes,
+          payload: toBinary(SegmentResultSchema, result),
           worldTimeBorn: worldTime(),
           worldTimeExpire: worldTime() + 60_000n,
           timestamp: BigInt(Date.now()) * 1000n,
@@ -146,16 +146,18 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (!segment) throw new HTTPException(422);
 
-    const results = fastest(mine(user.player_id, c.req.param('sport'), segment));
+    const results = mine(user.player_id, c.req.param('sport'), segment);
+    const best = fastest(results)[0];
+    const latest = [...results].sort((a, b) => Number(b.worldTime - a.worldTime) || Number(b.id - a.id))[0];
 
     const stats = create(SegmentRideStatsSchema, {
       segmentId: BigInt(segment),
     });
 
-    if (results[0]) {
+    if (best && latest) {
       stats.numberOfResults = results.length;
-      stats.latestTime = results[0].elapsedMs;
-      stats.bestTime = results[0].elapsedMs;
+      stats.latestTime = latest.elapsedMs;
+      stats.bestTime = best.elapsedMs;
       stats.latestPercentile = 100;
       stats.bestPercentile = 100;
     }
@@ -284,7 +286,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/route-results', async (c) => {
     const user = authenticated(c);
 
-    const result = fromBinary(RouteResultSaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const result = parseProtobuf(RouteResultSaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     const id = records.insert('route_result', RouteResultSaveRequestSchema, result);
 
@@ -364,7 +366,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/achievement/route-completion-achievement-unlocks', async (c) => {
     const user = authenticated(c);
 
-    const incoming = fromBinary(
+    const incoming = parseProtobuf(
       RouteCompletionAchievementUnlockRequestSchema,
       new Uint8Array(await c.req.arrayBuffer()),
     );
@@ -383,7 +385,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/race-results', async (c) => {
     const user = authenticated(c);
 
-    const result = fromBinary(RaceResultEntrySaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const result = parseProtobuf(RaceResultEntrySaveRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     for (const [id, race] of races) if (Date.now() - race.touched > 3_600_000) races.delete(id);
 

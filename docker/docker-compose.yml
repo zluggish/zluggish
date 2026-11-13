@@ -2,12 +2,12 @@ services:
   zluggish:
     image: ghcr.io/zluggish/zluggish:latest
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: server/Dockerfile
       target: server
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./storage/:/usr/src/app/zwift-offline/storage
+      - ../storage/:/usr/src/app/zwift-offline/storage
     ports:
       - 80:80
       - 443:443

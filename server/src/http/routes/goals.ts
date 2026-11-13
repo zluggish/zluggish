@@ -1,6 +1,7 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import { z } from 'zod';
 import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
 import type { Goal } from '#src/protocol/generated/goal_pb';
@@ -91,9 +92,8 @@ export function goalRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       })
       .parse(row);
 
-    const value = (goal.type === 0 ? totals.distance : totals.duration) ?? 0;
-    goal.actualDistance = value;
-    goal.actualDuration = value;
+    goal.actualDistance = totals.distance ?? 0;
+    goal.actualDuration = totals.duration ?? 0;
   }
 
   app.on(['GET', 'POST'], '/api/profiles/:id/goals', async (c) => {
@@ -104,7 +104,7 @@ export function goalRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
     if (c.req.method === 'POST') {
       const goal = c.req.header('Content-Type')?.includes('application/x-protobuf-lite')
-        ? fromBinary(GoalSchema, new Uint8Array(await c.req.arrayBuffer()))
+        ? parseProtobuf(GoalSchema, new Uint8Array(await c.req.arrayBuffer()))
         : parseGoal(goalInput.parse(await c.req.json()));
 
       goal.playerId = BigInt(user.player_id);

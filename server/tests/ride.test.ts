@@ -1,3 +1,4 @@
+import { LoginRequestSchema } from '#src/protocol/generated/login_pb';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -16,7 +17,8 @@ import {
 } from '#src/protocol/generated/udp-node-msgs_pb';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { worldTime } from '#src/world/state';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { Accounts } from '#src/domain/accounts/repository';
 import { resolve } from 'node:path';
 
@@ -64,6 +66,7 @@ await test(
     const tcpPort = z.object({ port: z.number() }).parse(listeners.tcp.address()).port;
 
     const udpPort = z.object({ port: z.number() }).parse(udpAddress).port;
+    runtime.config.network.udp.port = udpPort;
     const socket = createConnection({ host: '127.0.0.1', port: tcpPort });
     t.after(() => socket.destroy());
     await once(socket, 'connect');
@@ -105,7 +108,13 @@ await test(
 
     const handshake = fromBinary(ServerToClientSchema, decoded.payload.subarray(0, -4));
 
-    assert.equal(handshake.udpConfig?.relayAddresses[0]?.port, 3022);
+    assert.equal(handshake.udpConfig?.relayAddresses[0]?.port, udpPort);
+    assert.equal(handshake.udpConfigVod1?.port, udpPort);
+    assert.ok(
+      handshake.udpConfigVod1?.relayAddressesVod.every((group) =>
+        group.relayAddresses.every((address) => address.port === udpPort),
+      ),
+    );
     assert.ok(existsSync(resolve(f.accounts.storage, String(user.player_id), 'encryption_key.bin')));
     const udp = createSocket('udp4');
     t.after(() => udp.close());
@@ -155,6 +164,7 @@ await test(
     const login = await f.app.request('/api/users/login', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
+      body: toBinary(LoginRequestSchema, create(LoginRequestSchema, { key })),
     });
 
     assert.equal(login.status, 409);
@@ -173,9 +183,12 @@ await test('activity create, save and restart preserve ownership, FIT bytes and 
     name: 'Synthetic ride',
     startDate: '2026-11-12T10:00:00Z',
     date: '2026-11-12T10:00:00Z',
-    distanceInMeters: 1000,
+    endDate: '2026-11-12T10:00:06Z',
+    distanceInMeters: 3000,
+    totalElevation: 25,
+    calories: 50,
     fitFilename: 'synthetic.fit',
-    fit: new Uint8Array([0, 1, 2, 255]),
+    fit: readFileSync(new URL('fixtures/ride.fit', import.meta.url)),
   });
 
   const response = await f.app.request(`/api/profiles/${user.player_id}/activities`, {
@@ -194,7 +207,32 @@ await test('activity create, save and restart preserve ownership, FIT bytes and 
   });
 
   assert.equal(finished.status, 200);
-  assert.ok(existsSync(resolve(f.profiles.folder(user.player_id), 'fit', `${id} - synthetic.fit`)));
+  assert.deepEqual(
+    readFileSync(resolve(f.profiles.folder(user.player_id), 'fit', `${id} - synthetic.fit`)),
+    Buffer.from(activity.fit),
+  );
+  const streaks = fromBinary(StreaksSchema, readFileSync(resolve(f.profiles.folder(user.player_id), 'streaks.bin')));
+  assert.equal(streaks.curStreakDistance, 3000);
+  assert.equal(streaks.curStreakElevation, 25);
+  assert.equal(streaks.curStreakCalories, 50);
+  assert.equal(
+    f.accounts.db.prepare('SELECT power FROM power_curve WHERE player_id=? AND time=?').get(user.player_id, '5')?.power,
+    200,
+  );
+  const detail = await f.app.request(`/api/activities/${id}`, { headers });
+
+  const chartUrl = z.object({ fitnessData: z.object({ fullDataUrl: z.string() }) }).parse(await detail.json())
+    .fitnessData.fullDataUrl;
+
+  const chart = await f.app.request(new URL(chartUrl).pathname, { headers });
+
+  const points = z
+    .object({ powerInWatts: z.array(z.number()), timeInSec: z.array(z.number()), distanceInCm: z.array(z.number()) })
+    .parse(await chart.json());
+
+  assert.deepEqual(points.powerInWatts, [200, 200, 200, 200, 200, 200]);
+  assert.deepEqual(points.timeInSec, [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(points.distanceInCm, [0, 1000, 2000, 3000, 4000, 5000]);
   const other = await f.accounts.create('Other', 'password');
 
   const attempt = await f.app.request(`/api/profiles/${user.player_id}/activities/${id}`, {

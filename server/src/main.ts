@@ -30,7 +30,7 @@ if (existsSync(resolve(config.storageDir, '.config-migration.json')))
 
 const root = packageRoot();
 
-const assets = resolve(root, 'assets');
+const assets = resolve(root, '../assets');
 
 const gameInfo = readFileSync(resolve(assets, 'data/game_info.txt'), 'utf8').replace(/^\u{FEFF}/u, '');
 
@@ -40,7 +40,7 @@ const variants = readFileSync(resolve(assets, 'data/variants.txt'), 'utf8');
 const owner = await openRuntime(config, assets);
 const app = createApp({ gameInfo, gameInfoHash, variants }, owner.runtime);
 const api = config.network.api;
-const host = api.host ?? (config.network.host || '0.0.0.0');
+const host = api.host ?? (config.network.host || '127.0.0.1');
 const listener: HttpListenerOptions = { port: api.port, host };
 
 if (api.useCert)
@@ -53,7 +53,7 @@ const server = startHttp(app, listener);
 const cdn = startCdn(owner.runtime);
 const ride = startRideListeners(owner.runtime);
 
-const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host || '0.0.0.0') : null;
+const dns = config.dns.enabled ? startDns(config.server.advertisedIp, config.network.host || '127.0.0.1') : null;
 
 console.log(`Zluggish server: ${api.useCert ? 'https' : 'http'}://${host}:${api.port}`);
 

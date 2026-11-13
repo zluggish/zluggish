@@ -1,6 +1,7 @@
+import { parseProtobuf } from '#src/http/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -251,7 +252,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const user = authenticated(c);
     const id = BigInt(user.player_id);
 
-    const update = fromBinary(WorldAttributeSchema, new Uint8Array(await c.req.arrayBuffer()));
+    const update = parseProtobuf(WorldAttributeSchema, new Uint8Array(await c.req.arrayBuffer()));
 
     update.worldTimeExpire = worldTime() + 60_000n;
     update.waF12 = 1n;
@@ -259,7 +260,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     let recipients: bigint[] | undefined;
 
     if (update.waType === WA_TYPE.WAT_SPA) {
-      const action = fromBinary(SocialPlayerActionSchema, update.payload);
+      const action = parseProtobuf(SocialPlayerActionSchema, update.payload);
       action.playerId = id;
       const profile = runtime.profiles.get(user.player_id);
       action.firstName = profile.firstName;
@@ -296,7 +297,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/api/player-playbacks/player/playback', async (c) => {
     const user = authenticated(c);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const playback = fromBinary(PlaybackDataSchema, bytes);
+    const playback = parseProtobuf(PlaybackDataSchema, bytes);
 
     if (!playback.time) return c.body(null, 200);
     const id = randomUUID();

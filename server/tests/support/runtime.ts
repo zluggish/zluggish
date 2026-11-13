@@ -20,11 +20,11 @@ export function runtimeFixture(t: TestContext) {
   const settings = new SettingsStore(storage);
   const world = new World();
   const config = validateConfig({ storageDir: storage });
-  const assets = resolve(packageRoot(), 'assets');
+  const assets = resolve(packageRoot(), '../assets');
 
   const tokens = z
     .object({ access: z.string(), refresh: z.string(), id: z.string() })
-    .parse(JSON.parse(readFileSync(resolve(packageRoot(), 'assets/tokens.json'), 'utf8')));
+    .parse(JSON.parse(readFileSync(resolve(packageRoot(), '../assets/tokens.json'), 'utf8')));
 
   const runtime = {
     accounts,

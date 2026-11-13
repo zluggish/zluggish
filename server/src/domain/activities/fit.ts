@@ -34,7 +34,7 @@ export function decodeFit(bytes: Uint8Array) {
     timestamp:
       messages.activityMesgs?.at(-1)?.timestamp === undefined
         ? Math.floor(Date.now() / 1000)
-        : (messages.activityMesgs.at(-1)?.timestamp ?? 0) + 631_065_600,
+        : z.number().parse(messages.activityMesgs.at(-1)?.timestamp) + 631_065_600,
   };
 }
 

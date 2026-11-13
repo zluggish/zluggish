@@ -85,7 +85,7 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
     if (!parsed.success)
       throw new ConfigError(parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.code}`).join('; '));
 
-    config = validateConfig(parsed.data);
+    config = parsed.data;
   } catch (error) {
     if (error instanceof ConfigError) throw error;
 

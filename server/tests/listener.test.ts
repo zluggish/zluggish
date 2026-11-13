@@ -16,7 +16,7 @@ await test('Node adapter serves HTTPS, binary bodies, forms, and actual peer add
   app.get('/peer', (c) => c.text(getConnInfo(c).remote.address ?? ''));
   app.post('/binary', async (c) => c.body(new Uint8Array(await c.req.arrayBuffer())));
   app.post('/form', async (c) => c.json(await c.req.parseBody()));
-  const root = resolve(packageRoot(), 'assets');
+  const root = resolve(packageRoot(), '../assets');
 
   const server = startHttp(app, {
     host: '127.0.0.1',
