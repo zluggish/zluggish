@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 function sources(directory: string): string[] {
@@ -14,7 +15,7 @@ function sources(directory: string): string[] {
 
 for (const layer of ['http', 'services', 'repositories']) {
   await test(`${layer} respects application dependency boundaries`, () => {
-    const root = new URL(`${layer}/`, import.meta.url).pathname;
+    const root = fileURLToPath(new URL(`${layer}/`, import.meta.url));
 
     for (const file of sources(root)) {
       const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -55,8 +56,8 @@ for (const layer of ['http', 'services', 'repositories']) {
 }
 
 await test('cryptography is centralized in the crypto repository', () => {
-  for (const file of sources(new URL('./', import.meta.url).pathname)) {
-    if (file.endsWith('/repositories/crypto.repository.ts')) continue;
+  for (const file of sources(fileURLToPath(new URL('./', import.meta.url)))) {
+    if (file === fileURLToPath(new URL('repositories/crypto.repository.ts', import.meta.url))) continue;
     const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
 
     for (const statement of source.statements) {
@@ -76,7 +77,7 @@ await test('cryptography is centralized in the crypto repository', () => {
 
 await test('services and repositories expose operations through classes', () => {
   for (const layer of ['services', 'repositories'])
-    for (const file of sources(new URL(`${layer}/`, import.meta.url).pathname)) {
+    for (const file of sources(fileURLToPath(new URL(`${layer}/`, import.meta.url)))) {
       const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
 
       for (const statement of source.statements) {
@@ -101,7 +102,7 @@ await test('services and repositories expose operations through classes', () => 
 });
 
 await test('DTOs do not depend on application implementation layers', () => {
-  for (const file of sources(new URL('dtos/', import.meta.url).pathname)) {
+  for (const file of sources(fileURLToPath(new URL('dtos/', import.meta.url)))) {
     const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
 
     for (const statement of source.statements) {
