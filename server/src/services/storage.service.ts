@@ -33,6 +33,7 @@ export class StorageService extends BaseService {
   achievements(id: number) {
     return new AchievementService(this.repositories).loadAchievements(this.context, id);
   }
+
   /** Repeated unlocks are idempotent membership additions, not progression increments. */
   unlock(id: number, incoming: Achievements) {
     const file = resolve(this.context.profiles.folder(id), 'achievements.bin');
@@ -43,6 +44,7 @@ export class StorageService extends BaseService {
         achievements.achievements.push(achievement);
     this.filesRepository.saveData(AchievementsSchema, file, achievements);
   }
+
   attributes(id: number, requested: Set<number>) {
     const storage = this.filesRepository.readData(
       UserStorageSchema,
@@ -55,6 +57,7 @@ export class StorageService extends BaseService {
       ),
     });
   }
+
   saveAttributes(id: number, incoming: UserStorage) {
     const file = resolve(this.context.profiles.folder(id), 'user_storage.bin');
     const storage = this.filesRepository.readData(UserStorageSchema, file);
@@ -80,6 +83,7 @@ export class StorageService extends BaseService {
 
     this.filesRepository.saveData(UserStorageSchema, file, storage);
   }
+
   upload(id: number, upload: { folder: string; filename: string; file: Uint8Array }) {
     const folder = safeName(upload.folder);
 
@@ -97,9 +101,11 @@ export class StorageService extends BaseService {
 
     return { id: fileId, folder, name, timestamp };
   }
+
   list(id: number, folder: string) {
     return this.storageRepository.listZfile(id, folder).map((row) => fileRow.parse(row));
   }
+
   private owned(id: number, fileId: string) {
     const parsed = fileRow.safeParse(this.storageRepository.findZfileRow(fileId, id));
 
@@ -107,6 +113,7 @@ export class StorageService extends BaseService {
 
     return parsed.data;
   }
+
   delete(id: number, fileId: string) {
     const row = this.owned(id, fileId);
     this.filesRepository.remove(
@@ -114,6 +121,7 @@ export class StorageService extends BaseService {
     );
     this.storageRepository.deleteZfile(row.id);
   }
+
   download(id: number, fileId: string) {
     const row = this.owned(id, fileId);
 

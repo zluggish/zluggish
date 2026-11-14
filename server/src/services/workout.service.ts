@@ -78,6 +78,7 @@ export class WorkoutsService extends BaseService {
   syncWorkoutsAutomatically(id: number, android = false) {
     return WorkoutsService.syncWorkoutsAutomatically(this.runtime, id, android);
   }
+
   provider(id: number) {
     const settings = SettingsService.resolveRiderSettings(
       this.runtime.config.riderDefaults,
@@ -97,6 +98,7 @@ export class WorkoutsService extends BaseService {
 
     return available.includes(saved) ? saved : (available[0] ?? null);
   }
+
   entries(id: number) {
     const file = resolve(this.runtime.profiles.folder(id), 'intervals_icu_workout.json');
 
@@ -105,9 +107,11 @@ export class WorkoutsService extends BaseService {
 
     return z.array(metadataSchema).parse(Array.isArray(raw.workouts) ? raw.workouts : [raw]);
   }
+
   metadataFile(id: number) {
     return resolve(this.runtime.profiles.folder(id), 'intervals_icu_workout.json');
   }
+
   /** Unmodified stored entries, including fields the schema does not read. */
   stored(id: number) {
     const none: StoredEntry[] = [];
@@ -129,6 +133,7 @@ export class WorkoutsService extends BaseService {
         }
       : { collection: false, entries: [storedEntrySchema.parse(raw)] };
   }
+
   removeEvent(id: number, eventId: string | number) {
     const { entries } = this.stored(id);
 
@@ -153,6 +158,7 @@ export class WorkoutsService extends BaseService {
       true,
     );
   }
+
   list(id: number, now = new Date()) {
     if (this.provider(id) !== 'intervals-icu') return [];
     const day = localDay(now);
@@ -238,11 +244,13 @@ export class WorkoutsService extends BaseService {
       };
     });
   }
+
   file(id: string) {
     return uuid.safeParse(id).success
       ? resolve(this.runtime.config.storageDir, 'tp-workouts/intervalsicu', `${id}.zwo`)
       : null;
   }
+
   async sync(id: number, signal = AbortSignal.timeout(30_000)) {
     signal.throwIfAborted();
     const provider = this.provider(id);
@@ -365,6 +373,7 @@ export class WorkoutsService extends BaseService {
 
     return `Synced ${entries.length} Intervals.icu workouts.`;
   }
+
   bridge(id: number, signal = AbortSignal.timeout(30_000)) {
     const settings = SettingsService.resolveRiderSettings(
       this.runtime.config.riderDefaults,
@@ -504,6 +513,7 @@ export class WorkoutsService extends BaseService {
       difficulty: Math.min(number(root.difficulty), 5),
     };
   }
+
   static syncWorkoutsAutomatically(runtime: Runtime, id: number, android = false) {
     let provider: string | null;
     const workouts = new WorkoutsService(runtime);

@@ -12,6 +12,7 @@ const rowSchema = z.object({ value: z.string() });
 
 export class SettingsStore {
   readonly db: DatabaseSync;
+
   private readonly executor: SqliteExecutor;
 
   constructor(storage: string, readOnly = false) {

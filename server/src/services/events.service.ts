@@ -17,6 +17,7 @@ export class EventsService extends BaseService {
   constructor(private readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   findPrivateEvent(...values: Parameters<EventsRepository['findPrivateEvent']>) {
     return this.eventsRepository.findPrivateEvent(...values);
   }
@@ -28,6 +29,7 @@ export class EventsService extends BaseService {
   notificationsForPlayer(...values: Parameters<EventsRepository['notificationsForPlayer']>) {
     return this.eventsRepository.notificationsForPlayer(...values);
   }
+
   findNotification(...values: Parameters<EventsRepository['findNotification']>) {
     return this.eventsRepository.findNotification(...values);
   }
@@ -45,6 +47,7 @@ export class EventsService extends BaseService {
         : [];
     });
   }
+
   markNotification(player: number, id: string, update: z.infer<typeof notificationUpdateSchema>) {
     const row = this.findNotification(id, player);
 
@@ -67,6 +70,7 @@ export class EventsService extends BaseService {
       enrolledZwiftAcademy: false,
     };
   }
+
   read(id: string) {
     const row = this.findPrivateEvent(id);
 
@@ -74,11 +78,13 @@ export class EventsService extends BaseService {
 
     return storedSchema.parse(JSON.parse(z.string().parse(row.json)));
   }
+
   all() {
     return this.eventsRepository
       .listPrivateEvent()
       .map((row) => storedSchema.parse(JSON.parse(z.string().parse(row.json))));
   }
+
   save(event: Meetup) {
     const accepted = event.eventInvites.filter((invite) => invite.status === 'ACCEPTED');
     event.acceptedTotalCount = accepted.length;
@@ -88,6 +94,7 @@ export class EventsService extends BaseService {
     event.invitedTotalCount = event.eventInvites.length;
     this.eventsRepository.updatePrivateEvent(JSON.stringify(event), event.id);
   }
+
   broadcast(event: Meetup) {
     const payload = toBinary(
       EventSchema,
@@ -127,6 +134,7 @@ export class EventsService extends BaseService {
         [BigInt(id)],
       );
   }
+
   notify(event: Meetup, id: number) {
     const notificationId = Number(this.eventsRepository.insertNotification(event.id, id, '').lastInsertRowid);
 
@@ -161,6 +169,7 @@ export class EventsService extends BaseService {
 
     this.updateNotification(JSON.stringify(notification), notificationId);
   }
+
   announceSignup(playerId: number, id: bigint, joining: boolean) {
     const payload = joining
       ? toBinary(
@@ -196,9 +205,11 @@ export class EventsService extends BaseService {
   private begin() {
     this.eventsRepository.begin();
   }
+
   private commit() {
     this.eventsRepository.commit();
   }
+
   private rollback() {
     this.eventsRepository.rollback();
   }
@@ -210,6 +221,7 @@ export class EventsService extends BaseService {
   eventJSON(...args: Parameters<typeof EventCatalogService.eventJSON>) {
     return EventCatalogService.eventJSON(...args);
   }
+
   createMeetup(user: Rider, input: MeetupInput) {
     input.invitedProfileIds = [...new Set(input.invitedProfileIds)].filter((id) => id !== user.player_id);
 
@@ -259,6 +271,7 @@ export class EventsService extends BaseService {
 
     return event.id;
   }
+
   deleteMeetup(event: Meetup) {
     this.begin();
 
@@ -271,6 +284,7 @@ export class EventsService extends BaseService {
       throw error;
     }
   }
+
   updateMeetup(event: Meetup, update: MeetupInput) {
     update.invitedProfileIds = [...new Set(update.invitedProfileIds)].filter((id) => id !== event.organizerProfileId);
 
@@ -322,6 +336,7 @@ export class EventsService extends BaseService {
 
     this.broadcast(next);
   }
+
   // Any existing decision may change. The organizer remains accepted when updating
   // the invite list; retained invitees keep decisions, new invitees start pending.
   respondToInvite(event: Meetup, playerId: number, accepting: boolean) {

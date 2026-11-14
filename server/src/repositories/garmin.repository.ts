@@ -16,6 +16,7 @@ export class GarminRepository {
       retries: 0,
     });
   }
+
   /** Authorization stays in memory until the owning browser attempt is validated. */
   saveAuthorization(folder: string, client: GarminClient) {
     const tokens = client.getTokens();
@@ -25,6 +26,7 @@ export class GarminRepository {
     files.writeDurable(resolve(folder, 'oauth1_token.json'), JSON.stringify(tokens.oauth1), true);
     files.writeDurable(resolve(folder, 'oauth2_token.json'), JSON.stringify(tokens.oauth2), true);
   }
+
   async uploadGarmin(tokens: string, domain: string, filename: string, fit: Uint8Array) {
     const client = new GarminRepository().garminClient(tokens, domain);
 

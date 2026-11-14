@@ -54,25 +54,40 @@ export function filesUnder(folder: string, suffix: string): string[] {
 
 export class Simulation {
   readonly replays = new Map<bigint, ReplayRider>();
+
   readonly pelotons = new Map<string, Peloton>();
+
   readonly blobs = new Map<bigint, Blob>();
+
   readonly directors = new Map<bigint, GestureDirector>();
+
   readonly ghosts = new Map<bigint, RiderGhosts>();
+
   readonly bookmarks = new Map<bigint, Map<bigint, { state: PlayerState; name: string }>>();
+
   readonly lastGesture = new Map<bigint, { action: number; time: number }>();
+
   readonly pool: RiderPool;
+
   readonly ghostAppearance: z.infer<typeof ghostAppearanceSchema>;
+
   readonly starts: Record<string, { road: number; time: number }>;
+
   readonly rng = new Random();
+
   timer: NodeJS.Timeout | null = null;
+
   lastPacer = 0;
+
   lastBot = 0;
+
   private autoGroup: {
     id: bigint;
     all: boolean;
     road: number;
     forward: boolean;
   } | null = null;
+
   constructor(
     readonly runtime: Runtime,
     readonly now: () => number = () => performance.now() / 1000,
@@ -87,13 +102,16 @@ export class Simulation {
     runtime.world.simulation = this;
     this.reload();
   }
+
   start() {
     if (!this.timer) this.timer = setInterval(() => this.tick(), 500);
   }
+
   close() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
+
   reload() {
     for (const id of this.replays.keys()) {
       this.runtime.world.synthetic.delete(id);
@@ -169,6 +187,7 @@ export class Simulation {
     for (const id of ids) this.loadBlob(BigInt(id));
     this.tick();
   }
+
   loadPelotons() {
     for (const group of this.pelotons.values())
       for (const rider of group.riders) {
@@ -217,6 +236,7 @@ export class Simulation {
       for (const rider of group.riders) this.runtime.profiles.synthetic.set(rider.profile.id, rider.profile);
     }
   }
+
   loadBlob(id: bigint) {
     const previous = this.blobs.get(id);
 
@@ -256,6 +276,7 @@ export class Simulation {
 
     if (state) blob.receive(state, 0);
   }
+
   receive(id: bigint, state: PlayerState) {
     const blob = this.blobs.get(id);
     blob?.receive(state, clamp(Number(worldTime() - state.worldTime) / 1000, -5, 5));
@@ -345,6 +366,7 @@ export class Simulation {
 
     ghosts.lastRoadTime = state.roadTime;
   }
+
   regroup(id: bigint) {
     const state = this.runtime.world.online.get(id);
     const ghosts = this.ghosts.get(id);
@@ -360,6 +382,7 @@ export class Simulation {
 
     ghosts.last = 0;
   }
+
   nearest(state: PlayerState, states: PlayerState[]) {
     let index: number | null = null;
     let distance = Infinity;
@@ -376,6 +399,7 @@ export class Simulation {
 
     return index;
   }
+
   group(id: bigint, all: boolean) {
     const state = this.runtime.world.online.get(id);
 
@@ -390,6 +414,7 @@ export class Simulation {
         if (index !== null) replay.position = index;
       }
   }
+
   loadBookmarks(id: bigint) {
     const bookmarks = new Map<bigint, { state: PlayerState; name: string }>();
 
@@ -407,6 +432,7 @@ export class Simulation {
 
     return bookmarks;
   }
+
   bookmark(state: PlayerState, name: string) {
     const safe = name
       .normalize('NFKD')
@@ -428,6 +454,7 @@ export class Simulation {
     );
     this.loadBookmarks(state.id);
   }
+
   logout(id: bigint) {
     const state = this.runtime.world.online.get(id);
 
@@ -446,6 +473,7 @@ export class Simulation {
     for (const rider of blob.riders) this.runtime.world.synthetic.delete(rider.profile.id);
     this.loadBlob(id);
   }
+
   gesture(id: bigint, payload: Uint8Array) {
     if (payload.length !== 16) return null;
     const buffer = Buffer.from(payload);
@@ -462,6 +490,7 @@ export class Simulation {
 
     return this.blobs.get(id)?.gesture(action.data) ?? null;
   }
+
   command(id: bigint, command: string) {
     const [name, ...parts] = command.trim().toLowerCase().split(/\s+/);
     const argument = parts.join(' ');
@@ -590,6 +619,7 @@ export class Simulation {
 
     return `Invalid command: ${command}`;
   }
+
   /** Off -> tracking; switching rider resets the road/direction checkpoint. */
   private trackGroup(id: bigint, all: boolean) {
     this.autoGroup = { id, all, road: -1, forward: false };

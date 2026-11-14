@@ -41,13 +41,21 @@ by Simulation.tick. previous=null initializes motion, not a paused rider state.
 */
 export class Peloton {
   readonly riders: Follower[] = [];
+
   readonly slots: [number, number][] = [];
+
   readonly starts: number[] = [];
+
   readonly lengths: number[] = [];
+
   readonly grades: number[];
+
   readonly rng: Random;
+
   readonly length: number;
+
   nextShuffle = 0;
+
   constructor(
     readonly index: number,
     readonly pacer: ReplayRider,
@@ -157,6 +165,7 @@ export class Peloton {
       entry.rider.lateral = this.slots[index]?.[1] ?? 0;
     }
   }
+
   tick(now: number, time: bigint, seconds = 1) {
     if (this.pacer.states.length === 0 || !this.length) return [];
 

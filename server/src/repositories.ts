@@ -30,34 +30,63 @@ import { ZwiftRepository } from '#src/repositories/zwift.repository';
 /** One repository set per account database, shared by every service. */
 export class Repositories {
   readonly loggingRepository = new LoggingRepository();
+
   readonly db;
+
   private settings: SettingsStore | undefined;
+
   readonly accountsRepository: AccountsRepository;
+
   readonly activitiesRepository: ActivitiesRepository;
+
   readonly connectionsRepository: Connections;
+
   readonly eventsRepository: EventsRepository;
+
   readonly fitnessRepository: FitnessRepository;
+
   readonly goalRepository: GoalRepository;
+
   readonly protobufRepository: ProtobufRows;
+
   readonly recordsRepository: RecordsRepository;
+
   readonly socialRepository: SocialRepository;
+
   readonly storageRepository: StorageRepository;
+
   readonly uploadsRepository: UploadsRepository;
+
   readonly completionRepository: Completions;
+
   readonly cryptoRepository: CryptoRepository;
+
   readonly filesRepository: AssetFiles;
+
   readonly lockRepository: LockRepository;
+
   readonly profileJsonRepository: ProfileJsonRepository;
+
   readonly profileDownloadRepository: ProfileDownloadRepository;
+
   readonly stravaRepository: StravaRepository;
+
   readonly garminRepository: GarminRepository;
+
   readonly streakRepository: StreakRepository;
+
   readonly eventCatalogRepository: EventCatalogRepository;
+
   readonly riderRepository: RiderRepository;
+
   readonly sessionRepository: SessionRepository;
+
   readonly zwiftRepository: ZwiftRepository;
+
   readonly discordRepository: DiscordRepository;
+
   readonly profileRepository: Profiles;
+
   constructor(readonly storage: string) {
     this.db = openDatabase(storage);
     this.accountsRepository = new AccountsRepository(this.db);
@@ -87,6 +116,7 @@ export class Repositories {
     this.discordRepository = new DiscordRepository();
     this.profileRepository = new Profiles(storage, this.accountsRepository);
   }
+
   get settingsRepository() {
     return (this.settings ??= new SettingsStore(this.storage));
   }

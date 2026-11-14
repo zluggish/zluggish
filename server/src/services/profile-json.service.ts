@@ -49,6 +49,7 @@ export class ProfileJsonService extends BaseService {
       (now.getUTCMonth() + 1 < month || (now.getUTCMonth() + 1 === month && now.getUTCDate() < day) ? 1 : 0)
     );
   }
+
   static companionProfile(profile: PlayerProfile, avatar: string | null, bikeFrameName: string) {
     const privacy = profile.privacyBits;
 

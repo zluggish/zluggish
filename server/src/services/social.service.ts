@@ -7,12 +7,15 @@ export class SocialService extends BaseService {
   constructor(private readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   listUser(...values: Parameters<SocialRepository['listUser']>) {
     return this.socialRepository.listUser(...values);
   }
+
   findActivity(...values: Parameters<SocialRepository['findActivity']>) {
     return this.socialRepository.findActivity(...values);
   }
+
   insertPlayback(...values: Parameters<SocialRepository['insertPlayback']>) {
     return this.socialRepository.insertPlayback(...values);
   }

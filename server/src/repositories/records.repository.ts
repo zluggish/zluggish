@@ -3,12 +3,15 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class RecordsRepository {
   private readonly executor: SqliteExecutor;
+
   constructor(db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
+
   updateRouteResult(player: number, id: number | bigint) {
     return this.executor.run(query.updateTable('route_result').set({ player_id: player }).where('id', '=', id));
   }
+
   listRouteResult(player: number) {
     return this.executor.all(
       query
@@ -19,9 +22,11 @@ export class RecordsRepository {
         .groupBy('route_hash'),
     );
   }
+
   findPrivateEvent(id: number | bigint) {
     return this.executor.get(query.selectFrom('private_event').select('json').where('id', '=', id));
   }
+
   routeBadgeCount(player: number) {
     return (
       this.executor.get(
@@ -34,6 +39,7 @@ export class RecordsRepository {
       )?.count ?? 0
     );
   }
+
   ensureRoute(player: number, hash: number) {
     const existing = this.executor.get(
       query.selectFrom('route_result').select('id').where('player_id', '=', player).where('route_hash', '=', hash),

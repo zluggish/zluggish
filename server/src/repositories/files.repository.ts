@@ -36,15 +36,19 @@ export class AssetFiles {
   readData<Schema extends DescMessage>(schema: Schema, path: string) {
     return existsSync(path) ? fromBinary(schema, readFileSync(path)) : create(schema);
   }
+
   saveData<Schema extends DescMessage>(schema: Schema, path: string, value: ReturnType<typeof create<Schema>>) {
     this.writeDurable(path, toBinary(schema, value), true);
   }
+
   write(path: string, data: Uint8Array) {
     this.writeDurable(path, data, true);
   }
+
   read(path: string) {
     return existsSync(path) ? readFileSync(path) : null;
   }
+
   remove(path: string) {
     if (existsSync(path)) unlinkSync(path);
   }
@@ -74,12 +78,20 @@ export class AssetFiles {
       rmSync(temporary, { force: true });
     }
   }
+
   existsSync = existsSync;
+
   lstatSync = lstatSync;
+
   mkdirSync = mkdirSync;
+
   readdirSync = readdirSync;
+
   readFileSync = readFileSync;
+
   rmSync = rmSync;
+
   statSync = statSync;
+
   unlinkSync = unlinkSync;
 }

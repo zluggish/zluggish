@@ -11,6 +11,7 @@ export class StreakRepository {
 
     return existsSync(path) ? fromBinary(StreaksSchema, readFileSync(path)) : null;
   }
+
   saveStreaks(folder: string, streaks: Streaks) {
     new AssetFiles().writeDurable(resolve(folder, 'streaks.bin'), toBinary(StreaksSchema, streaks), true);
   }

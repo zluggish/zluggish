@@ -38,12 +38,19 @@ Random draws remain in event order so seeded simulation stays reproducible.
 */
 export class GestureDirector {
   readonly cooldown = new Map<bigint, number>();
+
   seen = new Map<bigint, { phase: string | null; dropping: boolean; behind: boolean }>();
+
   readonly surging = new Set<bigint>();
+
   queue: { expires: number; rider: SignallingRider; action: UserBikeAction }[] = [];
+
   frontSince: number | null = null;
+
   nextRandom: number;
+
   last = 0;
+
   constructor(
     readonly rng: Random,
     now: number,
@@ -51,6 +58,7 @@ export class GestureDirector {
   ) {
     this.nextRandom = now + Math.max(5, interval * rng.between(0.6, 1.4));
   }
+
   step(now: number, riders: SignallingRider[], interval: number, speed: number, chance: number) {
     const previous = this.seen;
     this.seen = new Map();

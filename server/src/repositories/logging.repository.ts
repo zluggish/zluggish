@@ -77,9 +77,13 @@ export class LoggingRepository {
   }
 
   verbose = (event: string, message: string, fields?: Fields) => this.write('VERBOSE', event, message, fields);
+
   info = (event: string, message: string, fields?: Fields) => this.write('INFO', event, message, fields);
+
   warn = (event: string, message: string, fields?: Fields) => this.write('WARN', event, message, fields);
+
   error = (event: string, message: string, fields?: Fields) => this.write('ERROR', event, message, fields);
+
   critical = (event: string, message: string, fields?: Fields) => this.write('CRITICAL', event, message, fields);
 
   private sink(line: string, level: Level) {

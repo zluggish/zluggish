@@ -39,6 +39,7 @@ export class Random {
   constructor(private seed = Math.floor(Math.random() * 0xff_ff_ff_ff)) {
     this.seed ||= 1;
   }
+
   value() {
     let value = this.seed;
     value ^= value << 13;
@@ -48,14 +49,17 @@ export class Random {
 
     return (value >>> 0) / 4_294_967_296;
   }
+
   between(low: number, high: number) {
     return lerp(low, high, this.value());
   }
+
   gaussian(sigma = 1) {
     return (
       Math.sqrt(-2 * Math.log(Math.max(this.value(), Number.EPSILON))) * Math.cos(2 * Math.PI * this.value()) * sigma
     );
   }
+
   pick<T>(items: readonly T[]): T {
     const item = items[Math.floor(this.value() * items.length)];
 
@@ -63,6 +67,7 @@ export class Random {
 
     return item;
   }
+
   shuffle<T>(items: readonly T[]) {
     const shuffled = [...items];
 
@@ -101,10 +106,15 @@ export interface Sample {
 /** Recent road geometry measured in metres. A road/lap boundary never interpolates road coordinates. */
 export class Trail {
   entries: Snapshot[] = [];
+
   resets = 0;
+
   latency = 0;
+
   heading: [number, number] = [0, 0];
+
   constructor(readonly now: () => number = () => performance.now() / 1000) {}
+
   push(state: PlayerState, lag: number | null = null) {
     let last = this.entries.at(-1);
 
@@ -156,6 +166,7 @@ export class Trail {
 
     while (this.entries.length > 3 && (this.entries[1]?.distance ?? 0) < snap.distance - 90) this.entries.shift();
   }
+
   // collecting -> ready with >3.2m across >=2 samples; >=8s age is stale.
   // push detects course/teleport discontinuity, clears history and increments generation.
   ready() {
@@ -168,6 +179,7 @@ export class Trail {
       this.now() - head.time < 8
     );
   }
+
   acceleration() {
     const head = this.entries.at(-1);
 
@@ -187,6 +199,7 @@ export class Trail {
       ? clamp((head.state.speed - ref.state.speed) / 3_600_000 / (head.time - ref.time), -3, 3)
       : 0;
   }
+
   motion() {
     const head = this.entries.at(-1);
 
@@ -205,6 +218,7 @@ export class Trail {
       advance: clamp(original * horizon + 0.5 * acceleration * horizon * horizon + speed * (age - horizon), 0, 30),
     };
   }
+
   grade() {
     const head = this.entries.at(-1);
 
@@ -223,6 +237,7 @@ export class Trail {
 
     return clamp((head.state.yAltitude - ref.state.yAltitude) / 100 / (head.distance - ref.distance), -0.25, 0.25);
   }
+
   sample(gap: number): Sample | null {
     const head = this.entries.at(-1);
 

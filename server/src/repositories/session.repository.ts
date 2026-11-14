@@ -82,5 +82,6 @@ export class SessionRepository {
       return Number.isSafeInteger(code) && code > 0 && code <= 0x10_ff_ff ? String.fromCodePoint(code) : match;
     });
   }
+
   binaryBlob = (bytes: Uint8Array) => new Blob([Uint8Array.from(bytes)]);
 }

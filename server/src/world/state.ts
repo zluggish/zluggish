@@ -23,17 +23,25 @@ export function forward(state: PlayerState) {
 /** Per authenticated relay; only accepted packets advance counters. Never an anti-replay policy. */
 export class Relay {
   tcpConnection = 0;
+
   udpConnection = 0;
+
   tcpRead = 0;
+
   tcpWrite = 0;
+
   udpRead = 0;
+
   udpWrite = 0;
+
   constructor(readonly key: Buffer) {}
+
   acceptUdp(connection: number, explicitConnection?: number, sequence?: number) {
     if (explicitConnection !== undefined && explicitConnection !== this.udpConnection) this.udpWrite = 0;
     this.udpConnection = connection;
     this.udpRead = sequence ?? this.udpRead + 1;
   }
+
   acceptTcp(connection: number, hello: boolean) {
     if (hello) {
       this.tcpConnection = connection;
@@ -41,9 +49,11 @@ export class Relay {
       this.tcpWrite = 0;
     } else this.tcpRead++;
   }
+
   nextUdp() {
     return this.udpWrite++;
   }
+
   nextTcp() {
     return this.tcpWrite++;
   }
@@ -60,17 +70,29 @@ export function expired(state: PlayerState, now = worldTime()) {
 /** Presence is online-map membership plus freshness, independent of relay/socket and observed ride. */
 export class World {
   readonly lifecycle = new Lifecycle();
+
   presence: ((id: bigint, joining: boolean) => void) | undefined;
+
   simulation: Simulation | undefined;
+
   readonly personal = new Map<bigint, Map<bigint, PlayerState>>();
+
   readonly phones = new Map<bigint, ServerToClient>();
+
   readonly news = new Map<bigint, Map<bigint, bigint>>();
+
   readonly online = new Map<bigint, PlayerState>();
+
   readonly relays = new Map<bigint, Relay>();
+
   readonly updates = new Map<bigint, WorldAttribute[]>();
+
   readonly mapOverrides = new Map<string, string>();
+
   readonly climbOverrides = new Map<string, string>();
+
   readonly synthetic = new Map<bigint, PlayerState>();
+
   readonly histories = new Map<bigint, PlayerState[]>();
 
   active(playerId: number | bigint) {

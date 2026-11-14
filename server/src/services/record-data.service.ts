@@ -7,6 +7,7 @@ export class RecordDataService extends BaseService {
   constructor(context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   insert<Schema extends DescMessage>(
     table: Table,
     schema: Schema,
@@ -15,6 +16,7 @@ export class RecordDataService extends BaseService {
   ) {
     return this.protobufRepository.insert(table, schema, message, exclude);
   }
+
   update<Schema extends DescMessage>(
     table: Table,
     id: bigint,
@@ -24,9 +26,11 @@ export class RecordDataService extends BaseService {
   ) {
     this.protobufRepository.update(table, id, schema, message, exclude);
   }
+
   select<Schema extends DescMessage>(table: Table, schema: Schema, playerId: bigint) {
     return this.protobufRepository.select(table, schema, playerId);
   }
+
   decode<Schema extends DescMessage>(schema: Schema, row: Parameters<ProtobufRows['decode']>[1]) {
     return this.protobufRepository.decode(schema, row);
   }

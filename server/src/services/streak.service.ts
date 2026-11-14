@@ -12,6 +12,7 @@ export class StreakService extends BaseService {
 
     return { start: start.getTime(), end: start.getTime() + 604_800_000 - 1000 };
   }
+
   streaksFor(profiles: Profiles, id: number) {
     const persisted = this.streakRepository.readStreaks(profiles.folder(id));
 
@@ -31,10 +32,12 @@ export class StreakService extends BaseService {
       curStreakRide: profile.curStreakRide * 1000n,
     });
   }
+
   updateStreaks(profiles: Profiles, id: number, activity: Activity) {
     const streaks = StreakService.advancedStreak(this.streaksFor(profiles, id), activity);
     this.streakRepository.saveStreaks(profiles.folder(id), streaks);
   }
+
   /** Invalid dates are ignored; older dates retain the existing same-week behavior. */
   static period(start: number, boundary: number) {
     if (!Number.isFinite(start)) return 'invalid';

@@ -20,6 +20,7 @@ export class IntegrationsService extends BaseService {
   constructor(readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   /** Browser-keyed authorization: login -> mfa -> verifying -> committed/removed.
   A replacement attempt fences both old callbacks and token-file publication.
   */

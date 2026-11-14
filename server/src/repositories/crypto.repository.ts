@@ -32,9 +32,13 @@ function packetAlgorithm(key: Uint8Array) {
 
 export class CryptoRepository {
   randomBytes = randomBytes;
+
   randomInt = randomInt;
+
   randomUUID = randomUUID;
+
   timingSafeEqual = timingSafeEqual;
+
   async verifyPassword(hash: string | null, password: string): Promise<boolean> {
     if (!hash?.startsWith('$argon2id$') || !password) return false;
 

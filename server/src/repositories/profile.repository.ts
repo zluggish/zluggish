@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 
 export class Profiles {
   readonly synthetic = new Map<bigint, PlayerProfile>();
+
   constructor(
     readonly storage: string,
     private readonly accounts: AccountsRepository,

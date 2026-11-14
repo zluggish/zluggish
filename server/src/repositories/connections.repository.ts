@@ -15,6 +15,7 @@ const names: Record<Connection, string> = {
 
 export class Connections {
   constructor(readonly storage: string) {}
+
   private key() {
     const file = resolve(this.storage, 'credentials-key.bin');
 
@@ -25,14 +26,17 @@ export class Connections {
 
     return key;
   }
+
   file(player: number, service: Connection) {
     return resolve(this.storage, String(player), names[service]);
   }
+
   read(player: number, service: Connection) {
     const file = this.file(player, service);
 
     return existsSync(file) ? new CryptoRepository().decryptCredentials(this.key(), readFileSync(file)) : null;
   }
+
   save(player: number, service: Connection, credentials: readonly [string, string]) {
     new AssetFiles().writeDurable(
       this.file(player, service),
@@ -40,6 +44,7 @@ export class Connections {
       true,
     );
   }
+
   remove(player: number, service: Connection) {
     const file = this.file(player, service);
 

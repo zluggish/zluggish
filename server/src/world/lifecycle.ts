@@ -16,9 +16,13 @@ use separate expiry/suppression windows and never own protocol presence.
 */
 export class Lifecycle {
   readonly rides = new Map<bigint, Ride>();
+
   private readonly clients = new Map<bigint, { clientId: string; seen: number }>();
+
   private readonly companions = new Map<bigint, number>();
+
   private readonly diagnostics = new Map<string, { time: number; suppressed: number }>();
+
   constructor(
     public log: LoggingRepository = new LoggingRepository(),
     public intervalSeconds = 60,

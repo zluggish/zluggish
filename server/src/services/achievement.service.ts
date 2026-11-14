@@ -47,6 +47,7 @@ export class AchievementService extends BaseService {
 
     return achievements;
   }
+
   backfillRoutes(runtime: Runtime, id: number) {
     const achievements = this.loadAchievements(runtime, id);
 

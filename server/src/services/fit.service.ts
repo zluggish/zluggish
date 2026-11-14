@@ -37,6 +37,7 @@ export class FitService extends BaseService {
           : z.number().parse(messages.activityMesgs.at(-1)?.timestamp) + 631_065_600,
     };
   }
+
   static activityChart(bytes: Uint8Array) {
     const { records } = FitService.decodeFit(bytes);
 
@@ -79,6 +80,7 @@ export class FitService extends BaseService {
 
     return data;
   }
+
   savePowerCurve(playerId: number, bytes: Uint8Array) {
     const { records, timestamp } = FitService.decodeFit(bytes);
     const repository = this.fitnessRepository;

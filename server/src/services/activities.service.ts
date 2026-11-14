@@ -225,6 +225,7 @@ export class ActivitiesService extends BaseService {
   findActivity(...values: Parameters<ActivitiesRepository['findActivity']>) {
     return this.activitiesRepository.findActivity(...values);
   }
+
   deleteActivity(id: bigint, player: number) {
     if (!this.activitiesRepository.findActivity(id, player)) throw new ApplicationError(404);
 
@@ -246,18 +247,21 @@ export class ActivitiesService extends BaseService {
 
     for (const file of [...charts, ...photos, ...fits]) this.filesRepository.rmSync(file, { force: true });
   }
+
   visible(activity: Activity, viewer: number) {
     return (
       activity.playerId === BigInt(viewer) ||
       (!activity.privateActivity && activity.privacy === ActivityPrivacyType.PUBLIC)
     );
   }
+
   fitnessVisible(activity: Activity, viewer: number) {
     return (
       this.visible(activity, viewer) &&
       (activity.playerId === BigInt(viewer) || activity.fitnessPrivacy !== FitnessPrivacy.HIDE_SENSITIVE_DATA)
     );
   }
+
   forViewer(activity: Activity, viewer: number) {
     if (!this.visible(activity, viewer)) throw new ApplicationError(404);
 
@@ -280,21 +284,27 @@ export class ActivitiesService extends BaseService {
       movingTimeInMs: activity.movingTimeInMs,
     });
   }
+
   findActivityFile(...values: Parameters<ActivitiesRepository['findActivityFile']>) {
     return this.activitiesRepository.findActivityFile(...values);
   }
+
   insertActivityFile(...values: Parameters<ActivitiesRepository['insertActivityFile']>) {
     return this.activitiesRepository.insertActivityFile(...values);
   }
+
   findOwnedActivityFile(...values: Parameters<ActivitiesRepository['findOwnedActivityFile']>) {
     return this.activitiesRepository.findOwnedActivityFile(...values);
   }
+
   insertActivityImage(...values: Parameters<ActivitiesRepository['insertActivityImage']>) {
     return this.activitiesRepository.insertActivityImage(...values);
   }
+
   insertActivityMedia(...values: Parameters<ActivitiesRepository['insertActivityMedia']>) {
     return this.activitiesRepository.insertActivityMedia(...values);
   }
+
   findActivityMedia(...values: Parameters<ActivitiesRepository['findActivityMedia']>) {
     return this.activitiesRepository.findActivityMedia(...values);
   }
@@ -314,6 +324,7 @@ export class ActivitiesService extends BaseService {
 
     return [...images, ...media].filter((path) => this.filesRepository.existsSync(path));
   }
+
   companion(activity: Activity, details = false) {
     const profile = this.context.profiles.get(Number(activity.playerId));
 

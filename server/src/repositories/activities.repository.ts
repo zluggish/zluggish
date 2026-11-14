@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class ActivitiesRepository {
   private readonly executor: SqliteExecutor;
+
   constructor(private readonly db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
@@ -19,6 +20,7 @@ export class ActivitiesRepository {
         .where('activity_id', '=', integer(activity)),
     );
   }
+
   listActivityMedia(player: number | bigint, activity: IntegerInput) {
     return this.executor.all(
       query
@@ -28,19 +30,23 @@ export class ActivitiesRepository {
         .where('activity_id', '=', integer(activity)),
     );
   }
+
   findActivity(id: IntegerInput, player: number | bigint) {
     return this.executor.get(
       query.selectFrom('activity').select('id').where('id', '=', integer(id)).where('player_id', '=', player),
     );
   }
+
   deleteActivity(id: IntegerInput, player: number | bigint) {
     return this.executor.run(
       query.deleteFrom('activity').where('id', '=', integer(id)).where('player_id', '=', player),
     );
   }
+
   listActivityFile(id: IntegerInput) {
     return this.executor.all(query.selectFrom('activity_file').select('id').where('activity_id', '=', integer(id)));
   }
+
   deleteActivityData(id: IntegerInput, player: number | bigint) {
     this.db.exec('BEGIN IMMEDIATE');
 
@@ -60,14 +66,17 @@ export class ActivitiesRepository {
       throw error;
     }
   }
+
   findActivityFile(id: IntegerInput) {
     return this.executor.get(
       query.selectFrom('activity_file').select('id').where('activity_id', '=', integer(id)).where('full', '=', 0),
     );
   }
+
   insertActivityFile(id: IntegerInput) {
     return this.executor.run(query.insertInto('activity_file').values({ activity_id: integer(id), full: 0 }));
   }
+
   findOwnedActivityFile(id: IntegerInput, activity: IntegerInput) {
     return this.executor.get(
       query
@@ -80,11 +89,13 @@ export class ActivitiesRepository {
         ),
     );
   }
+
   insertActivityImage(player: number | bigint, activity: IntegerInput) {
     return this.executor.run(
       query.insertInto('activity_image').values({ player_id: player, activity_id: integer(activity) }),
     );
   }
+
   insertActivityMedia(player: number | bigint, activity: IntegerInput, contentType: string) {
     return this.executor.run(
       query
@@ -92,9 +103,11 @@ export class ActivitiesRepository {
         .values({ player_id: player, activity_id: integer(activity), content_type: contentType }),
     );
   }
+
   findActivityMedia(id: IntegerInput) {
     return this.executor.get(query.selectFrom('activity_media').selectAll().where('id', '=', integer(id)));
   }
+
   recentActivities(player: number | bigint, viewer: number | bigint) {
     return this.executor.all(
       query
@@ -112,9 +125,11 @@ export class ActivitiesRepository {
       true,
     );
   }
+
   activityById(id: IntegerInput) {
     return this.executor.get(query.selectFrom('activity').selectAll().where('id', '=', integer(id)), true);
   }
+
   activityFeed(
     player: number | null,
     before: string | null,

@@ -64,6 +64,7 @@ export class EventCatalogService extends BaseService {
       })
       .slice(0, limit);
   }
+
   static eventJSON(event: Event) {
     const timestamp = (time: bigint) => (time ? new Date(Number(time)).toISOString().replace('Z', '+0000') : null);
 

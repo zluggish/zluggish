@@ -23,11 +23,13 @@ export class ZwiftRepository {
 
     return z.object({ access_token: z.string(), refresh_token: z.string().optional() }).parse(await response.json());
   }
+
   async officialLogin(username: string, password: string) {
     const tokens = await new ZwiftRepository().officialTokens(username, password);
 
     return tokens.access_token;
   }
+
   officialHeaders = (token: string) => ({
     Authorization: `Bearer ${token}`,
     'User-Agent': 'Zwift/115 CFNetwork/758.0.2 Darwin/15.0.0',

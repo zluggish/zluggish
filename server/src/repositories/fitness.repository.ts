@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class FitnessRepository {
   private readonly executor: SqliteExecutor;
+
   constructor(db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
@@ -15,6 +16,7 @@ export class FitnessRepository {
       .where(sql<number>`julianday(start_date)`, '>=', sql<number>`julianday(${start})`)
       .where(sql<number>`julianday(start_date)`, '<=', sql<number>`julianday(${end})`);
   }
+
   findActivity(player: number, start: string, end: string) {
     return this.executor.get(
       this.activities(player, start, end).select(({ fn }) => [
@@ -27,9 +29,11 @@ export class FitnessRepository {
       ]),
     );
   }
+
   listActivity(player: number, start: string, end: string) {
     return this.executor.all(this.activities(player, start, end).select('power_zones'));
   }
+
   findGoalMetrics(player: number, date: string) {
     return this.executor.get(
       query
@@ -41,6 +45,7 @@ export class FitnessRepository {
         .limit(1),
     );
   }
+
   insertGoalMetrics(
     player: number,
     tss: number,
@@ -68,6 +73,7 @@ export class FitnessRepository {
       }),
     );
   }
+
   deletePowerCurve(player: number) {
     return this.executor.run(query.deleteFrom('power_curve').where('player_id', '=', player));
   }

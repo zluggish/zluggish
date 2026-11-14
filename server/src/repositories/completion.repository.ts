@@ -20,24 +20,29 @@ export type CompletionState =
 /** Per activity: absent -> prepared -> completed. Prepared file effects are replayable. */
 export class Completions {
   private readonly executor: SqliteExecutor;
+
   constructor(readonly db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
+
   get(id: bigint) {
     const row = this.executor.get(query.selectFrom('activity_completion').selectAll().where('activity_id', '=', id));
 
     return row ? completion.parse(row) : null;
   }
+
   state(id: bigint): CompletionState {
     const saved = this.get(id);
 
     return saved ? { status: saved.done ? 'completed' : 'prepared', saved } : { status: 'draft' };
   }
+
   prepare(id: bigint, player: number, payload: Uint8Array, streak: Uint8Array | null) {
     this.executor.run(
       query.insertInto('activity_completion').values({ activity_id: id, player_id: player, payload, streak }),
     );
   }
+
   unfinished() {
     return this.executor
       .all(query.selectFrom('activity_completion').selectAll().where('done', '=', 0).orderBy('activity_id'))

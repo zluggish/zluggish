@@ -9,27 +9,35 @@ export class SettingsService extends BaseService {
   constructor(context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   read(...args: Parameters<SettingsStore['read']>) {
     return this.settingsRepository.read(...args);
   }
+
   save(...args: Parameters<SettingsStore['save']>) {
     return this.settingsRepository.save(...args);
   }
+
   import(...args: Parameters<SettingsStore['import']>) {
     return this.settingsRepository.import(...args);
   }
+
   world(...args: Parameters<SettingsStore['world']>) {
     return this.settingsRepository.world(...args);
   }
+
   worldIds(...args: Parameters<SettingsStore['worldIds']>) {
     return this.settingsRepository.worldIds(...args);
   }
+
   saveWorld(...args: Parameters<SettingsStore['saveWorld']>) {
     return this.settingsRepository.saveWorld(...args);
   }
+
   resetWorld(...args: Parameters<SettingsStore['resetWorld']>) {
     return this.settingsRepository.resetWorld(...args);
   }
+
   close(...args: Parameters<SettingsStore['close']>) {
     return this.settingsRepository.close(...args);
   }

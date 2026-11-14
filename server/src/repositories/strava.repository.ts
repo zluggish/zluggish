@@ -156,6 +156,7 @@ export class StravaRepository {
       state,
     })}`;
   }
+
   readToken(file: string): StravaToken | null {
     if (!existsSync(file)) return null;
 
@@ -168,6 +169,7 @@ export class StravaRepository {
 
     return { clientId, clientSecret, access, refresh, expiresAt };
   }
+
   writeToken(file: string, token: StravaToken) {
     new AssetFiles().writeDurable(
       file,
@@ -175,6 +177,7 @@ export class StravaRepository {
       true,
     );
   }
+
   async exchangeCode(clientId: string, clientSecret: string, code: string): Promise<StravaToken> {
     const result = await oauth({
       client_id: clientId,
@@ -191,6 +194,7 @@ export class StravaRepository {
       expiresAt: result.expires_at,
     };
   }
+
   async uploadPaid(file: string, fit: Uint8Array, name: string, now = Date.now() / 1000) {
     let token = this.readToken(file);
 
@@ -229,6 +233,7 @@ export class StravaRepository {
 
     return true;
   }
+
   async checkSession(cookie: string) {
     const response = await cookieSession(cookie).request(selectUrl);
 
@@ -236,6 +241,7 @@ export class StravaRepository {
 
     return response1.includes(marker);
   }
+
   parseForm(form: string) {
     const data: Record<string, string> = {};
 
@@ -278,6 +284,7 @@ export class StravaRepository {
 
     return data;
   }
+
   async uploadFree(
     cookie: string,
     filename: string,

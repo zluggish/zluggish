@@ -40,26 +40,45 @@ let generation = Math.floor(Date.now() / 1000) % 33;
 
 export class Blob {
   readonly trail: Trail;
+
   readonly riders: BlobRider[] = [];
+
   slots: [number, number][] = [];
+
   readonly steps: number[];
+
   readonly front: [number, number][] = [];
+
   readonly tail: [number, number][] = [];
+
   readonly roadLimits: Record<string, [number, number]>;
+
   readonly roadWidths: Record<string, [number, number, number][]>;
+
   readonly reach = new Map<string, [number, number]>();
+
   private readonly behavior = new BlobBehavior();
+
   get mode() {
     return this.behavior.mode;
   }
+
   grade = 0;
+
   shift = 0;
+
   nextShuffle: number;
+
   nextPull: number;
+
   nextFormation: number;
+
   nextTurn: number;
+
   leaders: number;
+
   resets = 0;
+
   constructor(
     readonly playerId: bigint,
     readonly index: number,
@@ -124,9 +143,11 @@ export class Blob {
     this.nextFormation = now() + this.wait(config.formationInterval, 0.6);
     this.nextTurn = now() + config.turnInterval;
   }
+
   wait(base: number, spread = 0.5) {
     return Math.max(5, base * this.rng.between(1 - spread, 1 + spread));
   }
+
   scatterPool(points: [number, number][], obstacles: [number, number][], start: number, depth: number) {
     const cfg = this.config;
 
@@ -158,6 +179,7 @@ export class Blob {
       }
     }
   }
+
   form() {
     const cfg = this.config;
     const count = this.riders.length;
@@ -238,6 +260,7 @@ export class Blob {
 
     this.assign(slots);
   }
+
   assign(slots: [number, number][]) {
     const free = new Set(slots.map((_, i) => i));
     // Keep unchanged scattered positions with their riders before assigning new slots.
@@ -275,6 +298,7 @@ export class Blob {
 
     this.slots = slots;
   }
+
   receive(state: PlayerState, lag: number) {
     this.trail.push(state, lag);
     const side = this.side(state);
@@ -284,6 +308,7 @@ export class Blob {
     if (side.you > 0 === side.positive && side.you !== 0)
       this.reach.set(side.key, [Math.min(seen[0], Math.abs(side.you)), Math.max(seen[1], Math.abs(side.you))]);
   }
+
   side(state: PlayerState) {
     let positive = forward(state) !== [7, 11, 13, 17].includes(course(state));
     const you = (state.roadPosition - 10_000_000) / 100_000;
@@ -297,6 +322,7 @@ export class Blob {
       key: `${course(state)}:${road(state)}:${positive ? 'f' : 'r'}`,
     };
   }
+
   edges(): [number, number] | null {
     const cfg = this.config;
     const head = this.trail.entries.at(-1);
@@ -328,6 +354,7 @@ export class Blob {
 
     return side.positive ? [inner, outer] : [-outer, -inner];
   }
+
   limits(): [number, number] | null {
     const edges = this.edges();
     const head = this.trail.entries.at(-1);
@@ -341,6 +368,7 @@ export class Blob {
 
     return [low - this.shift, high - this.shift];
   }
+
   fit(lateral: number) {
     const limits = this.limits();
 
@@ -350,6 +378,7 @@ export class Blob {
         : (limits[0] + limits[1]) / 2
       : lateral;
   }
+
   gesture(action: UserBikeAction) {
     const now = this.now();
 
@@ -400,6 +429,7 @@ export class Blob {
             ? 'Somebody is coming through.'
             : 'Back to normal, we take the front.';
   }
+
   rotate() {
     const ordered = [...this.riders].sort((a, b) => (this.slots[a.slot]?.[0] ?? 0) - (this.slots[b.slot]?.[0] ?? 0));
 
@@ -465,6 +495,7 @@ export class Blob {
         4.2,
       ) * (front.lateral >= 0 ? 1 : -1);
   }
+
   tick(time: bigint, seconds = 0.5) {
     if (!this.trail.ready()) return [];
     const now = this.now();
@@ -567,6 +598,7 @@ export class Blob {
 
     return this.riders.flatMap((rider) => (rider.state ? [rider.state] : []));
   }
+
   updateRider(rider: BlobRider, speed: number, stretch: number, now: number, time: bigint, seconds: number) {
     const cfg = this.config;
     const slot = this.slots[rider.slot];

@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class AccountsService extends BaseService {
   readonly db: DatabaseSync;
+
   readonly repository: AccountsRepository;
 
   constructor(readonly storage: string) {
@@ -19,16 +20,20 @@ export class AccountsService extends BaseService {
   list() {
     return this.repository.list();
   }
+
   get(id: number) {
     return this.repository.get(id);
   }
+
   byUsername(username: string) {
     return this.repository.byUsername(username);
   }
+
   // Setup is one-way: first owner creation commits its marker in the same account transaction.
   setupComplete() {
     return this.repository.setupComplete();
   }
+
   identityOf(rider: Rider) {
     return `${rider.player_id}:${rider.auth_version}`;
   }
@@ -105,6 +110,7 @@ export class AccountsService extends BaseService {
     const hash = password ? await this.cryptoRepository.hashPassword(password) : null;
     this.repository.setPassword(id, hash, admin);
   }
+
   close() {
     if (this.db.isOpen) this.db.close();
   }

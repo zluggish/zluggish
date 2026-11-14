@@ -9,6 +9,7 @@ import { create, fromBinary, toBinary, toJsonString } from '@bufbuild/protobuf';
 
 export class ProfileDownloadRepository {
   constructor(private readonly log = new LoggingRepository()) {}
+
   async downloadOfficialData(username: string, password: string, profile: boolean, achievements: boolean) {
     const signal = AbortSignal.timeout(30_000);
     const tokens = await new ZwiftRepository().officialTokens(username, password, signal);

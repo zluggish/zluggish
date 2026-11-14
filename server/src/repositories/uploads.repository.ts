@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class UploadsRepository {
   private readonly executor: SqliteExecutor;
+
   constructor(db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
@@ -13,6 +14,7 @@ export class UploadsRepository {
       .selectFrom('activity_upload as u')
       .innerJoin('activity_completion as c', 'c.activity_id', 'u.activity_id');
   }
+
   status(player: number) {
     return this.executor.all(
       this.jobs()
@@ -22,6 +24,7 @@ export class UploadsRepository {
         .limit(100),
     );
   }
+
   retry(player: number) {
     this.executor.run(
       query
@@ -35,9 +38,11 @@ export class UploadsRepository {
         ),
     );
   }
+
   failInterrupted() {
     this.executor.run(query.updateTable('activity_upload').set({ state: 'failed' }).where('state', '=', 'sending'));
   }
+
   pending() {
     return this.executor.all(
       this.jobs()
@@ -49,6 +54,7 @@ export class UploadsRepository {
         .limit(10),
     );
   }
+
   ready(activity: number, provider: string) {
     return this.executor.get(
       this.jobs()
@@ -59,13 +65,16 @@ export class UploadsRepository {
         .where('c.done', '=', 1),
     );
   }
+
   /** Only pending jobs can be claimed; terminal results cannot resurrect deleted jobs. */
   claim(activity: number, provider: string) {
     return this.transition(activity, provider, 'pending', 'sending');
   }
+
   finish(activity: number, provider: string, state: 'sent' | 'failed' | 'cancelled') {
     return this.transition(activity, provider, 'sending', state);
   }
+
   private transition(activity: number, provider: string, expected: UploadState, state: UploadState) {
     const result = this.executor.run(
       query

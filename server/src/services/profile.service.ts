@@ -16,15 +16,19 @@ export class ProfilesService extends BaseService {
   constructor(private readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   folder(...args: Parameters<Profiles['folder']>) {
     return this.profileRepository.folder(...args);
   }
+
   get(...args: Parameters<Profiles['get']>) {
     return this.profileRepository.get(...args);
   }
+
   save(...args: Parameters<Profiles['save']>) {
     return this.profileRepository.save(...args);
   }
+
   get synthetic() {
     return this.profileRepository.synthetic;
   }
@@ -75,9 +79,11 @@ export class ProfilesService extends BaseService {
 
     return publicProfile;
   }
+
   companionProfile(...args: [Parameters<typeof ProfileJsonService.companionProfile>[0], string | null]) {
     return ProfileJsonService.companionProfile(...args, this.profileJsonRepository.bikeFrameName(args[0].bikeFrame));
   }
+
   entitlements(profile: ReturnType<typeof create<typeof PlayerProfileSchema>>) {
     profile.entitlements = profile.entitlements.filter((item) => item.type !== ProfileEntitlement_EntitlementType.RIDE);
     profile.entitlements.push(

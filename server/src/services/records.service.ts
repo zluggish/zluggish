@@ -8,12 +8,15 @@ export class RecordsService extends BaseService {
   constructor(private readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   updateRouteResult(...values: Parameters<RecordsRepository['updateRouteResult']>) {
     return this.recordsRepository.updateRouteResult(...values);
   }
+
   listRouteResult(...values: Parameters<RecordsRepository['listRouteResult']>) {
     return this.recordsRepository.listRouteResult(...values);
   }
+
   findPrivateEvent(...values: Parameters<RecordsRepository['findPrivateEvent']>) {
     return this.recordsRepository.findPrivateEvent(...values);
   }

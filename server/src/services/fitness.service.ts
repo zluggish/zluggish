@@ -12,6 +12,7 @@ export class FitnessService extends BaseService {
   constructor(context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   findActivity(...values: Parameters<FitnessRepository['findActivity']>) {
     return this.fitnessRepository.findActivity(...values);
   }
@@ -117,6 +118,7 @@ export class FitnessService extends BaseService {
   streaks(id: number) {
     return new StreakService(this.repositories).streaksFor(this.profileRepository, id);
   }
+
   metrics(id: number, date: number, historical: boolean) {
     const weeks = [this.week(id, date), this.week(id, date - 604_800_000)];
 
@@ -129,6 +131,7 @@ export class FitnessService extends BaseService {
 
     return { weeks, goals, streak: this.streaks(id).curStreak, useMetric: this.profileRepository.get(id).useMetric };
   }
+
   saveGoals(id: number, input: z.infer<typeof goalSchema>) {
     const goals = goalSchema.parse(input);
     goals.lastUpdated = new Date().toISOString();
@@ -145,6 +148,7 @@ export class FitnessService extends BaseService {
       goals.currentGoalSource,
     );
   }
+
   powerCurve(id: number, option: string, days: number) {
     const cutoff = option === 'last' ? Math.floor(Date.now() / 1000) - days * 86_400 : 0;
     const response = create(PowerCurveAggregationMsgSchema);

@@ -5,6 +5,7 @@ one failed disposer must not prevent later disposers, especially the storage loc
 */
 export class Resources {
   private state: Closing | { status: 'open' | 'closed' } = { status: 'open' };
+
   private readonly disposers: (() => void | Promise<void>)[] = [];
 
   get status() {

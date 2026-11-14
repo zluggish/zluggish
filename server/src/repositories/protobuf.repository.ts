@@ -11,6 +11,7 @@ export type Table = ProtobufTable;
 
 export class ProtobufRows {
   private readonly executor: SqliteExecutor;
+
   constructor(readonly db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }

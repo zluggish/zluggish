@@ -7,13 +7,16 @@ import { MessageService } from '#src/services/message.service';
 export class DiscordBridge extends BaseService {
   // Open admits at most 100 sends; close permanently stops admission. Each settled send releases one slot.
   private pending = 0;
+
   private closed = false;
+
   constructor(
     readonly runtime: Runtime,
     readonly transport: DiscordTransport,
   ) {
     super(runtime.accounts.repositories);
   }
+
   receive(channel: string, author: string, bot: boolean, content: string) {
     const settings = this.runtime.config.integrations.discord;
 
@@ -25,11 +28,13 @@ export class DiscordBridge extends BaseService {
     else if (!content.startsWith('!'))
       new MessageService(this.repositories).sendMessage(this.runtime, content.slice(0, 2000), undefined, author);
   }
+
   welcome(member: string) {
     const message = this.runtime.config.integrations.discord.welcomeMessage;
 
     if (message) this.send(`${member}\n${message}`);
   }
+
   send(content: string, sender = 'Server') {
     if (this.closed || this.pending >= 100) return;
     this.pending++;
@@ -42,6 +47,7 @@ export class DiscordBridge extends BaseService {
         this.pending--;
       });
   }
+
   online(id: bigint, joining: boolean) {
     this.transport.presence(this.runtime.world.online.size);
 
@@ -49,6 +55,7 @@ export class DiscordBridge extends BaseService {
     const profile = this.runtime.profiles.get(Number(id));
     this.send(joining ? 'Riding' : 'Leaving', `${profile.firstName} ${profile.lastName}`);
   }
+
   async close() {
     this.closed = true;
     await this.transport.close();

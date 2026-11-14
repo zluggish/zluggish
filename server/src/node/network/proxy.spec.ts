@@ -13,6 +13,7 @@ class UpstreamRequest extends EventEmitter {
   setTimeout() {
     return this;
   }
+
   end() {}
 }
 

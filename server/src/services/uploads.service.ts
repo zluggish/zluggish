@@ -36,6 +36,7 @@ export class UploadsService extends BaseService {
   get workerStatus() {
     return this.worker.status;
   }
+
   private timer: NodeJS.Timeout | null = null;
 
   configured(player: number) {
@@ -69,11 +70,13 @@ export class UploadsService extends BaseService {
 
     return providers;
   }
+
   status(player: number) {
     return this.uploadsRepository
       .status(player)
       .map((row) => z.object({ activity_id: z.number(), provider: z.string(), state: z.string() }).parse(row));
   }
+
   retry(player: number) {
     this.uploadsRepository.retry(player);
 
@@ -91,6 +94,7 @@ export class UploadsService extends BaseService {
     this.timer.unref();
     void this.drain();
   }
+
   async close() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -101,6 +105,7 @@ export class UploadsService extends BaseService {
       await current.promise;
     } else this.worker = { status: 'stopped' };
   }
+
   drain() {
     const current = this.worker;
 

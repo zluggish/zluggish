@@ -27,8 +27,11 @@ export const ghostAppearanceSchema = z.strictObject({
 
 export class RiderPool {
   private nameIndex = 0;
+
   readonly dictionary: RiderSpec;
+
   readonly names: RiderSpec[];
+
   constructor(
     assets: string,
     ridersFile: string,
@@ -63,6 +66,7 @@ export class RiderPool {
       });
     }
   }
+
   customizeGhost(profile: PlayerProfile, appearance: z.infer<typeof ghostAppearanceSchema>) {
     const { random_body: randomBody, ...equipment } = appearance;
 
@@ -83,6 +87,7 @@ export class RiderPool {
 
     mergeFromJson(PlayerProfileSchema, profile, JSON.parse(JSON.stringify(equipment)));
   }
+
   profile(
     id: bigint,
     overrides: Record<string, z.infer<ReturnType<typeof z.json>> | undefined> = {},

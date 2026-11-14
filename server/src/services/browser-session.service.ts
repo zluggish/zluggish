@@ -27,6 +27,7 @@ export interface OpenedSession {
 
 export class SessionsService extends BaseService {
   readonly secret: Buffer;
+
   readonly browsers = new Map<string, BrowserSession>();
 
   constructor(readonly accounts: AccountsService) {

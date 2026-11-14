@@ -6,9 +6,11 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export class SocialRepository {
   private readonly executor: SqliteExecutor;
+
   constructor(db: DatabaseSync) {
     this.executor = new SqliteExecutor(db);
   }
+
   listUser(first: string, last: string, limit: number, offset: number) {
     return this.executor.all(
       query
@@ -19,6 +21,7 @@ export class SocialRepository {
         .offset(offset),
     );
   }
+
   findActivity(player: IntegerInput, since: string) {
     return this.executor.get(
       query
@@ -35,6 +38,7 @@ export class SocialRepository {
         .where(sql<number>`julianday(start_date)`, '>=', sql<number>`julianday(${since})`),
     );
   }
+
   insertPlayback(player: number, uuid: string, segment: bigint, time: number, worldTime: bigint, type: number) {
     return this.executor.run(
       query
@@ -42,6 +46,7 @@ export class SocialRepository {
         .values({ player_id: player, uuid, segment_id: segment, time, world_time: worldTime, type }),
     );
   }
+
   playbackForSegment(
     player: number,
     segment: bigint,

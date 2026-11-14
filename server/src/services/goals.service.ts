@@ -24,6 +24,7 @@ export class GoalService extends BaseService {
   constructor(context: RepositoryContext) {
     super(context.accounts.repositories);
   }
+
   create(playerId: number, goal: Goal) {
     goal.playerId = BigInt(playerId);
     goal.createdOn = BigInt(Date.now());
@@ -32,6 +33,7 @@ export class GoalService extends BaseService {
 
     return goal;
   }
+
   list(playerId: number) {
     const goals = this.goalRepository.list(playerId);
 
@@ -42,19 +44,23 @@ export class GoalService extends BaseService {
 
     return goals;
   }
+
   update(playerId: number, id: bigint, goal: Goal) {
     this.requireOwned(playerId, id);
     goal.id = id;
     goal.playerId = BigInt(playerId);
     this.goalRepository.save(goal);
   }
+
   delete(playerId: number, id: bigint) {
     this.requireOwned(playerId, id);
     this.goalRepository.delete(playerId, id);
   }
+
   requireOwned(playerId: number, id: bigint) {
     if (!this.goalRepository.exists(playerId, id)) throw new ApplicationError(404);
   }
+
   private progress(goal: Goal) {
     const now = new Date();
 
@@ -100,6 +106,7 @@ export class GoalService extends BaseService {
       timezone: goal.timezone,
     };
   }
+
   static parseGoal(body: z.infer<typeof goalInput>) {
     return create(GoalSchema, {
       id: BigInt(body.id),

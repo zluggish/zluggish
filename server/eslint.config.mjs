@@ -1,6 +1,7 @@
 // Adapted from immich-app/immich server/eslint.config.mjs; see README.md.
 import { fileURLToPath } from 'node:url';
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import { importX } from 'eslint-plugin-import-x';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
@@ -132,6 +133,12 @@ export default defineConfig([
         },
       },
       eslintConfigPrettier,
+      {
+        plugins: { '@stylistic': stylistic },
+        rules: {
+          '@stylistic/lines-between-class-members': ['error', 'always'],
+        },
+      },
     ],
   },
 ]);
