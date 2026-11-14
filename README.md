@@ -97,7 +97,7 @@ You are now ready to connect the client
   - Append this line: `<server-ip> us-or-rly101.zwift.com secure.zwift.com cdn.zwift.com launcher.zwift.com`
     <br />(Where `<server-ip>` is the ip address of the machine running Zluggish. If
     it's running on the same machine as Zwift, use `127.0.0.1` as the ip.)
-- The retained `scripts/configure_client.bat` helper configures local client redirection to `127.0.0.1`; use the manual steps above for a separate server. Older `launch.bat` scripts expect the removed Python/executable server and should not be used to start this Node version.
+- The retained `scripts/configure_client.bat` helper configures local client redirection to `127.0.0.1`; use the manual steps above for a separate server. `scripts/launch.bat` temporarily redirects the client to the address in `scripts/ip_address.txt`, launches Zwift, and restores the hosts file when you continue past its pause. It does not start the server.
 
 Why: We need to redirect Zwift to use Zluggish and convince Windows and Zwift to
 accept Zluggish’s self signed certificates for Zwift's domain names. Feel free

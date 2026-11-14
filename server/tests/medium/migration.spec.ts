@@ -248,6 +248,7 @@ await test('preference reset exposes configured defaults and invalid writes fail
 await test('settings CLI dry runs do not create locks or a preference database', async (t) => {
   const f = fixture(t);
   addRiders(f.storage);
+  renameSync(resolve(f.storage, 'zwift-offline.db'), resolve(f.storage, 'zluggish.db'));
   mkdirSync(resolve(f.root, 'external'));
   writeFileSync(f.output, `export default { storageDir: ${JSON.stringify(f.storage)} };`);
   const before = snapshot(f.root);

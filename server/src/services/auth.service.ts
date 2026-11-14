@@ -75,9 +75,7 @@ export class AccountsService extends BaseService {
         pass_hash: passwordHash,
         auth_version: 1,
         official_player_id: null,
-        enable_ghosts: 1,
         is_admin: owner ? 1 : 0,
-        remember: 0,
       });
 
       if (owner) this.repository.finishSetup();

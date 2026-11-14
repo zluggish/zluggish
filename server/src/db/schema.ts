@@ -15,9 +15,7 @@ export interface Database {
     pass_hash: Generated<string | null>;
     auth_version: Generated<Integer>;
     official_player_id: Generated<NullableInteger>;
-    enable_ghosts: Generated<Integer>;
     is_admin: Generated<Integer>;
-    remember: Generated<Integer>;
   };
   account_state: {
     id: Generated<Integer>;

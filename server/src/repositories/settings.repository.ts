@@ -133,8 +133,7 @@ export const defaultRiderSettings = riderSettingsSchema.parse({});
 
 export class RiderRepository {
   checkRider(storage: string, playerId: number) {
-    const currentDatabase = resolve(storage, 'zluggish.db');
-    const path = existsSync(currentDatabase) ? currentDatabase : resolve(storage, 'zwift-offline.db');
+    const path = resolve(storage, 'zluggish.db');
 
     if (!existsSync(path)) throw new ConfigError('Unknown rider; initialize accounts before changing preferences');
     const db = new DatabaseSync(path, { readOnly: true });

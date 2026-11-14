@@ -1,3 +1,4 @@
+import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
 import { createSchemaSQL } from '#src/db/ddl';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
@@ -26,7 +27,7 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
         .object({ version: z.number() })
         .parse(db.prepare('SELECT version FROM version LIMIT 1').get()).version;
 
-      if (version > 4 || version < 3)
+      if (version > 5 || version < 3)
         throw new ConfigError('Unsupported activity database version; migrate with the original release first');
     }
 
@@ -98,7 +99,7 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
 
       if (!ids.has(selected))
         db.prepare(
-          `INSERT INTO user (player_id,username,first_name,last_name,pass_hash,auth_version,is_admin,enable_ghosts,remember) VALUES (?,?,?,?,NULL,1,?,1,0)`,
+          `INSERT INTO user (player_id,username,first_name,last_name,pass_hash,auth_version,is_admin) VALUES (?,?,?,?,NULL,1,?)`,
         ).run(
           selected,
           `rider-${new CryptoRepository().randomBytes(12).toString('hex')}@local.invalid`,
@@ -114,7 +115,9 @@ export async function migrateAccounts(storage: string, soloPlayer?: number) {
     db.prepare('INSERT OR IGNORE INTO account_state VALUES (1, ?)').run(
       db.prepare('SELECT 1 FROM user LIMIT 1').get() ? 1 : 0,
     );
-    db.exec('DELETE FROM version; INSERT INTO version VALUES (4); COMMIT;');
+    removeLegacyAccountFields(db, storage);
+
+    db.exec('DELETE FROM version; INSERT INTO version VALUES (5); COMMIT;');
 
     if (path !== destination) db.exec('PRAGMA journal_mode=DELETE');
     db.close();

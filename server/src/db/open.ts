@@ -1,3 +1,4 @@
+import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
 import { completionSchemaSQL, createSchemaSQL } from '#src/db/ddl';
 import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
@@ -28,7 +29,7 @@ export function openDatabase(storage: string): DatabaseSync {
 
       if (
         !version.success ||
-        version.data.version !== 4 ||
+        ![4, 5].includes(version.data.version) ||
         !columns.has('auth_version') ||
         !columns.has('official_player_id') ||
         !!inspection
@@ -65,7 +66,16 @@ export function openDatabase(storage: string): DatabaseSync {
     if (fresh) {
       db.exec('BEGIN IMMEDIATE');
       db.exec(createSchemaSQL);
-      db.exec('INSERT INTO version VALUES (4); INSERT INTO account_state VALUES (1, 0); COMMIT;');
+      db.exec('INSERT INTO version VALUES (5); INSERT INTO account_state VALUES (1, 0); COMMIT;');
+    }
+
+    const version = z.object({ version: z.number() }).parse(db.prepare('SELECT version FROM version LIMIT 1').get());
+
+    if (version.version === 4) {
+      db.exec('BEGIN IMMEDIATE');
+      removeLegacyAccountFields(db, storage);
+
+      db.exec('DELETE FROM version; INSERT INTO version VALUES (5); COMMIT;');
     }
 
     db.exec(completionSchemaSQL);
