@@ -3,7 +3,7 @@ import type { InitializationVector } from '#src/node/network/packet';
 import { decodePacket, encodePacket, FrameDecoder } from '#src/node/network/packet';
 import { ClientToServerSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { AssetFiles } from '#src/repositories/files.repository';
-import { worldTime } from '#src/world/state';
+import { expired, worldTime } from '#src/world/state';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { createSocket } from 'node:dgram';
 import { existsSync, readFileSync } from 'node:fs';
@@ -50,17 +50,13 @@ export function startRideListeners(runtime: Runtime) {
 
       if (incoming.playerId !== id || !incoming.state) return;
 
-      if (decoded.fields.connection !== undefined && decoded.fields.connection !== relay.udpConnection)
-        relay.udpWrite = 0;
-
       clients.set(endpoint, id);
-      relay.udpConnection = decoded.iv.connection;
-      relay.udpRead = decoded.fields.sequence ?? relay.udpRead + 1;
+      relay.acceptUdp(decoded.iv.connection, decoded.fields.connection, decoded.fields.sequence);
       world.lifecycle.connected(id);
       world.receive(id, incoming.state);
 
       for (const payload of world.responses(id, incoming.state, incoming.worldTime)) {
-        const sequence = relay.udpWrite++;
+        const sequence = relay.nextUdp();
 
         const packet = encodePacket(
           payload,
@@ -79,6 +75,9 @@ export function startRideListeners(runtime: Runtime) {
   udp.bind(config.network.udp.port, config.network.udp.host ?? host);
 
   const sockets = new Set<Socket>();
+  // Validated socket ownership is the connection generation. Accept -> identify ->
+  // validate -> activate (superseding old owner) -> close. Every send/tick/close
+  // checks ownership; TCP close alone never removes relay credentials or ends a ride.
   const active = new Map<bigint, Socket>();
 
   const tcp = createServer((socket) => {
@@ -107,7 +106,7 @@ export function startRideListeners(runtime: Runtime) {
           device: 1,
           channel: 4,
           connection: relay.tcpConnection,
-          sequence: relay.tcpWrite++,
+          sequence: relay.nextTcp(),
         },
         {},
       );
@@ -167,9 +166,7 @@ export function startRideListeners(runtime: Runtime) {
 
             if (previous && previous !== socket) previous.destroy();
             active.set(playerId, socket);
-            relay.tcpConnection = decoded.iv.connection;
-            relay.tcpRead = 1;
-            relay.tcpWrite = 0;
+            relay.acceptTcp(decoded.iv.connection, true);
 
             const ip =
               socket.remoteAddress === '127.0.0.1' || socket.remoteAddress === '::1'
@@ -238,7 +235,7 @@ export function startRideListeners(runtime: Runtime) {
                 send(toBinary(ServerToClientSchema, response));
               }, 1000);
           } else {
-            relay.tcpRead++;
+            relay.acceptTcp(decoded.iv.connection, false);
 
             if (incoming.subsSegments.length > 0)
               send(
@@ -278,24 +275,31 @@ export function startRideListeners(runtime: Runtime) {
   const cleanup = setInterval(() => {
     world.lifecycle.prune();
 
-    for (const [id, state] of world.online)
-      if (worldTime() > state.worldTime + 30_000n) world.logout(id, 'inactivity_timeout');
+    for (const [id, state] of world.online) if (expired(state)) world.logout(id, 'inactivity_timeout');
 
     for (const [endpoint, id] of clients) if (!world.relays.has(id)) clients.delete(endpoint);
   }, 5000);
 
+  let closing: Promise<void> | null = null;
+
   return {
     tcp,
     udp,
-    close: async () => {
-      world.lifecycle.close();
-      clearInterval(cleanup);
+    close: () =>
+      (closing ??= Promise.try(async () => {
+        world.lifecycle.close();
+        clearInterval(cleanup);
 
-      for (const socket of sockets) socket.destroy();
-      await Promise.all([
-        new Promise<void>((resolve, reject) => tcp.close((error) => (error ? reject(error) : resolve()))),
-        new Promise<void>((resolve) => udp.close(resolve)),
-      ]);
-    },
+        for (const socket of sockets) socket.destroy();
+        await Promise.all([
+          new Promise<void>((resolve, reject) =>
+            tcp.close((error) => {
+              if (error && (!('code' in error) || error.code !== 'ERR_SERVER_NOT_RUNNING')) reject(error);
+              else resolve();
+            }),
+          ),
+          new Promise<void>((resolve) => udp.close(resolve)),
+        ]);
+      })),
   };
 }

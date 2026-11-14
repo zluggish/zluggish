@@ -100,18 +100,23 @@ export function decodePacket(data: Uint8Array, key: Uint8Array, iv: Initializati
 export class FrameDecoder {
   private pending = Buffer.alloc(0);
 
+  /** Header/payload states are derived from buffered bytes; no duplicate length flag. */
+  get state() {
+    return this.pending.length < 2 ? 'header' : 'payload';
+  }
+
   push(chunk: Uint8Array): Buffer[] {
     const frames: Buffer[] = [];
     let incoming = Buffer.from(chunk);
 
     while (incoming.length > 0) {
-      if (this.pending.length < 2) {
+      if (this.state === 'header') {
         const size = Math.min(2 - this.pending.length, incoming.length);
         this.pending = Buffer.concat([this.pending, incoming.subarray(0, size)]);
         incoming = incoming.subarray(size);
       }
 
-      if (this.pending.length < 2) break;
+      if (this.state === 'header') break;
       const length = this.pending.readUInt16BE(0);
 
       if (length === 0) throw new Error('Empty TCP frame');

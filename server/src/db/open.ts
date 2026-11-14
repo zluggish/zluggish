@@ -6,6 +6,10 @@ import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 
+/** Absent -> fresh v5; compatible v4 -> transactionally upgraded v5; v5 -> open.
+Incompatible schema/hash/folder evidence requires explicit account migration.
+Filename publication is separate from the schema transaction; neither invents identities.
+*/
 export function openDatabase(storage: string): DatabaseSync {
   const path = resolve(storage, 'zluggish.db');
   const legacyPath = resolve(storage, 'zwift-offline.db');

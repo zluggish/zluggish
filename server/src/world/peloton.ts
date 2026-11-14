@@ -35,7 +35,10 @@ interface Follower {
   preference: string;
 }
 
-/** Followers use cumulative route distance, including grade and bounded relative motion. */
+/** Followers use cumulative route distance, including grade and bounded relative motion.
+Slot shuffles are synchronous swaps admitted by nextShuffle; replay wrap is owned
+by Simulation.tick. previous=null initializes motion, not a paused rider state.
+*/
 export class Peloton {
   readonly riders: Follower[] = [];
   readonly slots: [number, number][] = [];

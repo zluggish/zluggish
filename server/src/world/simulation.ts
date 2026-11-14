@@ -24,10 +24,13 @@ interface GhostPlayback {
   id: bigint;
 }
 
+/** Loading and playback are independent: manual regroup may precede lazy loading.
+Exhaustion is position >= states.length per recording; regroup can revive it.
+*/
 interface RiderGhosts {
   lastRoadTime: number;
-  loaded: boolean;
-  started: boolean;
+  loading: 'waiting' | 'loaded';
+  playback: 'waiting' | 'playing';
   startRoad: number;
   startTime: number;
   last: number;
@@ -64,7 +67,7 @@ export class Simulation {
   timer: NodeJS.Timeout | null = null;
   lastPacer = 0;
   lastBot = 0;
-  autoGroup: {
+  private autoGroup: {
     id: bigint;
     all: boolean;
     road: number;
@@ -268,10 +271,10 @@ export class Simulation {
 
     if (!settings.ghosts.enabled || !state.roadTime) return;
 
-    const ghosts = this.ghosts.get(id) ?? {
+    const ghosts: RiderGhosts = this.ghosts.get(id) ?? {
       lastRoadTime: 0,
-      loaded: false,
-      started: false,
+      loading: 'waiting',
+      playback: 'waiting',
       startRoad: road(state),
       startTime: state.roadTime,
       last: 0,
@@ -281,8 +284,8 @@ export class Simulation {
     this.ghosts.set(id, ghosts);
 
     if (ghosts.lastRoadTime && state.roadTime !== ghosts.lastRoadTime) {
-      if (!ghosts.loaded) {
-        ghosts.loaded = true;
+      if (ghosts.loading === 'waiting') {
+        ghosts.loading = 'loaded';
 
         const folder = resolve(this.runtime.profiles.folder(Number(id)), 'ghosts', String(course(state)));
 
@@ -332,7 +335,7 @@ export class Simulation {
       }
 
       if (
-        !ghosts.started &&
+        ghosts.playback === 'waiting' &&
         ghosts.playbacks.length > 0 &&
         road(state) === ghosts.startRoad &&
         ahead(state, ghosts.startTime)
@@ -347,7 +350,7 @@ export class Simulation {
     const ghosts = this.ghosts.get(id);
 
     if (!state || !ghosts) return;
-    ghosts.started = true;
+    ghosts.playback = 'playing';
 
     for (const ghost of ghosts.playbacks) {
       const index = this.nearest(state, ghost.states);
@@ -488,12 +491,7 @@ export class Simulation {
     }
 
     if (name === 'autogroup' || name === 'autogroupall') {
-      this.autoGroup = {
-        id,
-        all: name === 'autogroupall',
-        road: -1,
-        forward: false,
-      };
+      this.trackGroup(id, name === 'autogroupall');
 
       return 'Automatic grouping enabled.';
     }
@@ -592,6 +590,11 @@ export class Simulation {
 
     return `Invalid command: ${command}`;
   }
+  /** Off -> tracking; switching rider resets the road/direction checkpoint. */
+  private trackGroup(id: bigint, all: boolean) {
+    this.autoGroup = { id, all, road: -1, forward: false };
+  }
+
   tick() {
     const now = this.now();
     const time = worldTime();
@@ -657,7 +660,7 @@ export class Simulation {
     }
 
     for (const [id, ghosts] of this.ghosts)
-      if (ghosts.started && now - ghosts.last >= 3) {
+      if (ghosts.playback === 'playing' && now - ghosts.last >= 3) {
         ghosts.last = now;
         const personal = world.personal.get(id) ?? new Map();
 

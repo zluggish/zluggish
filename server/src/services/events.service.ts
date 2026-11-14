@@ -1,3 +1,4 @@
+import { notificationPayloadSchema, notificationEventSchema, notificationUpdateSchema } from '#src/dtos/events.dto';
 import { type RepositoryContext } from '#src/context';
 import type { Meetup, MeetupInput } from '#src/dtos/meetup.dto';
 import { storedSchema } from '#src/dtos/meetup.dto';
@@ -29,6 +30,28 @@ export class EventsService extends BaseService {
   }
   findNotification(...values: Parameters<EventsRepository['findNotification']>) {
     return this.eventsRepository.findNotification(...values);
+  }
+
+  /** Listing expiry only hides notifications. Updates can mark read or unread;
+  meetup edits reset unread and invite removal deletes the corresponding rows.
+  */
+  notifications(player: number, now = Date.now()) {
+    return this.notificationsForPlayer(player).flatMap((row) => {
+      const text = z.string().parse(row.json);
+      const notification = notificationPayloadSchema.parse(JSON.parse(text));
+
+      return notificationEventSchema.parse(JSON.parse(notification.argString0)).eventStartDate * 1000 > now - 1_800_000
+        ? text
+        : [];
+    });
+  }
+  markNotification(player: number, id: string, update: z.infer<typeof notificationUpdateSchema>) {
+    const row = this.findNotification(id, player);
+
+    if (!row) throw new ApplicationError(404);
+    const notification = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(row.json)));
+    Object.assign(notification, update, { lastModified: update.readDate });
+    this.updateNotification(JSON.stringify(notification), id);
   }
 
   profile(id: number) {
@@ -299,6 +322,8 @@ export class EventsService extends BaseService {
 
     this.broadcast(next);
   }
+  // Any existing decision may change. The organizer remains accepted when updating
+  // the invite list; retained invitees keep decisions, new invitees start pending.
   respondToInvite(event: Meetup, playerId: number, accepting: boolean) {
     const invite = event.eventInvites.find((invite) => invite.invitedProfile.id === playerId);
 

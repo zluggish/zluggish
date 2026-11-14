@@ -187,6 +187,7 @@ export const UploadProvider = {
 export type UploadProvider = (typeof UploadProvider)[keyof typeof UploadProvider];
 
 export const UploadState = {
+  Pending: 'pending',
   Sending: 'sending',
   Cancelled: 'cancelled',
   Sent: 'sent',

@@ -11,3 +11,4 @@ server/tools/oxlint/anti-slop/
 server/src/protocol/generated/
 server/node_modules/
 server/dist/
+server/pnpm-lock.yaml

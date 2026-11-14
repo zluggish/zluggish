@@ -1,4 +1,3 @@
-import { activityMediaSchema } from '#src/dtos/activities.dto';
 import { parseProtobuf } from '#src/http/protobuf';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -9,7 +8,6 @@ import {
   ActivityMediaSaveResultSchema,
   ActivitySchema,
 } from '#src/protocol/generated/activity_pb';
-import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { create, toBinary } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -30,7 +28,6 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
   const records = runtime.services.recordData;
 
-  const mediaTokens = new Map<string, { token: Buffer; expires: number }>();
   const uploads = runtime.services.uploads;
 
   app.on(['GET', 'POST'], ['/api/profiles/:id/activities', '/api/profiles/:id/activities/'], async (c) => {
@@ -89,25 +86,12 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     activity.playerId = BigInt(user.player_id);
     activity.id = id;
 
-    if (service.finalized(activity))
-      return c.body(JSON.stringify({ id: Number(id) }), 200, {
-        'Content-Type': 'text/html; charset=utf-8',
-      });
+    const finish = c.req.query('upload-to-strava') === 'true';
+    const outcome = service.save(activity, finish);
 
-    if (c.req.query('upload-to-strava') === 'true') {
-      if (activity.distanceInMeters < 1) {
-        service.deleteActivity(id, user.player_id);
-        runtime.world.lifecycle.log.info('activity.discarded', 'Activity discarded', {
-          playerId: user.player_id,
-          activityId: id,
-        });
-      } else {
-        service.finalize(activity);
-        void uploads.drain();
-      }
+    if (outcome === 'completed') void uploads.drain();
 
-      runtime.world.logout(BigInt(user.player_id), 'activity_finished');
-    } else records.update('activity', id, ActivitySchema, activity, ['fit']);
+    if (finish && outcome !== 'unchanged') runtime.world.logout(BigInt(user.player_id), 'activity_finished');
 
     return c.body(JSON.stringify({ id: Number(id) }), 200, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -249,10 +233,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (!service.findActivity(c.req.param('activityId'), user.player_id)) throw new HTTPException(404);
     const id = service.insertActivityMedia(user.player_id, c.req.param('activityId'), body.contentType).lastInsertRowid;
 
-    for (const [key, entry] of mediaTokens) if (entry.expires < Date.now()) mediaTokens.delete(key);
-    const token = new CryptoRepository().randomBytes(32);
-    const expires = Date.now() + 900_000;
-    mediaTokens.set(String(id), { token, expires });
+    const { token, expires } = service.issueMedia(String(id));
 
     return c.body(
       toBinary(
@@ -266,29 +247,9 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     );
   });
   app.put('/uploads/media/:id', async (c) => {
-    const entry = mediaTokens.get(c.req.param('id'));
-    const token = Buffer.from(c.req.query('token') ?? '', 'base64url');
-
-    if (
-      !entry ||
-      entry.expires < Date.now() ||
-      token.length !== entry.token.length ||
-      !new CryptoRepository().timingSafeEqual(token, entry.token)
-    )
-      throw new HTTPException(403);
-
-    const row = activityMediaSchema.safeParse(service.findActivityMedia(c.req.param('id')));
-
-    if (!row.success) throw new HTTPException(404);
-
-    const extension = row.data.content_type.includes('quicktime') ? 'mov' : 'mp4';
-
-    runtime.services.files.write(
-      resolve(runtime.services.profiles.folder(row.data.player_id), 'medias', `${row.data.id}.${extension}`),
-      new Uint8Array(await c.req.arrayBuffer()),
-      true,
+    await service.receiveMedia(c.req.param('id'), Buffer.from(c.req.query('token') ?? '', 'base64url'), () =>
+      c.req.arrayBuffer(),
     );
-    mediaTokens.delete(c.req.param('id'));
 
     return c.body(null, 200);
   });

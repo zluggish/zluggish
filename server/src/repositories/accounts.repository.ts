@@ -73,6 +73,7 @@ export class AccountsRepository {
   finishSetup() {
     this.executor.run(query.updateTable('account_state').set({ setup_complete: 1 }).where('id', '=', 1));
   }
+  // Password change (including removing protection) revokes every older player:version identity.
   setPassword(id: number, hash: string | null, admin: boolean) {
     this.executor.run(
       query

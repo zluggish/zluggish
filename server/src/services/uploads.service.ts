@@ -19,6 +19,8 @@ const isoDate = (value: string | null | undefined) =>
 
 const title = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 
+type Worker = { status: 'idle' | 'stopped' } | { status: 'draining' | 'stopping'; promise: Promise<void> };
+
 /** Only one planned workout for the activity's day, or an exact unique title, pairs. */
 
 export class UploadsService extends BaseService {
@@ -29,8 +31,11 @@ export class UploadsService extends BaseService {
     super(runtime.accounts.repositories);
   }
 
-  private pending: Promise<void> | null = null;
-  private stopped = false;
+  private worker: Worker = { status: 'idle' };
+
+  get workerStatus() {
+    return this.worker.status;
+  }
   private timer: NodeJS.Timeout | null = null;
 
   configured(player: number) {
@@ -76,8 +81,10 @@ export class UploadsService extends BaseService {
   }
 
   start() {
+    if (this.timer || this.worker.status === 'stopped' || this.worker.status === 'stopping') return;
+
     // A crash after sending but before acknowledgement is ambiguous: require an explicit retry.
-    this.uploadsRepository.failInterrupted();
+    if (this.worker.status === 'idle') this.uploadsRepository.failInterrupted();
     this.timer = setInterval(() => {
       void this.drain();
     }, 5000);
@@ -85,31 +92,43 @@ export class UploadsService extends BaseService {
     void this.drain();
   }
   async close() {
-    this.stopped = true;
-
     if (this.timer) clearInterval(this.timer);
-    await this.pending;
+    this.timer = null;
+    const current = this.worker;
+
+    if (current.status === 'draining' || current.status === 'stopping') {
+      this.worker = { status: 'stopping', promise: current.promise };
+      await current.promise;
+    } else this.worker = { status: 'stopped' };
   }
   drain() {
-    if (this.pending) return this.pending;
+    const current = this.worker;
 
-    if (this.stopped) return Promise.resolve();
-    this.pending = this.deliver()
+    if (current.status === 'draining' || current.status === 'stopping') return current.promise;
+
+    if (current.status === 'stopped') return Promise.resolve();
+
+    const drain = Promise.withResolvers<void>();
+    this.worker = { status: 'draining', promise: drain.promise };
+    void this.deliver()
       .catch(() => {
         this.runtime.world.lifecycle.log.warn('upload.queue_failed', 'Upload queue unavailable; pending jobs retained');
         this.warn('Upload queue unavailable; pending jobs retained');
       })
       .finally(() => {
-        this.pending = null;
-      });
+        this.worker = { status: this.worker.status === 'stopping' ? 'stopped' : 'idle' };
+      })
+      .then(drain.resolve)
+      .catch(drain.reject);
 
-    return this.pending;
+    return drain.promise;
   }
+
   private async deliver() {
     const jobs = this.uploadsRepository.pending();
 
     for (const candidate of jobs) {
-      if (this.stopped) break;
+      if (this.worker.status === 'stopping' || this.worker.status === 'stopped') break;
 
       const key = z.object({ activity_id: z.number(), provider: z.string() }).parse(candidate);
 
@@ -127,14 +146,14 @@ export class UploadsService extends BaseService {
         })
         .parse(row);
 
-      this.uploadsRepository.setState(job.activity_id, job.provider, 'sending');
+      if (!this.uploadsRepository.claim(job.activity_id, job.provider)) continue;
 
       try {
         const activity = fromBinary(ActivitySchema, job.payload);
 
         // Resolve credentials at delivery, so revoked connections cannot be used by queued work.
         if (!this.configured(job.player_id).includes(job.provider)) {
-          this.uploadsRepository.setState(job.activity_id, job.provider, 'cancelled');
+          this.uploadsRepository.finish(job.activity_id, job.provider, 'cancelled');
           continue;
         }
 
@@ -156,14 +175,14 @@ export class UploadsService extends BaseService {
 
           await this.freeStrava(job.player_id, activity, photos);
         } else await this[job.provider](job.player_id, activity);
-        this.uploadsRepository.setState(job.activity_id, job.provider, 'sent', 'sending');
+        this.uploadsRepository.finish(job.activity_id, job.provider, 'sent');
         this.runtime.world.lifecycle.log.info('upload.succeeded', 'Activity uploaded', {
           playerId: job.player_id,
           activityId: job.activity_id,
           provider: job.provider,
         });
       } catch {
-        this.uploadsRepository.setState(job.activity_id, job.provider, 'failed', 'sending');
+        this.uploadsRepository.finish(job.activity_id, job.provider, 'failed');
         this.runtime.world.lifecycle.log.warn('upload.failed', 'Activity upload failed; retry from rider home', {
           playerId: job.player_id,
           activityId: job.activity_id,

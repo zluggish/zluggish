@@ -275,6 +275,10 @@ export function migrationCandidate(options: MigrationOptions) {
   return { config, preferences, output, source: renderConfig(config) };
 }
 
+/** Checkpoints are durable evidence, not a separate mutable status:
+no journal -> journal prepared -> settings migration ID committed -> output linked -> journal removed.
+Resume repeats idempotent effects; changed output refuses continuation. Startup blocks on the journal.
+*/
 export async function migrateConfig(options: MigrationOptions) {
   if (options.dryRun) {
     const candidate = migrationCandidate(options);

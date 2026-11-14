@@ -12,6 +12,12 @@ export interface BrowserSession {
   touched: number;
 }
 
+type BrowserEvent =
+  | { type: 'login'; identity: string }
+  | { type: 'clear-selection' }
+  | { type: 'stage-import'; stage: string }
+  | { type: 'finish-import' };
+
 const identityPayload = z.object({ session_cookie: z.string() });
 
 export interface OpenedSession {
@@ -37,7 +43,7 @@ export class SessionsService extends BaseService {
   open(id?: string): OpenedSession {
     const now = Date.now();
 
-    for (const [key, session] of this.browsers) if (now - session.touched > 86_400_000) this.browsers.delete(key);
+    for (const [key, session] of this.browsers) if (now - session.touched > 86_400_000) this.end(key);
     const previous = id ? this.browsers.get(id) : undefined;
 
     if (id && previous) {
@@ -57,7 +63,7 @@ export class SessionsService extends BaseService {
         }
 
       if (oldest === undefined) throw new ApplicationError(503, 'Too many browser sessions');
-      this.browsers.delete(oldest);
+      this.end(oldest);
     }
 
     const token = this.cryptoRepository.randomBytes(32).toString('base64url');
@@ -73,6 +79,41 @@ export class SessionsService extends BaseService {
     this.browsers.set(token, session);
 
     return { id: token, session };
+  }
+
+  /** Identity, launch selection and staged import are independent session dimensions. */
+  transition(session: BrowserSession, event: BrowserEvent) {
+    switch (event.type) {
+      case 'login': {
+        session.identity = event.identity;
+        session.selected = true;
+        break;
+      }
+
+      case 'clear-selection': {
+        session.selected = false;
+        break;
+      }
+
+      case 'stage-import': {
+        session.pendingImport = event.stage;
+        break;
+      }
+
+      case 'finish-import': {
+        session.pendingImport = null;
+        break;
+      }
+    }
+  }
+
+  end(id: string) {
+    this.browsers.delete(id);
+  }
+
+  /** Recheck after awaits: logout, eviction or password change invalidates continuation. */
+  current(id: string, session: BrowserSession, identity: string) {
+    return this.browsers.get(id) === session && session.identity === identity && !!this.accounts.identity(identity);
   }
 
   validCsrf(session: BrowserSession, token: string) {

@@ -1,10 +1,10 @@
+import { Resources } from '#src/node/lifecycle/resources';
 import { createServices } from '#src/composition';
 import type { ResolvedConfig } from '#src/config/index';
 import { packageRoot } from '#src/config/load';
 import type { RepositoryContext } from '#src/context';
 import type { Runtime } from '#src/http/runtime';
 import { LockRepository } from '#src/repositories/lock.repository';
-import { SettingsStore } from '#src/repositories/settings.repository';
 import { AccountsService } from '#src/services/auth.service';
 import { SessionsService } from '#src/services/browser-session.service';
 import { ImportsService } from '#src/services/profile-import.service';
@@ -17,13 +17,15 @@ import { z } from 'zod';
 import { DiscordService } from '#src/services/discord.service';
 
 export async function openRuntime(config: ResolvedConfig, assets: string) {
+  const resources = new Resources();
   const release = await new LockRepository().acquireStorageLock(config.storageDir);
-  let accounts: AccountsService | null = null;
-  let settings: SettingsStore | null = null;
+  resources.defer(release);
 
   try {
-    accounts = new AccountsService(config.storageDir);
-    settings = accounts.repositories.settingsRepository;
+    const accounts = new AccountsService(config.storageDir);
+    resources.defer(() => accounts.close());
+    const settings = accounts.repositories.settingsRepository;
+    resources.defer(() => settings.close());
     const sessions = new SessionsService(accounts);
     const profiles = accounts.repositories.profileRepository;
     const world = new World();
@@ -47,6 +49,10 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
 
     new ImportsService(accounts, world).recover();
     const simulation = new Simulation(runtime);
+    resources.defer(() => runtime.discord?.close());
+    resources.defer(() => runtime.services.uploads.close());
+    resources.defer(() => simulation.close());
+    resources.defer(() => world.lifecycle.close());
     runtime.services.activities.recover();
     simulation.start();
     runtime.services.uploads.start();
@@ -63,22 +69,16 @@ export async function openRuntime(config: ResolvedConfig, assets: string) {
       }
     }
 
-    return {
-      runtime,
-      close: async () => {
-        world.lifecycle.close();
-        simulation.close();
-        await runtime.services.uploads.close();
-        await runtime.discord?.close();
-        runtime.settings.close();
-        runtime.accounts.close();
-        await release();
-      },
-    };
+    return { runtime, close: () => resources.close() };
   } catch (error) {
-    settings?.close();
-    accounts?.close();
-    await release();
+    try {
+      await resources.close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Runtime initialization and cleanup failed', {
+        cause: cleanupError,
+      });
+    }
+
     throw error;
   }
 }

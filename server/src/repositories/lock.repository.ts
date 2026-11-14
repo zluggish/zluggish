@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 /** Same OS lock as Python FileLock; the descriptor stays open for the owner's lifetime. */
 
 export class LockRepository {
+  // Unowned -> descriptor locked -> released. Release latches once; OS ownership is authoritative.
   acquireStorageLock(storage: string): Promise<() => Promise<void>> {
     return Promise.try(() => {
       mkdirSync(storage, { recursive: true });

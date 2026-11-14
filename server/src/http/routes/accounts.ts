@@ -143,7 +143,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.on(['GET', 'POST'], '/signup/', (c) => c.redirect('/riders/add/'));
   app.on(['GET', 'POST'], '/login/', async (c) => {
     const session = c.get('browser');
-    session.selected = false;
+    sessions.transition(session, { type: 'clear-selection' });
 
     if (!accounts.setupComplete()) return c.redirect('/riders/add/');
     let error = '';
@@ -157,10 +157,9 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const password = z.string().catch('').parse(form.password);
 
       if (user && (!user.pass_hash || (await accounts.verify(user, password)))) {
-        sessions.browsers.delete(c.get('browserId'));
+        sessions.end(c.get('browserId'));
         const fresh = sessions.open();
-        fresh.session.identity = runtime.services.accounts.identityOf(user);
-        fresh.session.selected = true;
+        sessions.transition(fresh.session, { type: 'login', identity: runtime.services.accounts.identityOf(user) });
         setCookie(c, 'zluggish_session', fresh.id, {
           httpOnly: true,
           sameSite: 'Lax',
@@ -246,7 +245,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
   app.post('/riders/switch/', async (c) => {
     await csrf(c, runtime);
-    sessions.browsers.delete(c.get('browserId'));
+    sessions.end(c.get('browserId'));
     deleteCookie(c, 'zluggish_session', { path: '/' });
 
     return c.redirect('/login/');
@@ -359,7 +358,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (password !== null && password !== form.confirm_password) throw new HTTPException(400);
 
       await accounts.changePassword(user.player_id, password);
-      sessions.browsers.delete(c.get('browserId'));
+      sessions.end(c.get('browserId'));
 
       return c.redirect('/login/');
     }
@@ -396,7 +395,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const user = c.get('rider');
 
     if (c.req.path !== '/ride' || !user || !c.get('browser').selected) {
-      c.get('browser').selected = false;
+      sessions.transition(c.get('browser'), { type: 'clear-selection' });
 
       return c.redirect('/login/');
     }
@@ -492,7 +491,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (password !== form['password-confirm']) throw new HTTPException(400);
 
     await accounts.changePassword(user.player_id, password);
-    sessions.browsers.delete(c.get('browserId'));
+    sessions.end(c.get('browserId'));
 
     return c.body(null, 204);
   });
@@ -500,13 +499,13 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const user = c.get('rider');
 
     if (user) runtime.world.lifecycle.log.info('auth.logout', 'User logged out', { playerId: user.player_id });
-    sessions.browsers.delete(c.get('browserId'));
+    sessions.end(c.get('browserId'));
 
     return c.redirect('/login/');
   });
 
   app.post('/auth/realms/zwift/protocol/openid-connect/logout', (c) => {
-    sessions.browsers.delete(c.get('browserId'));
+    sessions.end(c.get('browserId'));
 
     return c.body(null, 204);
   });

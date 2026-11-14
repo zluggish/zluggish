@@ -5,6 +5,9 @@ import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
+/** Per rider, missing file bootstraps saved-game unlocks; membership only grows through
+threshold/report events. Import replaces this state externally; reads may backfill routes.
+*/
 export class AchievementService extends BaseService {
   loadAchievements(runtime: Runtime, id: number) {
     const file = resolve(runtime.profiles.folder(id), 'achievements.bin');

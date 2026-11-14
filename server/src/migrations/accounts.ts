@@ -9,7 +9,10 @@ import { resolve } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 
-/* Migrate legacy zwift-offline accounts to the new zluggish schema */
+/** Explicit legacy upgrade: backup -> transactional identity/schema conversion ->
+commit -> publish current filename. Rollback preserves the old DB; reruns retain
+current hashes and revoke only identities whose password protection changes.
+*/
 export async function migrateAccounts(storage: string, soloPlayer?: number) {
   const destination = resolve(storage, 'zluggish.db');
   const legacyPath = resolve(storage, 'zwift-offline.db');

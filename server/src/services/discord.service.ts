@@ -5,6 +5,7 @@ import { MessageService } from '#src/services/message.service';
 
 /** All external work is bounded and detached from the ride tick. */
 export class DiscordBridge extends BaseService {
+  // Open admits at most 100 sends; close permanently stops admission. Each settled send releases one slot.
   private pending = 0;
   private closed = false;
   constructor(

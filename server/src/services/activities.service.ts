@@ -1,3 +1,4 @@
+import { activityMediaSchema } from '#src/dtos/activities.dto';
 import { type RepositoryContext } from '#src/context';
 import { ApplicationError } from '#src/errors';
 import { ActivitySchema, FitnessPrivacy, type Activity } from '#src/protocol/generated/activity_pb';
@@ -15,19 +16,97 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 
 export class ActivitiesService extends BaseService {
+  private readonly mediaTokens = new Map<string, { token: Buffer; expires: number; status: 'issued' | 'receiving' }>();
+
+  issueMedia(id: string) {
+    for (const [key, entry] of this.mediaTokens) if (entry.expires < Date.now()) this.mediaTokens.delete(key);
+
+    const entry = {
+      token: this.cryptoRepository.randomBytes(32),
+      expires: Date.now() + 900_000,
+      status: 'issued' as const,
+    };
+
+    this.mediaTokens.set(id, entry);
+
+    return entry;
+  }
+
+  /** issued -> receiving -> consumed; a failed write releases the claim for retry.
+  Validate again after reading the body: deleting the activity must not recreate its media.
+  */
+  async receiveMedia(id: string, token: Buffer, read: () => Promise<ArrayBuffer>) {
+    const entry = this.mediaTokens.get(id);
+
+    if (
+      !entry ||
+      entry.status !== 'issued' ||
+      entry.expires < Date.now() ||
+      token.length !== entry.token.length ||
+      !this.cryptoRepository.timingSafeEqual(token, entry.token)
+    )
+      throw new ApplicationError(403);
+    entry.status = 'receiving';
+
+    try {
+      if (!this.activitiesRepository.findActivityMedia(id)) throw new ApplicationError(404);
+      const bytes = new Uint8Array(await read());
+
+      if (this.mediaTokens.get(id) !== entry || entry.expires < Date.now()) throw new ApplicationError(403);
+      const row = activityMediaSchema.safeParse(this.activitiesRepository.findActivityMedia(id));
+
+      if (!row.success) throw new ApplicationError(404);
+      const extension = row.data.content_type.includes('quicktime') ? 'mov' : 'mp4';
+      this.filesRepository.write(
+        resolve(this.context.profiles.folder(row.data.player_id), 'medias', `${id}.${extension}`),
+        bytes,
+      );
+      this.mediaTokens.delete(id);
+    } catch (error) {
+      if (this.mediaTokens.get(id) === entry) entry.status = 'issued';
+      throw error;
+    }
+  }
+
   constructor(private readonly context: RepositoryContext) {
     super(context.accounts.repositories);
   }
 
   finalized(activity: Activity) {
-    const saved = this.completionRepository.get(activity.id);
+    const state = this.completionRepository.state(activity.id);
 
-    if (!saved) return false;
+    if (state.status === 'draft') return false;
+    const { saved } = state;
 
     if (!Buffer.from(saved.payload).equals(Buffer.from(toBinary(ActivitySchema, activity))))
       throw new ApplicationError(409, 'Completed activities cannot be replaced.');
 
-    return saved.done !== 0;
+    return state.status === 'completed';
+  }
+
+  /** Draft edits, durable completion and discard are distinct from ending a ride. */
+  save(activity: Activity, finish: boolean) {
+    if (this.finalized(activity)) return 'unchanged';
+
+    if (!finish) {
+      this.protobufRepository.update('activity', activity.id, ActivitySchema, activity, ['fit']);
+
+      return 'updated';
+    }
+
+    if (activity.distanceInMeters < 1) {
+      this.deleteActivity(activity.id, Number(activity.playerId));
+      this.context.world.lifecycle.log.info('activity.discarded', 'Activity discarded', {
+        playerId: Number(activity.playerId),
+        activityId: activity.id,
+      });
+
+      return 'discarded';
+    }
+
+    this.finalize(activity);
+
+    return 'completed';
   }
 
   recover() {
@@ -63,7 +142,7 @@ export class ActivitiesService extends BaseService {
     const journal = this.completionRepository;
     const folder = this.context.profiles.folder(player);
 
-    if (!journal.get(activity.id)) {
+    if (journal.state(activity.id).status === 'draft') {
       // Finish earlier writes before deriving another snapshot of this rider's progression.
       for (const pending of journal.unfinished())
         if (pending.player_id === player) this.finalize(fromBinary(ActivitySchema, pending.payload));

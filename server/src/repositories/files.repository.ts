@@ -49,6 +49,7 @@ export class AssetFiles {
     if (existsSync(path)) unlinkSync(path);
   }
 
+  // temporary -> fsynced -> linked/renamed -> directory synced; failure retains no success marker.
   writeDurable(path: string, text: string | Uint8Array, replace = false) {
     mkdirSync(dirname(path), { recursive: true });
     const temporary = `${path}.${new CryptoRepository().randomUUID()}.tmp`;

@@ -1,6 +1,7 @@
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { AssetFiles } from '#src/repositories/files.repository';
+import { worldTime } from '#src/world/state';
 import { Simulation } from '#src/world/simulation';
 import { runtimeFixture } from '#tests/support/runtime';
 import { create, toBinary } from '@bufbuild/protobuf';
@@ -46,4 +47,48 @@ await test('simulation playback stops, resumes and removes deleted pacers on rel
   simulation.reload();
   assert.equal(f.world.synthetic.has(100n), false);
   assert.equal(f.profiles.synthetic.has(100n), false);
+});
+
+await test('ghost regroup before lazy loading preserves independent playback and loading states', async (t) => {
+  const f = runtimeFixture(t);
+  const rider = await f.accounts.create('Ghost Rider', '', true);
+  f.settings.save(rider.player_id, { 'ghosts.enabled': true });
+  let now = 100;
+  const simulation = new Simulation(f, () => now);
+  const id = BigInt(rider.player_id);
+
+  const state = create(PlayerStateSchema, {
+    id,
+    f19: (6 << 16) | 4,
+    aux3: 1 << 8,
+    roadTime: 1000,
+    worldTime: worldTime(),
+  });
+
+  f.world.receive(id, state);
+  simulation.regroup(id);
+  assert.equal(simulation.ghosts.get(id)?.loading, 'waiting');
+  assert.equal(simulation.ghosts.get(id)?.playback, 'playing');
+  const file = resolve(f.profiles.folder(rider.player_id), 'ghosts/6/1/test.bin');
+  new AssetFiles().writeDurable(
+    file,
+    toBinary(GhostSchema, create(GhostSchema, { playerId: rider.player_id, states: [state] })),
+  );
+  f.world.receive(id, { ...state, roadTime: 2000, worldTime: state.worldTime + 1n });
+  assert.equal(simulation.ghosts.get(id)?.loading, 'loaded');
+  now += 3;
+  simulation.tick();
+  const ghostId = id + 10_000_000n;
+  assert.equal(f.world.personal.get(id)?.has(ghostId), true);
+  now += 3;
+  simulation.tick();
+  assert.equal(f.world.personal.get(id)?.has(ghostId), false);
+  f.world.receive(id, { ...state, roadTime: 500, worldTime: state.worldTime + 2n });
+  simulation.regroup(id);
+  now += 3;
+  simulation.tick();
+  assert.equal(f.world.personal.get(id)?.has(ghostId), true);
+  f.world.logout(id);
+  assert.equal(simulation.ghosts.has(id), false);
+  assert.equal(f.world.personal.has(id), false);
 });

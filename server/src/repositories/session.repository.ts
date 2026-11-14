@@ -21,6 +21,7 @@ export class CookieSession {
     return url.hostname === this.domain || url.hostname.endsWith(`.${this.domain}`);
   }
 
+  // Each response updates the jar before following a bounded redirect; 307/308 retain the request body.
   async request(url: string, init: SessionRequest = {}, redirects = 10): Promise<Response> {
     const target = new URL(url);
     const headers = new Headers({ 'User-Agent': agent, ...init.headers });

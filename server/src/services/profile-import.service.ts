@@ -28,6 +28,8 @@ export class ImportsService extends BaseService {
   }
 
   prepare(rider: Rider, files: ImportFiles) {
+    if (!this.accounts.identity(this.accounts.identityOf(rider))) throw new Error('Import identity changed');
+
     if (this.world.active(rider.player_id)) throw new Error('Finish the active ride before importing');
     let profile = null;
     const names: ImportFile[] = [];
@@ -180,8 +182,7 @@ export class ImportsService extends BaseService {
       );
     }
 
-    manifest.state = 'publishing';
-    this.filesRepository.writeDurable(resolve(folder, 'manifest.json'), JSON.stringify(manifest), true);
+    this.transition(folder, manifest, 'publish');
 
     try {
       for (const name of manifest.files)
@@ -197,8 +198,7 @@ export class ImportsService extends BaseService {
         manifest.files.includes('profile.bin') && !keepName ? manifest.lastName : rider.last_name,
         manifest.sourceId ? BigInt(manifest.sourceId) : rider.official_player_id,
       );
-      manifest.state = 'committed';
-      this.filesRepository.writeDurable(resolve(folder, 'manifest.json'), JSON.stringify(manifest), true);
+      this.transition(folder, manifest, 'commit');
     } catch (error) {
       this.rollback(folder, manifest);
       throw error;
@@ -210,6 +210,16 @@ export class ImportsService extends BaseService {
   cancel(rider: Rider, stage: string) {
     this.inspect(rider, stage);
     this.filesRepository.rmSync(this.folder(rider, stage), { recursive: true });
+  }
+
+  /** Persist a checkpoint before admitting its effects. A failed rollback retains the journal. */
+  private transition(folder: string, manifest: ImportManifest, event: 'publish' | 'commit') {
+    const expected = event === 'publish' ? 'staged' : 'publishing';
+
+    if (manifest.state !== expected) throw new Error('Invalid import transition');
+    const next = { ...manifest, state: event === 'publish' ? ('publishing' as const) : ('committed' as const) };
+    this.filesRepository.writeDurable(resolve(folder, 'manifest.json'), JSON.stringify(next), true);
+    manifest.state = next.state;
   }
 
   rollback(folder: string, manifest: ImportManifest) {
@@ -258,9 +268,22 @@ export class ImportsService extends BaseService {
 
         if (String(manifest.playerId) !== name) throw new Error('Import journal rider mismatch');
 
-        if (manifest.state === 'publishing') this.rollback(folder, manifest);
+        switch (manifest.state) {
+          case 'staged': {
+            break; // Abandonment is not a commit or a cancellation.
+          }
 
-        if (manifest.state !== 'staged') this.filesRepository.rmSync(folder, { recursive: true });
+          case 'publishing': {
+            this.rollback(folder, manifest);
+            this.filesRepository.rmSync(folder, { recursive: true });
+            break;
+          }
+
+          case 'committed': {
+            this.filesRepository.rmSync(folder, { recursive: true });
+            break;
+          }
+        }
       }
     }
   }

@@ -10,6 +10,14 @@ const completion = z.object({
   done: z.number(),
 });
 
+type Completion = z.infer<typeof completion>;
+
+export type CompletionState =
+  | { status: 'draft' }
+  | { status: 'prepared'; saved: Completion }
+  | { status: 'completed'; saved: Completion };
+
+/** Per activity: absent -> prepared -> completed. Prepared file effects are replayable. */
 export class Completions {
   private readonly executor: SqliteExecutor;
   constructor(readonly db: DatabaseSync) {
@@ -19,6 +27,11 @@ export class Completions {
     const row = this.executor.get(query.selectFrom('activity_completion').selectAll().where('activity_id', '=', id));
 
     return row ? completion.parse(row) : null;
+  }
+  state(id: bigint): CompletionState {
+    const saved = this.get(id);
+
+    return saved ? { status: saved.done ? 'completed' : 'prepared', saved } : { status: 'draft' };
   }
   prepare(id: bigint, player: number, payload: Uint8Array, streak: Uint8Array | null) {
     this.executor.run(

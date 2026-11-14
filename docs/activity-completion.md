@@ -9,3 +9,5 @@ Rider home lists the most recent 100 provider jobs, with `pending`, `sending`, `
 Use **Retry failed uploads** on rider home after checking the provider. The provider may have accepted an activity even when its acknowledgement was lost, so an explicit retry can create a duplicate there. Retries require the current rider's authenticated browser session and CSRF token. A successful local activity save means the upload intent was recorded, not that the provider has accepted it.
 
 The journal and job tables are added when an existing version-4 account database opens. Back up the complete storage directory, including `zluggish.db`, rather than only the FIT files. Completion journals retain the finalized activity payload, including FIT bytes, for recovery and upload retries; account database size grows with saved activities.
+
+Provider jobs use guarded pending-to-sending claims and sending-to-result updates. A deleted job cannot be recreated by a late result. Worker shutdown stops admission and waits for admitted delivery; repeated start/close does not create additional timers.

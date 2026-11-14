@@ -9,7 +9,11 @@ interface Ride {
   counterReset: boolean;
 }
 
-/** Observes accepted real-rider state only; never changes protocol state. */
+/** Observational machines, keyed by rider: absent client -> connected; absent ride ->
+riding on accepted state; end removes both idempotently. Reconnect only touches seen.
+counterReset latches until progress emits. Companion registration and diagnostics
+use separate expiry/suppression windows and never own protocol presence.
+*/
 export class Lifecycle {
   readonly rides = new Map<bigint, Ride>();
   private readonly clients = new Map<bigint, { clientId: string; seen: number }>();

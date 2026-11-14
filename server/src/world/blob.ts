@@ -1,4 +1,5 @@
-import type { BlobMode, GesturePhase } from '#src/enum';
+import { BlobBehavior } from '#src/world/blob-mode';
+import type { GesturePhase } from '#src/enum';
 import type { ResolvedConfig } from '#src/config/index';
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
@@ -12,8 +13,10 @@ import { z } from 'zod';
 
 type BlobConfig = ResolvedConfig['soloBlob'];
 
-type Mode = BlobMode | null;
-
+/** Effort: normal -> approach -> pull -> normal (or abort without a leader/toast).
+Dropping independently peels a leader to its new slot; blocked independently
+accumulates collision time and resets after avoidance. Neither owns group mode.
+*/
 interface BlobRider {
   profile: PlayerProfile;
   slot: number;
@@ -45,8 +48,10 @@ export class Blob {
   readonly roadLimits: Record<string, [number, number]>;
   readonly roadWidths: Record<string, [number, number, number][]>;
   readonly reach = new Map<string, [number, number]>();
-  mode: Mode = null;
-  modeUntil = 0;
+  private readonly behavior = new BlobBehavior();
+  get mode() {
+    return this.behavior.mode;
+  }
   grade = 0;
   shift = 0;
   nextShuffle: number;
@@ -350,25 +355,22 @@ export class Blob {
 
     switch (action) {
       case UserBikeAction.UBA_ELBOW: {
-        this.mode = 'attack';
-        this.modeUntil = now + 90;
+        this.behavior.enter('attack', now + 90);
         this.nextPull = now;
 
         break;
       }
 
       case UserBikeAction.UBA_HAMMER: {
-        this.mode = 'hammer';
-        this.modeUntil = now + this.config.hammerTime;
+        this.behavior.enter('hammer', now + this.config.hammerTime);
         this.nextPull = now;
 
         break;
       }
 
       case UserBikeAction.UBA_TOAST: {
-        this.mode = 'toast';
-        this.modeUntil = now + this.config.toastTime;
-        this.nextPull = this.modeUntil;
+        this.behavior.enter('toast', now + this.config.toastTime);
+        this.nextPull = now + this.config.toastTime;
 
         for (const rider of this.riders) rider.phase = null;
 
@@ -376,8 +378,7 @@ export class Blob {
       }
 
       case UserBikeAction.UBA_BELL: {
-        this.mode = this.mode === 'lead' ? null : 'lead';
-        this.modeUntil = now + this.config.leadTime;
+        this.behavior.enter(this.mode === 'lead' ? null : 'lead', now + this.config.leadTime);
 
         break;
       }
@@ -469,8 +470,7 @@ export class Blob {
     const now = this.now();
     const cfg = this.config;
 
-    if (this.mode && now > this.modeUntil) {
-      this.mode = null;
+    if (this.behavior.expire(now)) {
       this.form();
       this.nextPull = Math.max(this.nextPull, now + 15);
     }
@@ -478,8 +478,7 @@ export class Blob {
     const busy = this.riders.some((rider) => rider.phase || rider.dropping);
 
     if (cfg.turnInterval > 0 && this.mode === null && now >= this.nextTurn && !busy) {
-      this.mode = 'lead';
-      this.modeUntil = now + cfg.leadTime;
+      this.behavior.enter('lead', now + cfg.leadTime);
       this.nextTurn = now + cfg.leadTime + cfg.turnInterval;
       this.form();
     }

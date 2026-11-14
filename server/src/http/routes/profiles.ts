@@ -33,12 +33,20 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         files[key] = new Uint8Array(await upload.arrayBuffer());
       }
 
+      if (
+        !runtime.services.sessions.current(
+          c.get('browserId'),
+          c.get('browser'),
+          runtime.services.accounts.identityOf(rider),
+        )
+      )
+        throw new HTTPException(401);
       const stage = imports.prepare(rider, files);
       const browser = c.get('browser');
 
       if (browser.pendingImport) imports.cancel(rider, browser.pendingImport);
 
-      browser.pendingImport = stage;
+      runtime.services.sessions.transition(browser, { type: 'stage-import', stage });
 
       return c.redirect(`/profile/${rider.username}/confirm/`);
     }
@@ -81,6 +89,16 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (c.req.method === 'POST') {
       const form = await csrf(c, runtime);
 
+      if (
+        c.get('browser').pendingImport !== stage ||
+        !runtime.services.sessions.current(
+          c.get('browserId'),
+          c.get('browser'),
+          runtime.services.accounts.identityOf(rider),
+        )
+      )
+        throw new HTTPException(409);
+
       if (form.cancel) imports.cancel(rider, stage);
       else {
         if (!form.confirm || ((duplicate || mixed) && !form.confirm_source)) throw new HTTPException(400);
@@ -88,7 +106,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         imports.publish(rider, stage, form.keep_name === 'on');
       }
 
-      c.get('browser').pendingImport = null;
+      runtime.services.sessions.transition(c.get('browser'), { type: 'finish-import' });
 
       return c.redirect(`/user/${rider.username}/`);
     }

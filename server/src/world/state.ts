@@ -20,16 +20,44 @@ export function forward(state: PlayerState) {
   return (state.f19 & 4) !== 0;
 }
 
-export interface Relay {
-  key: Buffer;
-  tcpConnection: number;
-  udpConnection: number;
-  tcpRead: number;
-  tcpWrite: number;
-  udpRead: number;
-  udpWrite: number;
+/** Per authenticated relay; only accepted packets advance counters. Never an anti-replay policy. */
+export class Relay {
+  tcpConnection = 0;
+  udpConnection = 0;
+  tcpRead = 0;
+  tcpWrite = 0;
+  udpRead = 0;
+  udpWrite = 0;
+  constructor(readonly key: Buffer) {}
+  acceptUdp(connection: number, explicitConnection?: number, sequence?: number) {
+    if (explicitConnection !== undefined && explicitConnection !== this.udpConnection) this.udpWrite = 0;
+    this.udpConnection = connection;
+    this.udpRead = sequence ?? this.udpRead + 1;
+  }
+  acceptTcp(connection: number, hello: boolean) {
+    if (hello) {
+      this.tcpConnection = connection;
+      this.tcpRead = 1;
+      this.tcpWrite = 0;
+    } else this.tcpRead++;
+  }
+  nextUdp() {
+    return this.udpWrite++;
+  }
+  nextTcp() {
+    return this.tcpWrite++;
+  }
 }
 
+export function fresh(state: PlayerState, now = worldTime()) {
+  return now < state.worldTime + 10_000n;
+}
+
+export function expired(state: PlayerState, now = worldTime()) {
+  return now > state.worldTime + 30_000n;
+}
+
+/** Presence is online-map membership plus freshness, independent of relay/socket and observed ride. */
 export class World {
   readonly lifecycle = new Lifecycle();
   presence: ((id: bigint, joining: boolean) => void) | undefined;
@@ -48,21 +76,13 @@ export class World {
   active(playerId: number | bigint) {
     const state = this.online.get(BigInt(playerId));
 
-    return !!state && worldTime() < state.worldTime + 10_000n;
+    return !!state && fresh(state);
   }
 
   login(playerId: bigint, key: Uint8Array) {
     if (![16, 24, 32].includes(key.length)) throw new Error('Invalid relay key');
 
-    const relay: Relay = {
-      key: Buffer.from(key),
-      tcpConnection: 0,
-      udpConnection: 0,
-      tcpRead: 0,
-      tcpWrite: 0,
-      udpRead: 0,
-      udpWrite: 0,
-    };
+    const relay = new Relay(Buffer.from(key));
 
     this.relays.set(playerId, relay);
     this.histories.delete(playerId);
@@ -89,7 +109,7 @@ export class World {
 
     if (previous && previous.worldTime > state.worldTime) return;
 
-    if (!(state.roadTime && (previous || worldTime() < state.worldTime + 10_000n))) return;
+    if (!(state.roadTime && (previous || fresh(state)))) return;
 
     const snapshot = clone(PlayerStateSchema, state);
     snapshot.id = playerId;
@@ -108,6 +128,8 @@ export class World {
     this.histories.set(playerId, history);
   }
 
+  // Queue admission is bounded; the TCP owner takes/deletes a batch before sending.
+  // nearby separately checkpoints each peer timestamp, suppressing unchanged snapshots.
   enqueue(update: WorldAttribute, recipients: bigint[] = this.online.keys().toArray()) {
     for (const id of recipients) {
       const queue = this.updates.get(id) ?? [];
@@ -135,7 +157,7 @@ export class World {
     for (const [id, peer] of [...this.online, ...this.synthetic, ...personal]) {
       if (id === playerId || course(watching) !== course(peer)) continue;
 
-      if (this.online.has(id) && worldTime() >= peer.worldTime + 10_000n) continue;
+      if (this.online.has(id) && !fresh(peer)) continue;
 
       if (news.get(id) === peer.worldTime) continue;
 

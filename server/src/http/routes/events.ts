@@ -1,4 +1,4 @@
-import { notificationPayloadSchema, notificationEventSchema, notificationUpdateSchema } from '#src/dtos/events.dto';
+import { notificationUpdateSchema } from '#src/dtos/events.dto';
 import { inputSchema, type Meetup } from '#src/dtos/meetup.dto';
 import { authenticated } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
@@ -204,32 +204,12 @@ export function eventRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.get('/api/notifications', (c) => {
     const user = authenticated(c);
 
-    return c.json(
-      service.notificationsForPlayer(user.player_id).flatMap((row) => {
-        const text = z.string().parse(row.json);
-
-        const notification = notificationPayloadSchema.parse(JSON.parse(text));
-
-        return notificationEventSchema.parse(JSON.parse(notification.argString0)).eventStartDate * 1000 >
-          Date.now() - 1_800_000
-          ? text
-          : [];
-      }),
-    );
+    return c.json(service.notifications(user.player_id));
   });
   app.put('/api/notifications/:id', async (c) => {
     const user = authenticated(c);
-
-    const row = service.findNotification(c.req.param('id'), user.player_id);
-
-    if (!row) throw new HTTPException(404);
-
-    const notification = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(row.json)));
-
     const update = notificationUpdateSchema.parse(await c.req.json());
-
-    Object.assign(notification, update, { lastModified: update.readDate });
-    service.updateNotification(JSON.stringify(notification), c.req.param('id'));
+    service.markNotification(user.player_id, c.req.param('id'), update);
 
     return c.body(null, 204);
   });

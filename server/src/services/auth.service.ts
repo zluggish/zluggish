@@ -25,6 +25,7 @@ export class AccountsService extends BaseService {
   byUsername(username: string) {
     return this.repository.byUsername(username);
   }
+  // Setup is one-way: first owner creation commits its marker in the same account transaction.
   setupComplete() {
     return this.repository.setupComplete();
   }

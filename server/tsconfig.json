@@ -15,7 +15,7 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "types": ["node"],
-    "lib": ["ES2023", "DOM", "DOM.Iterable", "ESNext.Iterator", "ESNext.Promise"]
+    "lib": ["ES2023", "DOM", "DOM.Iterable", "ESNext.Iterator", "ESNext.Promise", "ES2024.Promise"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
 }

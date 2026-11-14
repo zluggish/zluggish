@@ -59,14 +59,23 @@ export class UploadsRepository {
         .where('c.done', '=', 1),
     );
   }
-  setState(activity: number, provider: string, state: UploadState, expected?: 'sending') {
-    let update = query
-      .updateTable('activity_upload')
-      .set({ state })
-      .where('activity_id', '=', activity)
-      .where('provider', '=', provider);
+  /** Only pending jobs can be claimed; terminal results cannot resurrect deleted jobs. */
+  claim(activity: number, provider: string) {
+    return this.transition(activity, provider, 'pending', 'sending');
+  }
+  finish(activity: number, provider: string, state: 'sent' | 'failed' | 'cancelled') {
+    return this.transition(activity, provider, 'sending', state);
+  }
+  private transition(activity: number, provider: string, expected: UploadState, state: UploadState) {
+    const result = this.executor.run(
+      query
+        .updateTable('activity_upload')
+        .set({ state })
+        .where('activity_id', '=', activity)
+        .where('provider', '=', provider)
+        .where('state', '=', expected),
+    );
 
-    if (expected) update = update.where('state', '=', expected);
-    this.executor.run(update);
+    return result.changes !== 0;
   }
 }

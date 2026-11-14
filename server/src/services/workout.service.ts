@@ -51,6 +51,8 @@ export class WorkoutsService extends BaseService {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
+  // Publication is synchronous: capture -> replace -> commit, or restore on exception.
+  // This is exception rollback, not a durable crash journal; no published marker is invented.
   private publishFiles(files: ReadonlyMap<string, string | Uint8Array>, commit?: () => void) {
     const previous = new Map<string, Buffer | null>();
 
@@ -517,12 +519,12 @@ export class WorkoutsService extends BaseService {
     }
 
     if (!provider || (android && provider !== 'intervals-icu')) return Promise.resolve();
-    const requests = pending.get(runtime) ?? new Map<string, Promise<void>>();
+    const requests = pending.get(runtime) ?? new Map<string, { status: 'syncing'; promise: Promise<void> }>();
     pending.set(runtime, requests);
     const key = `${id}:${provider}`;
     const previous = requests.get(key);
 
-    if (previous) return previous;
+    if (previous) return previous.promise;
 
     const request = workouts
       .sync(id, AbortSignal.timeout(5000))
@@ -535,13 +537,13 @@ export class WorkoutsService extends BaseService {
         );
       })
       .finally(() => {
-        requests.delete(key);
+        if (requests.get(key)?.promise === request) requests.delete(key);
       });
 
-    requests.set(key, request);
+    requests.set(key, { status: 'syncing', promise: request });
 
     return request;
   }
 }
 
-const pending = new WeakMap<Runtime, Map<string, Promise<void>>>();
+const pending = new WeakMap<Runtime, Map<string, { status: 'syncing'; promise: Promise<void> }>>();

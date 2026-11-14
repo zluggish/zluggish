@@ -32,6 +32,10 @@ export function gestureUpdate(action: UserBikeAction, state: PlayerState, time: 
   });
 }
 
+/** Per tick: observe edges -> enqueue -> discard expired -> admit by global/per-rider
+cooldown -> emit. Surging and frontSince are separate observation latches.
+Random draws remain in event order so seeded simulation stays reproducible.
+*/
 export class GestureDirector {
   readonly cooldown = new Map<bigint, number>();
   seen = new Map<bigint, { phase: string | null; dropping: boolean; behind: boolean }>();

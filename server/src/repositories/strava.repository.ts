@@ -129,6 +129,7 @@ const progress = z.array(
   }),
 );
 
+/** Remote upload accepted -> processing -> success or error/empty/timeout; bounded to 60 polls. */
 async function waitReady(session: CookieSession, upload: string, delay = 1000) {
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await session.request(`${site}/upload/progress.json?${new URLSearchParams({ 'ids[]': upload })}`);

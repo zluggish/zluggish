@@ -51,6 +51,7 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
   const records = runtime.services.recordData;
 
+  // Absent -> accumulating by subgroup/rider -> pruned on a later POST after one hour. GET is observational.
   const races = new Map<bigint, { touched: number; riders: Map<number, RaceResultEntrySaveRequest> }>();
 
   app.post('/api/segment-results', async (c) => {

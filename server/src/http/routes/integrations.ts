@@ -3,7 +3,6 @@ import { authenticated, csrf, page } from '#src/http/routes/accounts';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import { RestartScheduler } from '#src/node/lifecycle/restart';
 import type { Rider } from '#src/repositories/accounts.repository';
-import type { GarminClient, MfaState } from 'garminconnect-js';
 import type { Context, Hono } from 'hono';
 import { html } from 'hono/html';
 import { HTTPException } from 'hono/http-exception';
@@ -192,12 +191,20 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         form.achievements === 'on',
       );
 
+      if (
+        !runtime.services.sessions.current(
+          c.get('browserId'),
+          c.get('browser'),
+          runtime.services.accounts.identityOf(rider),
+        )
+      )
+        throw new Error('Import identity changed');
       const imports = runtime.services.imports;
       const stage = imports.prepare(rider, files);
       const browser = c.get('browser');
 
       if (browser.pendingImport) imports.cancel(rider, browser.pendingImport);
-      browser.pendingImport = stage;
+      runtime.services.sessions.transition(browser, { type: 'stage-import', stage });
 
       return c.redirect(`/profile/${rider.username}/confirm/`);
     } catch {
@@ -282,18 +289,13 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       return stravaPage(c, rider, 'Strava authorization canceled.');
 
     try {
-      runtime.services.integrations.writeToken(
-        resolve(folder(rider), 'strava_token.txt'),
-        await runtime.services.integrations.exchangeCode(client[0], client[1], code),
-      );
+      await service.authorizeStrava(c.get('browserId'), c.get('browser'), rider, code);
 
       return stravaPage(c, rider, 'Strava authorized.');
     } catch {
       return stravaPage(c, rider, 'Strava authorization canceled.');
     }
   });
-
-  const pendingGarmin = new Map<string, { client: GarminClient; state: MfaState; identity: string; expires: number }>();
 
   function garminPage(c: Env, rider: Rider, message = '') {
     const client = connections.read(rider.player_id, 'garmin');
@@ -345,55 +347,28 @@ export function integrationRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   app.post('/garmin_auth', async (c) => {
     const rider = authenticated(c);
     const form = await csrf(c, runtime);
-    const key = c.get('browserId');
-    const identity = `${rider.player_id}:${rider.auth_version}`;
-
-    for (const [id, entry] of pendingGarmin) if (entry.expires < Date.now()) pendingGarmin.delete(id);
 
     try {
-      if (form.code === undefined) {
-        const credentials = connections.read(rider.player_id, 'garmin');
+      const outcome = await service.authorizeGarmin(
+        c.get('browserId'),
+        c.get('browser'),
+        rider,
+        form.code === undefined ? undefined : z.string().min(1).max(32).parse(form.code),
+      );
 
-        if (!credentials) return garminPage(c, rider, 'Save credentials first.');
-
-        const client = runtime.services.integrations.garminClient(
-          resolve(folder(rider), 'garth'),
-          runtime.config.integrations.garmin.domain,
+      if (outcome === 'mfa')
+        return c.html(
+          page(
+            'Garmin verification',
+            html`<form method="post" action="/garmin_auth">
+              ${token(c)}<label>Verification code<input name="code" autocomplete="one-time-code" required /></label>
+              <button>Verify</button>
+            </form>`,
+          ),
         );
-
-        const result = await client.login(credentials[0], credentials[1]);
-
-        if (result.state === 'mfa_required') {
-          if (pendingGarmin.size >= 100) throw new Error('Too many pending authorizations');
-          pendingGarmin.set(key, {
-            client,
-            state: result.mfaState,
-            identity,
-            expires: Date.now() + 300_000,
-          });
-
-          return c.html(
-            page(
-              'Garmin verification',
-              html`<form method="post" action="/garmin_auth">
-                ${token(c)}<label>Verification code<input name="code" autocomplete="one-time-code" required /></label
-                ><button>Verify</button>
-              </form>`,
-            ),
-          );
-        }
-      } else {
-        const pending = pendingGarmin.get(key);
-        pendingGarmin.delete(key);
-
-        if (!pending || pending.identity !== identity) throw new Error('Expired authorization');
-        await pending.client.resumeLogin(pending.state, z.string().min(1).max(32).parse(form.code));
-      }
 
       return garminPage(c, rider, 'Garmin authorized.');
     } catch {
-      pendingGarmin.delete(key);
-
       return garminPage(c, rider, 'Garmin authorization failed or expired. Try again.');
     }
   });

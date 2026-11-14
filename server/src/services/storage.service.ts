@@ -33,6 +33,7 @@ export class StorageService extends BaseService {
   achievements(id: number) {
     return new AchievementService(this.repositories).loadAchievements(this.context, id);
   }
+  /** Repeated unlocks are idempotent membership additions, not progression increments. */
   unlock(id: number, incoming: Achievements) {
     const file = resolve(this.context.profiles.folder(id), 'achievements.bin');
     const achievements = this.filesRepository.readData(AchievementsSchema, file);

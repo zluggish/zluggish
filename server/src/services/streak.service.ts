@@ -35,19 +35,30 @@ export class StreakService extends BaseService {
     const streaks = StreakService.advancedStreak(this.streaksFor(profiles, id), activity);
     this.streakRepository.saveStreaks(profiles.folder(id), streaks);
   }
+  /** Invalid dates are ignored; older dates retain the existing same-week behavior. */
+  static period(start: number, boundary: number) {
+    if (!Number.isFinite(start)) return 'invalid';
+
+    if (start > boundary + 604_800_000) return 'gap';
+
+    return start > boundary ? 'next-week' : 'same-week';
+  }
+
   static advancedStreak(previous: ReturnType<StreakService['streaksFor']>, activity: Activity) {
     const streaks = clone(StreaksSchema, previous);
     const start = Date.parse(activity.startDate);
 
-    if (!Number.isFinite(start)) return streaks;
+    const period = StreakService.period(start, Number(streaks.weekEnd));
 
-    if (start > Number(streaks.weekEnd) + 604_800_000) {
+    if (period === 'invalid') return streaks;
+
+    if (period === 'gap') {
       streaks.curStreak = 1;
       streaks.curStreakRide = BigInt(start);
       streaks.curStreakDistance = 0;
       streaks.curStreakElevation = 0;
       streaks.curStreakCalories = 0;
-    } else if (start > Number(streaks.weekEnd)) {
+    } else if (period === 'next-week') {
       streaks.curStreak++;
       streaks.curStreakRide = BigInt(start);
     }
