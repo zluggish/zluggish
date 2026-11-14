@@ -6,25 +6,61 @@ on:
     branches: [main]
 
 jobs:
-  python:
+  server:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-26.04, windows-latest, macos-latest]
-        python: ["3.12"]
+    defaults:
+      run:
+        working-directory: server
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-node@v7
         with:
-          python-version: ${{ matrix.python }}
-          cache: pip
-      - run: python -m pip install -r requirements.txt
-      - run: python -m unittest discover -s tests -v
+          node-version: '24'
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '12.18.0'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Regenerate protocol files
+        run: pnpm codegen
+      - name: Check generated protocol files are up to date
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain --untracked-files=all -- src/protocol/generated)" ]]; then
+            git diff -- src/protocol/generated
+            git status --short --untracked-files=all -- src/protocol/generated
+            echo 'Generated protocol files are out of date. Run pnpm codegen from server/ and commit the results.'
+            exit 1
+          fi
 
   quality:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
+        with:
+          working_directory: server
+      - run: mise run install
+        working-directory: server
       - run: mise run lint
+        working-directory: server
       - run: mise run format
+        working-directory: server
+
+  container:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - run: docker buildx build --platform ${{ matrix.platform }} -f server/Dockerfile --target server --load -t zluggish:test .
+      - run: docker run --rm -i --platform ${{ matrix.platform }} --read-only --tmpfs /tmp --tmpfs /usr/src/app/zluggish/storage --entrypoint node zluggish:test --input-type=module < server/scripts/smoke-container.mjs

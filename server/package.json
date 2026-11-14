@@ -1,0 +1,86 @@
+{
+  "name": "zluggish",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "packageManager": "pnpm@12.18.0",
+  "exports": {
+    "./config": {
+      "types": "./dist/src/config/index.d.ts",
+      "default": "./dist/src/config/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:unit && pnpm test:medium",
+    "dev": "node --conditions=development --import tsx src/main.ts",
+    "start": "node dist/src/main.js",
+    "format": "prettier --config .prettierrc --ignore-path ../.prettierignore --check ..",
+    "format:fix": "prettier --config .prettierrc --ignore-path ../.prettierignore --write ..",
+    "lint": "pnpm lint:anti-slop && pnpm lint:eslint",
+    "lint:fix": "cd .. && node server/node_modules/oxlint/bin/oxlint --config server/.oxlintrc.json --fix server/src server/tests && node server/node_modules/eslint/bin/eslint.js --config server/eslint.config.mjs \"server/src/**/*.{ts,tsx}\" \"server/tests/**/*.ts\" --fix",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format",
+    "codegen": "buf generate && node scripts/normalize-generated.mjs",
+    "test:unit": "node --conditions=development --import tsx --test \"src/**/*.spec.ts\"",
+    "test:medium": "node --conditions=development --import tsx --test tests/medium/*.spec.ts",
+    "lint:anti-slop": "cd .. && node server/node_modules/oxlint/bin/oxlint --config server/.oxlintrc.json server/src server/tests",
+    "lint:eslint": "cd .. && node server/node_modules/eslint/bin/eslint.js --config server/eslint.config.mjs \"server/src/**/*.{ts,tsx}\" \"server/tests/**/*.ts\" --max-warnings 0",
+    "cli": "node --conditions=development --import tsx src/cli/bin.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.0.0",
+    "@garmin/fitsdk": "^21.221.0",
+    "@hono/node-server": "2.1.8",
+    "argon2": "^0.45.2",
+    "discord.js": "^14.28.1",
+    "dns-packet": "^5.6.1",
+    "fast-xml-parser": "^5.12.0",
+    "fs-ext-extra-prebuilt": "^2.2.17",
+    "garminconnect-js": "^0.11.1",
+    "hono": "^4.0.0",
+    "ini": "^6.0.0",
+    "jiti": "^2.0.0",
+    "kysely": "^0.29.9",
+    "zod": "^4.0.0",
+    "typescript": "^6.0.3",
+    "@types/node": "^24.0.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.75.0",
+    "@bufbuild/protoc-gen-es": "2.17.0",
+    "@types/dns-packet": "^5.6.5",
+    "@types/ini": "^4.1.1",
+    "tsx": "^4.0.0",
+    "@eslint/js": "^10.0.1",
+    "@oxlint/plugins": "1.93.0",
+    "@stylistic/eslint-plugin": "^6.0.0",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-import-x": "^4.18.1",
+    "eslint-plugin-unicorn": "^79.0.0",
+    "globals": "^17.14.0",
+    "oxlint": "1.93.0",
+    "prettier": "3.6.2",
+    "typescript-eslint": "^8.72.2"
+  },
+  "imports": {
+    "#src/*": {
+      "types": "./src/*.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/src/*.js"
+    },
+    "#tests/*": {
+      "types": "./tests/*.ts",
+      "development": "./tests/*.ts",
+      "default": "./dist/tests/*.js"
+    }
+  },
+  "bin": {
+    "zluggish": "./dist/src/cli/bin.js"
+  }
+}

@@ -1,0 +1,52 @@
+import { staticResponseSchema } from '#src/dtos/static.dto';
+
+import { packageRoot } from '#src/config/load';
+import { parseProtobuf } from '#src/http/protobuf';
+import { authenticated } from '#src/http/routes/accounts';
+import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
+import {
+  SaveStructuredEventRequestSchema,
+  SaveStructuredEventResponseSchema,
+} from '#src/protocol/generated/structured_events_pb';
+import { create, toBinary } from '@bufbuild/protobuf';
+import type { Hono } from 'hono';
+import { resolve } from 'node:path';
+import { z } from 'zod';
+
+const contracts = z.array(staticResponseSchema);
+
+export function staticRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
+  const routes = contracts.parse(
+    JSON.parse(runtime.services.files.read(resolve(packageRoot(), '../assets/static-responses.json'), 'utf8')),
+  );
+
+  for (const route of routes)
+    app.on(route.methods, route.path, (c) => {
+      if (route.authenticated) authenticated(c);
+
+      if (route.status === 204) return c.body(null, 204);
+
+      return c.body(route.mode === 'json' ? JSON.stringify(route.body) : String(route.body), route.status, {
+        'Content-Type': route.mode === 'json' ? 'application/json' : 'text/html; charset=utf-8',
+      });
+    });
+
+  app.get('/api/head-unit-bff/*', (c) => {
+    const path = c.req.path.slice('/api/head-unit-bff/'.length);
+
+    return c.json(path === 'carousels/home-challenges' ? { items: [] } : path === 'crm' ? {} : []);
+  });
+  app.post('/api/actions-service/structured-events/batch', async (c) => {
+    const request = parseProtobuf(SaveStructuredEventRequestSchema, new Uint8Array(await c.req.arrayBuffer()));
+
+    return c.body(
+      toBinary(
+        SaveStructuredEventResponseSchema,
+        create(SaveStructuredEventResponseSchema, {
+          sequenceNumber: request.sequenceNumber,
+        }),
+      ),
+      202,
+    );
+  });
+}

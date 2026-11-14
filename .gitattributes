@@ -1,0 +1,2 @@
+# Keep protobuf output identical to codegen on every platform.
+server/src/protocol/generated/*.ts text eol=lf

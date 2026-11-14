@@ -1,0 +1,15 @@
+# pnpm 12 replaces onlyBuiltDependencies with explicit build decisions.
+allowBuilds:
+  '@bufbuild/buf': true
+  argon2: true
+  esbuild: true
+  # Runtime loads the shipped binaries; retain the previous no-build policy.
+  fs-ext-extra-prebuilt: false
+
+# Preserve exact versions already locked before upgrading to pnpm 12.
+# All other packages and versions retain the default release-age policy.
+minimumReleaseAgeExclude:
+  - '@eslint/config-array@0.23.6'
+  - '@stylistic/eslint-plugin@6.0.0'
+  - eslint@10.15.0
+  - node-releases@2.0.64

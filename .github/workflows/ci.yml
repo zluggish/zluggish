@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches:
-      - "main"
+      - 'main'
     tags:
-      - "*"
+      - '*'
 
 jobs:
   docker:
@@ -40,6 +40,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: ./server/Dockerfile
+          target: server
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

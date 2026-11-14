@@ -1,0 +1,45 @@
+[tools]
+node = '24'
+pnpm = '12.18.0'
+
+[tasks.install]
+description = 'Install server, including its admin CLI dependencies'
+run = 'pnpm install --frozen-lockfile'
+
+[tasks.build]
+description = 'Build server, including its admin CLI'
+run = 'pnpm build'
+
+[tasks.test]
+description = 'Run server, including its admin CLI tests'
+depends = ['build']
+run = 'pnpm test'
+
+[tasks.lint]
+description = 'Lint and typecheck server, including its admin CLI'
+depends = ['build']
+run = ['pnpm lint', 'pnpm typecheck']
+
+[tasks.format-fix]
+description = 'Format project files'
+run = 'pnpm format:fix'
+
+[tasks.format]
+description = 'Check project formatting'
+run = 'pnpm format'
+
+[tasks.check]
+description = 'Run lint, formatting checks, and tests'
+depends = ['lint', 'format', 'test']
+
+[tasks.server-dev]
+description = 'Run the Hono server'
+run = 'pnpm dev'
+
+[tasks.server-codegen]
+description = 'Generate TypeScript protobuf codecs'
+run = 'pnpm codegen'
+
+[tasks.cli]
+description = 'Run CLI from source'
+run = 'pnpm cli'

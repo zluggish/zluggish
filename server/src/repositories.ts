@@ -1,0 +1,123 @@
+import { openDatabase } from '#src/db/open';
+import { AccountsRepository } from '#src/repositories/accounts.repository';
+import { ActivitiesRepository } from '#src/repositories/activities.repository';
+import { Completions } from '#src/repositories/completion.repository';
+import { Connections } from '#src/repositories/connections.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { DiscordRepository } from '#src/repositories/discord.repository';
+import { EventCatalogRepository } from '#src/repositories/event-catalog.repository';
+import { EventsRepository } from '#src/repositories/events.repository';
+import { AssetFiles } from '#src/repositories/files.repository';
+import { FitnessRepository } from '#src/repositories/fitness.repository';
+import { GarminRepository } from '#src/repositories/garmin.repository';
+import { GoalRepository } from '#src/repositories/goal.repository';
+import { LockRepository } from '#src/repositories/lock.repository';
+import { LoggingRepository } from '#src/repositories/logging.repository';
+import { ProfileDownloadRepository } from '#src/repositories/profile-download.repository';
+import { ProfileJsonRepository } from '#src/repositories/profile-json.repository';
+import { Profiles } from '#src/repositories/profile.repository';
+import { ProtobufRows } from '#src/repositories/protobuf.repository';
+import { RecordsRepository } from '#src/repositories/records.repository';
+import { SessionRepository } from '#src/repositories/session.repository';
+import { RiderRepository, SettingsStore } from '#src/repositories/settings.repository';
+import { SocialRepository } from '#src/repositories/social.repository';
+import { StorageRepository } from '#src/repositories/storage.repository';
+import { StravaRepository } from '#src/repositories/strava.repository';
+import { StreakRepository } from '#src/repositories/streak.repository';
+import { UploadsRepository } from '#src/repositories/uploads.repository';
+import { ZwiftRepository } from '#src/repositories/zwift.repository';
+
+/** One repository set per account database, shared by every service. */
+export class Repositories {
+  readonly loggingRepository = new LoggingRepository();
+
+  readonly db;
+
+  private settings: SettingsStore | undefined;
+
+  readonly accountsRepository: AccountsRepository;
+
+  readonly activitiesRepository: ActivitiesRepository;
+
+  readonly connectionsRepository: Connections;
+
+  readonly eventsRepository: EventsRepository;
+
+  readonly fitnessRepository: FitnessRepository;
+
+  readonly goalRepository: GoalRepository;
+
+  readonly protobufRepository: ProtobufRows;
+
+  readonly recordsRepository: RecordsRepository;
+
+  readonly socialRepository: SocialRepository;
+
+  readonly storageRepository: StorageRepository;
+
+  readonly uploadsRepository: UploadsRepository;
+
+  readonly completionRepository: Completions;
+
+  readonly cryptoRepository: CryptoRepository;
+
+  readonly filesRepository: AssetFiles;
+
+  readonly lockRepository: LockRepository;
+
+  readonly profileJsonRepository: ProfileJsonRepository;
+
+  readonly profileDownloadRepository: ProfileDownloadRepository;
+
+  readonly stravaRepository: StravaRepository;
+
+  readonly garminRepository: GarminRepository;
+
+  readonly streakRepository: StreakRepository;
+
+  readonly eventCatalogRepository: EventCatalogRepository;
+
+  readonly riderRepository: RiderRepository;
+
+  readonly sessionRepository: SessionRepository;
+
+  readonly zwiftRepository: ZwiftRepository;
+
+  readonly discordRepository: DiscordRepository;
+
+  readonly profileRepository: Profiles;
+
+  constructor(readonly storage: string) {
+    this.db = openDatabase(storage);
+    this.accountsRepository = new AccountsRepository(this.db);
+    this.activitiesRepository = new ActivitiesRepository(this.db);
+    this.connectionsRepository = new Connections(storage);
+    this.eventsRepository = new EventsRepository(this.db);
+    this.fitnessRepository = new FitnessRepository(this.db);
+    this.goalRepository = new GoalRepository(this.db);
+    this.protobufRepository = new ProtobufRows(this.db);
+    this.recordsRepository = new RecordsRepository(this.db);
+    this.socialRepository = new SocialRepository(this.db);
+    this.storageRepository = new StorageRepository(this.db);
+    this.uploadsRepository = new UploadsRepository(this.db);
+    this.completionRepository = new Completions(this.db);
+    this.cryptoRepository = new CryptoRepository();
+    this.filesRepository = new AssetFiles();
+    this.lockRepository = new LockRepository();
+    this.profileJsonRepository = new ProfileJsonRepository();
+    this.profileDownloadRepository = new ProfileDownloadRepository(this.loggingRepository);
+    this.stravaRepository = new StravaRepository();
+    this.garminRepository = new GarminRepository();
+    this.streakRepository = new StreakRepository();
+    this.eventCatalogRepository = new EventCatalogRepository();
+    this.riderRepository = new RiderRepository();
+    this.sessionRepository = new SessionRepository();
+    this.zwiftRepository = new ZwiftRepository();
+    this.discordRepository = new DiscordRepository();
+    this.profileRepository = new Profiles(storage, this.accountsRepository);
+  }
+
+  get settingsRepository() {
+    return (this.settings ??= new SettingsStore(this.storage));
+  }
+}

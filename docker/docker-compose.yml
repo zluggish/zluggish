@@ -1,0 +1,17 @@
+services:
+  zluggish:
+    image: ghcr.io/zluggish/zluggish:latest
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+      target: server
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ../storage/:/usr/src/app/zluggish/storage
+    ports:
+      - 80:80
+      - 443:443
+      - 3024:3024/udp
+      - 3025:3025
+      - 53:53/udp
+    restart: unless-stopped
