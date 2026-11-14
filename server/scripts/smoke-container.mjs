@@ -20,33 +20,60 @@ assert.equal(typecheck.status, 0, typecheck.stdout + typecheck.stderr);
 const storageConfig = '/usr/src/app/zluggish/storage/zluggish.config.ts';
 assert.equal(existsSync(storageConfig), false);
 
+// ARM64 runs under QEMU in CI. Wait for actual listener readiness, rather than
+// assuming module loading and configuration evaluation finish within ten seconds.
+function waitForReady(server) {
+  return new Promise((resolve, reject) => {
+    let output = '';
+    const timer = setTimeout(() => finish(new Error(`Server readiness timeout after 60s\n${output}`)), 60_000);
+    const stdout = (bytes) => {
+      output += bytes;
+      if (output.includes('server.ready')) finish();
+    };
+    const stderr = (bytes) => {
+      output += bytes;
+    };
+    const exit = (code, signal) => finish(new Error(`Server exited before readiness: ${code ?? signal}\n${output}`));
+    const finish = (error) => {
+      clearTimeout(timer);
+      server.stdout.off('data', stdout);
+      server.stderr.off('data', stderr);
+      server.off('exit', exit);
+      server.off('error', finish);
+      if (error) reject(error);
+      else resolve();
+    };
+    server.stdout.on('data', stdout);
+    server.stderr.on('data', stderr);
+    server.once('exit', exit);
+    server.once('error', finish);
+  });
+}
+
 async function defaultStartup(expectedIp) {
-  const server = spawn(process.execPath, ['dist/src/main.js'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const server = spawn(process.execPath, ['dist/src/main.js'], { stdio: ['ignore', 'pipe', 'pipe'] });
   let errors = '';
   server.stderr.on('data', (bytes) => (errors += bytes));
   const exited = once(server, 'exit');
 
   try {
-    let response;
-
-    for (let i = 0; i < 100; i++) {
-      if (server.exitCode !== null) throw new Error(errors);
-
-      try {
-        response = await new Promise((done, fail) => {
-          const request = get('https://127.0.0.1/relay/tcp-config', { rejectUnauthorized: false }, (incoming) => {
-            const chunks = [];
-            incoming.on('data', (chunk) => chunks.push(chunk));
-            incoming.on('end', () => done(Buffer.concat(chunks)));
-            incoming.on('error', fail);
-          });
-          request.on('error', fail);
-        });
-        break;
-      } catch {}
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await waitForReady(server);
+    const response = await new Promise((done, fail) => {
+      const request = get(
+        'https://127.0.0.1/relay/tcp-config',
+        {
+          rejectUnauthorized: false,
+          signal: AbortSignal.timeout(10_000),
+        },
+        (incoming) => {
+          const chunks = [];
+          incoming.on('data', (chunk) => chunks.push(chunk));
+          incoming.on('end', () => done(Buffer.concat(chunks)));
+          incoming.on('error', fail);
+        },
+      );
+      request.on('error', fail);
+    });
 
     assert.ok(response, errors);
     assert.ok(response.includes(Buffer.from(expectedIp)));
@@ -85,7 +112,7 @@ writeFileSync(
 chmodSync(file, 0o444);
 
 const child = spawn(process.execPath, ['dist/src/main.js', '--config', file], {
-  stdio: ['ignore', 'ignore', 'pipe'],
+  stdio: ['ignore', 'pipe', 'pipe'],
 });
 
 let errors = '';
@@ -95,24 +122,9 @@ child.stderr.on('data', (bytes) => (errors += bytes));
 const exited = once(child, 'exit');
 
 try {
-  let ready = false;
-
-  for (let i = 0; i < 100; i++) {
-    if (child.exitCode !== null) throw new Error(errors);
-
-    try {
-      const response = await fetch('http://127.0.0.1:24443/health');
-
-      if (response.ok) {
-        ready = true;
-        break;
-      }
-    } catch {}
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  assert.ok(ready, errors);
+  await waitForReady(child);
+  const health = await fetch('http://127.0.0.1:24443/health', { signal: AbortSignal.timeout(10_000) });
+  assert.equal(health.status, 200, errors);
   assert.equal((await fetch('http://127.0.0.1:24443/api/game_info')).status, 200);
   assert.equal((await fetch('http://127.0.0.1:24080/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml')).status, 200);
   assert.ok(existsSync('/usr/src/app/zluggish/storage/zluggish.db'));

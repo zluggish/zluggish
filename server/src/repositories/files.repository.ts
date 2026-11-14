@@ -30,8 +30,6 @@ function syncDirectory(path: string) {
   }
 }
 
-// Shared filesystem primitives for repositories that manage opaque assets.
-
 export class AssetFiles {
   readData<Schema extends DescMessage>(schema: Schema, path: string) {
     return existsSync(path) ? fromBinary(schema, readFileSync(path)) : create(schema);

@@ -6,7 +6,6 @@ import { clone, create } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-// These policy methods need no repositories or runtime state.
 const service = ActivitiesService.prototype;
 
 await test('owners retain access while other riders can only see public activities', () => {

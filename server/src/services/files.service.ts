@@ -1,6 +1,5 @@
 import { BaseService } from '#src/services/base.service';
 
-/** Access to opaque local assets; repositories own filesystem semantics. */
 export class FilesService extends BaseService {
   readonly exists = this.filesRepository.existsSync;
 

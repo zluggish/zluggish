@@ -84,7 +84,6 @@ export default defineConfig([
           'unicorn/prefer-smaller-scope': 'off',
           'unicorn/no-unreadable-object-destructuring': 'off',
           'unicorn/single-line-block-comment-style': ['error', 'single-line'],
-          // maybe we do want to enable this later. TBD
           'unicorn/prefer-await': 'off',
           'unicorn/consistent-class-member-order': 'off',
           'unicorn/class-reference-in-static-methods': ['error', { preferThis: false, preferSuper: false }],
