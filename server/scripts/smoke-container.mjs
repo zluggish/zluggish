@@ -17,7 +17,7 @@ assert.equal(validate.status, 0, validate.stderr);
 const typecheck = spawnSync('zluggish', ['config', 'typecheck'], { encoding: 'utf8' });
 assert.equal(typecheck.status, 0, typecheck.stdout + typecheck.stderr);
 
-const storageConfig = '/usr/src/app/zwift-offline/storage/zluggish.config.ts';
+const storageConfig = '/usr/src/app/zluggish/storage/zluggish.config.ts';
 assert.equal(existsSync(storageConfig), false);
 
 async function defaultStartup(expectedIp) {
@@ -79,7 +79,7 @@ const file = '/tmp/zluggish.config.ts';
 
 writeFileSync(
   file,
-  'export default {storageDir:"/usr/src/app/zwift-offline/storage",network:{host:"127.0.0.1",api:{port:24443,useCert:false},cdn:{port:24080},tcp:{port:23025},udp:{port:23024}}}',
+  'export default {storageDir:"/usr/src/app/zluggish/storage",network:{host:"127.0.0.1",api:{port:24443,useCert:false},cdn:{port:24080},tcp:{port:23025},udp:{port:23024}}}',
 );
 
 chmodSync(file, 0o444);
@@ -115,7 +115,7 @@ try {
   assert.ok(ready, errors);
   assert.equal((await fetch('http://127.0.0.1:24443/api/game_info')).status, 200);
   assert.equal((await fetch('http://127.0.0.1:24080/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml')).status, 200);
-  assert.ok(existsSync('/usr/src/app/zwift-offline/storage/zluggish.db'));
+  assert.ok(existsSync('/usr/src/app/zluggish/storage/zluggish.db'));
   child.kill('SIGTERM');
 
   const result = await Promise.race([

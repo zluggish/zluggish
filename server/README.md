@@ -65,12 +65,12 @@ docker compose -f docker/docker-compose.yml run --rm --no-deps zluggish zluggish
 docker compose -f docker/docker-compose.yml up -d zluggish
 ```
 
-Compose `run` does not publish service ports. All paths supplied to the CLI must be container paths; mount external configuration or password files into the container when needed. The default container config selects the mounted storage at `/usr/src/app/zwift-offline/storage`. The CLI selects an existing config in that storage automatically, matching server startup; before the first startup it uses the image default. For config migration, select an output path on a writable mount.
+Compose `run` does not publish service ports. All paths supplied to the CLI must be container paths; mount external configuration or password files into the container when needed. The default container config selects the mounted storage at `/usr/src/app/zluggish/storage`. The CLI selects an existing config in that storage automatically, matching server startup; before the first startup it uses the image default. For config migration, select an output path on a writable mount.
 
 You can also run the image directly against a storage directory:
 
 ```sh
-docker run --rm -v /absolute/path/to/storage:/usr/src/app/zwift-offline/storage ghcr.io/zluggish/zluggish:latest zluggish config validate
+docker run --rm -v /absolute/path/to/storage:/usr/src/app/zluggish/storage ghcr.io/zluggish/zluggish:latest zluggish config validate
 ```
 
 These commands require an image built with the integrated CLI. For a local source checkout, build it with `docker compose -f docker/docker-compose.yml build zluggish` first. Config files are trusted code, and the CLI has full administrative access to mounted storage.
