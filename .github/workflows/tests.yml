@@ -27,8 +27,17 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: pnpm codegen
-      - run: git diff --exit-code -- src/protocol/generated
+      - name: Regenerate protocol files
+        run: pnpm codegen
+      - name: Check generated protocol files are up to date
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain --untracked-files=all -- src/protocol/generated)" ]]; then
+            git diff -- src/protocol/generated
+            git status --short --untracked-files=all -- src/protocol/generated
+            echo 'Generated protocol files are out of date. Run pnpm codegen from server/ and commit the results.'
+            exit 1
+          fi
 
   quality:
     runs-on: ubuntu-26.04
