@@ -6,7 +6,7 @@ Run the commands below from the **repository root**. Replace sample paths and ri
 
 ## Run natively
 
-Use Node **24.15 or later within the 24.x series** and **pnpm 10.28.1**. The admin CLI is part of the server package and operates directly on server storage.
+Use Node **24.15 or later within the 24.x series** and **pnpm 12.18.0**. The admin CLI is part of the server package and operates directly on server storage.
 
 ### macOS and Linux
 
@@ -14,7 +14,7 @@ With the required Node version installed, enable the pinned pnpm version and bui
 
 ```sh
 corepack enable
-corepack prepare pnpm@10.28.1 --activate
+corepack prepare pnpm@12.18.0 --activate
 pnpm --dir server install --frozen-lockfile
 pnpm --dir server build
 node server/dist/src/cli/bin.js --help
@@ -39,7 +39,7 @@ Native Windows execution is supported by the code, including Windows storage loc
 
 ```powershell
 corepack enable
-corepack prepare pnpm@10.28.1 --activate
+corepack prepare pnpm@12.18.0 --activate
 pnpm --dir server install --frozen-lockfile
 pnpm --dir server build
 node .\server\dist\src\cli\bin.js --help

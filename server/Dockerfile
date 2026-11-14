@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /usr/src/app/zluggish/server
-RUN corepack enable && corepack prepare pnpm@10.28.1 --activate
-COPY server/package.json server/pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+COPY server/package.json server/pnpm-lock.yaml server/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY server/ .
 RUN pnpm build && pnpm prune --prod

@@ -1,12 +1,12 @@
 {
   "name": "zluggish",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24.15 <25"
   },
-  "packageManager": "pnpm@10.28.1",
+  "packageManager": "pnpm@12.18.0",
   "exports": {
     "./config": {
       "types": "./dist/src/config/index.d.ts",
@@ -67,13 +67,6 @@
     "oxlint": "1.93.0",
     "prettier": "3.6.2",
     "typescript-eslint": "^8.72.2"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "argon2",
-      "@bufbuild/buf",
-      "esbuild"
-    ]
   },
   "imports": {
     "#src/*": {
