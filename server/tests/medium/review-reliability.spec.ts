@@ -139,19 +139,26 @@ await test('reopened upload queues require explicit owner retries for interrupte
   f.accounts.close();
   const reopened = new AccountsService(f.accounts.storage);
   const queue = new UploadsService({ ...f, accounts: reopened });
-  t.after(async () => {
-    await queue.close();
-    reopened.close();
-  });
-  queue.start();
-  await queue.drain();
-  assert.equal(queue.status(f.rider.player_id)[0]?.state, 'failed');
-  await queue.retry(f.other.player_id);
-  assert.equal(queue.status(f.rider.player_id)[0]?.state, 'failed');
-  assert.deepEqual(queue.status(f.other.player_id), []);
-  unlinkSync(token);
-  await queue.retry(f.rider.player_id);
-  assert.equal(queue.status(f.rider.player_id)[0]?.state, 'cancelled');
+
+  // Windows cannot remove the fixture directory while the reopened SQLite handle is live.
+  // Scoped cleanup runs before runtimeFixture's after hook, including on assertion failure.
+  try {
+    queue.start();
+    await queue.drain();
+    assert.equal(queue.status(f.rider.player_id)[0]?.state, 'failed');
+    await queue.retry(f.other.player_id);
+    assert.equal(queue.status(f.rider.player_id)[0]?.state, 'failed');
+    assert.deepEqual(queue.status(f.other.player_id), []);
+    unlinkSync(token);
+    await queue.retry(f.rider.player_id);
+    assert.equal(queue.status(f.rider.player_id)[0]?.state, 'cancelled');
+  } finally {
+    try {
+      await queue.close();
+    } finally {
+      reopened.close();
+    }
+  }
 });
 
 await test('configured logging level controls request logging and application diagnostics', async (t) => {
