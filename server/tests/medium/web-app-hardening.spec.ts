@@ -291,6 +291,42 @@ await test('imported activities without completion records rebuild missing chart
   assert.ok(detail.chart.timeInSec.length > 0);
 });
 
+await test('web app lists an activity whose Strava ids exceed 32 bits', async (t) => {
+  const f = await mediumFixture(t);
+  const web = createWebApp(f);
+
+  const data = {
+    playerId: BigInt(f.rider.player_id),
+    courseId: 6n,
+    name: 'Strava synced',
+    startDate: new Date().toISOString(),
+    distanceInMeters: 3000,
+    stravaUploadId: 13_104_230_872n,
+    stravaActivityId: 20_937_783_035n,
+  };
+
+  const posted = await f.request(`/api/profiles/${f.rider.player_id}/activities`, {
+    method: 'POST',
+    ...binary(ActivitySchema, data),
+  });
+
+  const { id } = z.object({ id: z.number() }).parse(await posted.json());
+  f.services.activities.finalize(create(ActivitySchema, { ...data, id: BigInt(id) }));
+  const { id: session } = f.services.management.sessions.create(f.accounts.identityOf(f.rider));
+
+  const list = await web.request('http://local:8080/api/me/activities', {
+    headers: { Cookie: `zluggish_web_session=${session}` },
+  });
+
+  assert.equal(list.status, 200);
+  const body = await json(list);
+
+  assert.deepEqual(
+    body.activities.map((a: { id: string; name: string }) => [a.id, a.name]),
+    [[String(id), 'Strava synced']],
+  );
+});
+
 await test('riders list, inspect and download only their own activities in the web app', async (t) => {
   const f = await mediumFixture(t);
   const web = createWebApp(f);

@@ -106,6 +106,13 @@ export class ActivitiesRepository {
     return row ? { player: row.player_id, fit: row.fit, filename: row.fit_filename ?? '' } : null;
   }
 
+  /** The id of the activity on Strava, kept so that its title can be changed later. */
+  setStravaActivity(id: IntegerInput, stravaActivity: number) {
+    this.executor.run(
+      query.updateTable('activity').set({ strava_activity_id: stravaActivity }).where('id', '=', integer(id)),
+    );
+  }
+
   setFit(id: IntegerInput, fit: Uint8Array) {
     this.executor.run(
       query

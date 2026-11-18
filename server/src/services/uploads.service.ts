@@ -15,6 +15,7 @@ import type { JobsService } from '#src/services/jobs.service';
 import { SettingsService } from '#src/services/settings.service';
 import type { StoredEntry } from '#src/dtos/workout.dto';
 import { WorkoutsService } from '#src/services/workout.service';
+import { loadRouteNames, titleWithRoute } from '#src/world/route-names';
 import { clearField, clone, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -56,6 +57,8 @@ async function checked(response: Response, code: string) {
 
 export class UploadsService extends BaseService {
   private jobs: JobsService | null = null;
+
+  private routeNames: ReadonlyMap<number, string> | null = null;
 
   constructor(
     readonly runtime: Runtime,
@@ -350,7 +353,7 @@ export class UploadsService extends BaseService {
     await this.stravaRepository.uploadPaid(
       this.stravaRepository.parseToken(text),
       activity.fit,
-      activity.name,
+      this.titled(player, activity),
       (token) => this.riderDocuments.put(player, 'strava_token.txt', this.stravaRepository.serializeToken(token)),
     );
   }
@@ -359,15 +362,53 @@ export class UploadsService extends BaseService {
     const cookie = this.riderDocuments.text(player, 'strava4_session.txt')?.split(/\r?\n/, 1)[0] ?? '';
 
     if (!cookie) throw new DeliveryRefusedError('strava_session_missing');
-    await this.stravaRepository.uploadFree(
+
+    const created = await this.stravaRepository.uploadFree(
       cookie,
       activity.fitFilename,
       activity.fit,
-      activity.name,
+      this.titled(player, activity),
       photos,
       undefined,
       (fresh) => this.riderDocuments.put(player, 'strava4_session.txt', fresh),
     );
+
+    // Kept so that the route can be added to the title when the game reports it later.
+    if (created !== undefined) this.activitiesRepository.setStravaActivity(activity.id, Number(created));
+  }
+
+  /** The names of the routes, read once. */
+  private routes() {
+    this.routeNames ??= loadRouteNames(this.runtime.assets);
+
+    return this.routeNames;
+  }
+
+  /** The title for Strava: the game sends only the name of the workout, so the route is added when it is known. */
+  private titled(player: number, activity: Activity) {
+    const hash = this.recordsRepository.routeOfActivity(player, Number(activity.id));
+
+    return titleWithRoute(activity.name, hash === null ? undefined : this.routes().get(hash));
+  }
+
+  /** The game reports the route of an activity some time after the upload. When the activity is on Strava
+  through the session of the rider, add the route to its title there. Returns whether the title was changed.
+  */
+  async nameStravaWithRoute(player: number, activityId: number) {
+    const cookie = this.riderDocuments.text(player, 'strava4_session.txt')?.split(/\r?\n/, 1)[0] ?? '';
+    const row = this.activitiesRepository.activityById(activityId);
+
+    if (!cookie || !row?.strava_activity_id || row.player_id !== BigInt(player)) return false;
+    const hash = this.recordsRepository.routeOfActivity(player, activityId);
+    const name = titleWithRoute(row.name ?? '', hash === null ? undefined : this.routes().get(hash));
+
+    if (name === (row.name ?? '')) return false;
+
+    await this.stravaRepository.renameFree(cookie, String(row.strava_activity_id), name, (fresh) =>
+      this.riderDocuments.put(player, 'strava4_session.txt', fresh),
+    );
+
+    return true;
   }
 
   async garmin(player: number, activity: Activity) {

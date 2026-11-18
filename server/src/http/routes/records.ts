@@ -268,6 +268,18 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       );
     },
   );
+
+  /** A failure to change the title on Strava is only logged: the route result itself was saved. */
+  const retitle = async (player: number, activity: number) => {
+    try {
+      await runtime.services.uploads.nameStravaWithRoute(player, activity);
+    } catch (error) {
+      runtime.world.lifecycle.log.warn('strava.title_failed', 'The route could not be added to the Strava title', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   app.post('/api/route-results', async (c) => {
     const user = authenticated(c);
 
@@ -276,6 +288,9 @@ export function recordRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const id = records.insert('route_result', RouteResultSaveRequestSchema, result);
 
     service.updateRouteResult(user.player_id, id);
+
+    // The route of an activity arrives some time after the upload: add it to the title on Strava.
+    if (result.activityId > 0n) void retitle(user.player_id, Number(result.activityId));
 
     return c.body(null, 202);
   });

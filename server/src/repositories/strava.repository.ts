@@ -328,12 +328,24 @@ export class StravaRepository {
     if (!text.includes(marker)) throw new DeliveryRefusedError('strava_session_invalid');
 
     try {
-      await this.sendFree(session, text, filename, fit, name, photos, delay);
+      return await this.sendFree(session, text, filename, fit, name, photos, delay);
     } finally {
       keepFresh(session, cookie, save);
     }
   }
 
+  /** Change the title of an activity that is already on Strava, through the session of the rider. */
+  async renameFree(cookie: string, id: string, name: string, save?: (cookie: string) => void) {
+    const session = cookieSession(cookie);
+
+    try {
+      await updateActivity(session, id, name, []);
+    } finally {
+      keepFresh(session, cookie, save);
+    }
+  }
+
+  /** Returns the id of the activity that Strava made of the upload. */
   private async sendFree(
     session: CookieSession,
     text: string,
@@ -362,6 +374,7 @@ export class StravaRepository {
     const body = await response.text();
 
     if (!body.includes('workflow')) throw new Error('Strava rejected the upload');
+    let created: string | undefined;
 
     for (const upload of progress.parse(JSON.parse(body))) {
       if (upload.id === undefined) continue;
@@ -370,6 +383,9 @@ export class StravaRepository {
 
       if (id === undefined) throw new Error('No activity ID in upload response');
       await updateActivity(session, String(id), name, photos);
+      created = String(id);
     }
+
+    return created;
   }
 }

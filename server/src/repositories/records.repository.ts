@@ -41,6 +41,21 @@ export class RecordsRepository {
     );
   }
 
+  /** The route of an activity: the hash in the latest route result that the game saved for it. */
+  routeOfActivity(player: number, activity: number) {
+    return (
+      this.executor.get(
+        query
+          .selectFrom('route_result')
+          .select('route_hash')
+          .where('player_id', '=', player)
+          .where('activity_id', '=', activity)
+          .orderBy('id', 'desc')
+          .limit(1),
+      )?.route_hash ?? null
+    );
+  }
+
   ensureRoute(player: number, hash: number) {
     const existing = this.executor.get(
       query.selectFrom('route_result').select('id').where('player_id', '=', player).where('route_hash', '=', hash),
