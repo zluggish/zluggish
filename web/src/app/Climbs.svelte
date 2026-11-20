@@ -1,23 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { z } from 'zod';
   import type { Api } from '../lib/api';
-
-  const climbSchema = z.object({
-    road: z.string(),
-    name: z.string(),
-    distanceKm: z.number().nullable(),
-    elevationM: z.number().nullable(),
-    rides: z.number(),
-    bestMs: z.number().nullable(),
-    lastRide: z.string().nullable(),
-    /** The two Strava segments of the climb, as ridden from Watopia and from France. */
-    strava: z.object({ watopia: z.number(), france: z.number() }).nullable(),
-  });
-
-  type Climb = z.infer<typeof climbSchema>;
-
-  const climbsResponse = z.object({ climbs: z.array(climbSchema), total: z.number() });
+  import { categoryTabs, climbsResponse, clock, day, matchesTab, tabOf } from './climbs';
+  import type { CategoryTab, Climb } from './climbs';
+  import ClimbDetail from './ClimbDetail.svelte';
 
   const segment = (id: number) => `https://www.strava.com/segments/${id}`;
 
@@ -30,31 +16,96 @@
   let climbs = $state<Array<Climb> | null>(null);
   let total = $state(0);
   let failure = $state('');
+  let activeTab = $state<CategoryTab>('all');
+  let expanded = $state<Set<string>>(new Set());
+  let tabButtons = $state<Array<HTMLButtonElement | null>>([]);
 
   const ridden = (climb: Climb) => (climb.lastRide ? Date.parse(climb.lastRide) : Number.NEGATIVE_INFINITY);
 
-  /** The most recently ridden climb first. */
   const ordered = $derived([...(climbs ?? [])].sort((a, b) => ridden(b) - ridden(a)));
   const rides = $derived((climbs ?? []).reduce((sum, climb) => sum + climb.rides, 0));
 
   const gradient = (climb: Climb) =>
     climb.distanceKm && climb.elevationM !== null ? climb.elevationM / (climb.distanceKm * 10) : null;
 
-  const clock = (ms: number) => {
-    const s = Math.round(ms / 1000);
-    const seconds = String(s % 60).padStart(2, '0');
-
-    return s >= 3600
-      ? `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${seconds}`
-      : `${Math.floor(s / 60)}:${seconds}`;
-  };
-
-  const day = (iso: string) =>
-    new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
-
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+  const tabLabel = (tab: CategoryTab): string => {
+    if (tab === 'all') {
+      return 'All';
+    }
+
+    if (tab === 'none') {
+      return 'Uncategorised';
+    }
+
+    if (tab === 'HC') {
+      return 'HC';
+    }
+
+    return `Cat ${tab}`;
+  };
+
+  const countForTab = (tab: CategoryTab): number => {
+    if (!climbs) {
+      return 0;
+    }
+
+    return climbs.filter((c) => matchesTab(c, tab)).length;
+  };
+
+  const filtered = $derived(ordered.filter((c) => matchesTab(c, activeTab)));
+
+  const selectTab = (tab: CategoryTab) => {
+    activeTab = tab;
+    const url = new URL(window.location.href);
+
+    if (tab === 'all') {
+      url.searchParams.delete('category');
+    } else {
+      url.searchParams.set('category', tab);
+    }
+
+    history.replaceState(null, '', url.toString());
+  };
+
+  const onTabKey = (e: KeyboardEvent, index: number) => {
+    const tabs = categoryTabs;
+    let newIndex: number;
+
+    if (e.key === 'ArrowRight') {
+      newIndex = (index + 1) % tabs.length;
+    } else if (e.key === 'ArrowLeft') {
+      newIndex = (index - 1 + tabs.length) % tabs.length;
+    } else if (e.key === 'Home') {
+      newIndex = 0;
+    } else if (e.key === 'End') {
+      newIndex = tabs.length - 1;
+    } else {
+      return;
+    }
+
+    e.preventDefault();
+    selectTab(tabs[newIndex]);
+    tabButtons[newIndex]?.focus();
+  };
+
+  const toggle = (road: string) => {
+    const next = new Set(expanded);
+
+    if (next.has(road)) {
+      next.delete(road);
+    } else {
+      next.add(road);
+    }
+
+    expanded = next;
+  };
+
   onMount(async () => {
+    const param = new URLSearchParams(window.location.search).get('category');
+    activeTab = tabOf(param);
+
     try {
       const body = await api(climbsResponse, '/api/me/climbs');
       total = body.total;
@@ -78,61 +129,103 @@
   </section>
 {:else}
   <section class="climbs" aria-label="Climb portals">
-    <ul class="panel">
-      {#each ordered as climb (climb.road)}
-        {@const grade = gradient(climb)}
-        <li>
-          <p class="height">
-            {#if climb.elevationM !== null}
-              <strong>{climb.elevationM.toLocaleString()} m<span class="hidden"> climbing</span></strong>
-            {/if}
-          </p>
+    <div class="tabs" role="tablist" aria-label="Climb category">
+      {#each categoryTabs as tab, i (tab)}
+        <button
+          bind:this={tabButtons[i]}
+          role="tab"
+          type="button"
+          aria-selected={activeTab === tab}
+          aria-controls="climb-list"
+          tabindex={activeTab === tab ? 0 : -1}
+          onclick={() => selectTab(tab)}
+          onkeydown={(e) => onTabKey(e, i)}
+        >
+          {tabLabel(tab)} ({countForTab(tab)})
+        </button>
+      {/each}
+    </div>
 
-          <div class="name">
-            <h3>{climb.name}</h3>
-            {#if climb.distanceKm !== null && grade !== null}
-              <p>{climb.distanceKm} km at {grade.toFixed(1)}%</p>
+    <ul class="panel" id="climb-list">
+      {#each filtered as climb (climb.road)}
+        {@const grade = gradient(climb)}
+        {@const isOpen = expanded.has(climb.road)}
+        <li>
+          <div class="row">
+            <p class="height">
+              {#if climb.elevationM !== null}
+                <strong>{climb.elevationM.toLocaleString()} m<span class="hidden"> climbing</span></strong>
+              {/if}
+            </p>
+
+            <div class="name">
+              <button
+                type="button"
+                class="expand-btn"
+                aria-expanded={isOpen}
+                aria-controls={`detail-${climb.road}`}
+                onclick={() => toggle(climb.road)}
+              >
+                <h3>{climb.name}</h3>
+                {#if climb.profileSource === 'imported'}
+                  <span class="tag">Real profile</span>
+                {/if}
+                {#if climb.distanceKm !== null && grade !== null}
+                  <p>{climb.distanceKm} km at {grade.toFixed(1)}%</p>
+                {/if}
+              </button>
+            </div>
+
+            <p class="best">
+              {#if climb.bestMs !== null}
+                <strong>{clock(climb.bestMs)}</strong>
+                <span>best of {climb.rides}</span>
+              {:else}
+                <strong class="none">No time</strong>
+              {/if}
+            </p>
+
+            <p class="last">
+              {#if climb.lastRide}
+                <strong><time datetime={climb.lastRide}>{day(climb.lastRide)}</time></strong>
+                <span>last ride</span>
+              {/if}
+            </p>
+
+            {#if climb.strava}
+              <p class="strava">
+                <span class="links">
+                  <a
+                    href={segment(climb.strava.watopia)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="{climb.name} on Strava, ridden from Watopia">Watopia</a
+                  >
+                  <a
+                    href={segment(climb.strava.france)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="{climb.name} on Strava, ridden from France">France</a
+                  >
+                </span>
+                <span>on Strava</span>
+              </p>
             {/if}
           </div>
 
-          <p class="best">
-            {#if climb.bestMs !== null}
-              <strong>{clock(climb.bestMs)}</strong>
-              <span>best of {climb.rides}</span>
-            {:else}
-              <strong class="none">No time</strong>
-            {/if}
-          </p>
-
-          <p class="last">
-            {#if climb.lastRide}
-              <strong><time datetime={climb.lastRide}>{day(climb.lastRide)}</time></strong>
-              <span>last ride</span>
-            {/if}
-          </p>
-
-          {#if climb.strava}
-            <p class="strava">
-              <span class="links">
-                <a
-                  href={segment(climb.strava.watopia)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="{climb.name} on Strava, ridden from Watopia">Watopia</a
-                >
-                <a
-                  href={segment(climb.strava.france)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="{climb.name} on Strava, ridden from France">France</a
-                >
-              </span>
-              <span>on Strava</span>
-            </p>
+          {#if isOpen}
+            <div id="detail-{climb.road}" class="detail-block">
+              <ClimbDetail {climb} />
+            </div>
           {/if}
         </li>
       {/each}
     </ul>
+
+    {#if filtered.length === 0}
+      <p class="empty-tab">No climbs in this category yet.</p>
+    {/if}
+
     <p class="summary">{climbs.length} of {total} climb portals ridden, {plural(rides, 'ride')}</p>
   </section>
 {/if}
@@ -148,7 +241,6 @@
     }
   }
 
-  /* Styles are scoped per component, so the glass panel of the other pages is repeated here. */
   .panel {
     background: var(--glass);
     border-radius: 12px;
@@ -169,33 +261,63 @@
     padding-left: 0.75rem;
   }
 
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .tabs button {
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+  .tabs button[aria-selected='true'] {
+    background: var(--glass);
+    color: inherit;
+    border-color: var(--orange);
+    font-weight: 700;
+  }
+  .tabs button:focus-visible {
+    outline: 2px solid var(--orange);
+    outline-offset: 2px;
+  }
+
   .climbs ul {
     list-style: none;
     margin: 0;
     padding-block: 0.25rem;
   }
-  /* How far through the collection the rider is, as a footnote to the list. */
   .summary {
     margin: 0.75rem 0 0;
     padding-inline: 0.25rem;
     color: var(--muted);
   }
+  .empty-tab {
+    padding: 1rem 0.25rem;
+    color: var(--muted);
+  }
 
-  /* One climb per row, led by how much it climbs: the heights line up in the first column. */
   .climbs li {
-    display: grid;
-    grid-template-columns: 8.5rem minmax(0, 1fr) 7rem 8.5rem 8.5rem;
-    grid-template-areas: 'height name best last strava';
-    align-items: center;
-    gap: 0.5rem 1.25rem;
-    padding: 0.85rem 0;
     border-bottom: 1px solid var(--line);
   }
   .climbs li:last-child {
     border-bottom: 0;
   }
 
-  /* The height is the number a climber looks for first, so it is the largest figure in the row. */
+  .row {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr) 7rem 8.5rem 8.5rem;
+    grid-template-areas: 'height name best last strava';
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    padding: 0.85rem 0;
+  }
+
   .height {
     grid-area: height;
     display: flex;
@@ -217,11 +339,36 @@
     grid-area: name;
     min-width: 0;
   }
+  .expand-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+  }
+  .expand-btn:focus-visible {
+    outline: 2px solid var(--orange);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
   .name h3 {
+    display: inline;
     margin: 0;
     font-size: 1rem;
     font-weight: 800;
     line-height: 1.25;
+  }
+  .tag {
+    display: inline;
+    margin-left: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #6a9955;
+    vertical-align: middle;
   }
   .hidden {
     position: absolute;
@@ -280,10 +427,12 @@
     line-height: 1.45;
   }
 
-  /* Narrow screens: the height keeps its own column; the date and the Strava links each become one line
-     under the name. */
+  .detail-block {
+    padding: 0 0 0.85rem;
+  }
+
   @media (max-width: 44rem) {
-    .climbs li {
+    .row {
       grid-template-columns: 4.5rem minmax(0, 1fr) auto;
       grid-template-areas:
         'height name best'
@@ -308,6 +457,12 @@
     }
     .last strong {
       font-weight: 600;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .delayed {
+      animation: none;
     }
   }
 </style>

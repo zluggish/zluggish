@@ -525,6 +525,16 @@ await test('web app lists the climb portals a rider has ridden with the best tim
       bestMs: 540_000,
       strava: { watopia: 41_290_767, france: 41_290_943 },
       lastRide: '2026-11-18T15:34:35.000Z',
+      category: '2',
+      avgGradePct: 6.4,
+      maxGradePct: null,
+      elevationLowM: null,
+      elevationHighM: null,
+      profileSource: 'estimated',
+      profile: [
+        [0, 0],
+        [5900, 376],
+      ],
     },
   ]);
 });

@@ -22,7 +22,7 @@ import { fieldErrors, NumberFromInput, satisfies, Strict } from '#src/schema';
 import { ApplicationError, UnreadableCredentialsError } from '#src/errors';
 import { credentials, password, newUser } from '#src/dtos/management.dto';
 import type { HttpRuntime } from '#src/http/runtime';
-import { climbFacts, readClimbSegments, readClimbs } from '#src/http/climbs';
+import { climbDetails, climbFacts, readClimbProfiles, readClimbSegments, readClimbs } from '#src/http/climbs';
 import { peerAddress } from '#src/http/routes/accounts';
 import { WORLD_TIME_EPOCH_MS } from '#src/world/state';
 import { isIP } from 'node:net';
@@ -464,30 +464,37 @@ export function createWebApp(runtime: HttpRuntime) {
 
       const recordsService = yield* RecordsService;
 
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
       const stats = new Map(
-        (yield* recordsService.climbPortalStats((yield* webSessionsService.require(c.get('sessionId'))).player_id)).map(
-          (row) => [String(row.route_hash), row],
-        ),
+        (yield* recordsService.climbPortalStats(player)).map((row) => [String(row.route_hash), row]),
       );
 
       const climbs = [];
       const segments = yield* readClimbSegments(runtime);
+
+      const profiles = yield* readClimbProfiles(runtime);
       const all = yield* readClimbs(runtime);
 
       for (const climb of all) {
         const row = stats.get(climb.road);
 
-        if (row) {
-          climbs.push({
-            road: climb.road,
-            ...climbFacts(climb.name),
-            rides: row.rides,
-            bestMs: row.best_ms,
-            strava: segments[climb.road] ?? null,
-            lastRide:
-              row.last_world_time === null ? null : new Date(row.last_world_time + WORLD_TIME_EPOCH_MS).toISOString(),
-          });
+        if (!row) {
+          continue;
         }
+
+        const facts = climbFacts(climb.name);
+
+        climbs.push({
+          road: climb.road,
+          ...facts,
+          rides: row.rides,
+          bestMs: row.best_ms,
+          strava: segments[climb.road] ?? null,
+          lastRide:
+            row.last_world_time === null ? null : new Date(row.last_world_time + WORLD_TIME_EPOCH_MS).toISOString(),
+          ...climbDetails(facts, profiles[climb.road]),
+        });
       }
 
       return c.json({ climbs, total: all.length });
