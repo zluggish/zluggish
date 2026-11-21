@@ -6,6 +6,7 @@ import {
 } from '#src/protocol/generated/login_pb';
 import { PlaybackDataSchema, PlaybackMetadataSchema } from '#src/protocol/generated/playback_pb';
 import { PlayerProfilesSchema } from '#src/protocol/generated/profile_pb';
+import { DropInWorldSchema } from '#src/protocol/generated/world_pb';
 import {
   SaveStructuredEventRequestSchema,
   SaveStructuredEventResponseSchema,
@@ -17,6 +18,79 @@ import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Schema } from 'effect';
+
+await test('realm listings require authentication and preserve JSON and protobuf rider details', async (t) => {
+  const f = await mediumFixture(t);
+  const state = create(PlayerStateSchema, {
+    id: BigInt(f.rider.player_id),
+    f19: 17 << 16,
+    distance: 1234,
+    time: 567,
+    power: 210,
+    x: 42,
+    z: 84,
+  });
+  f.world.online.set(state.id, state);
+
+  for (const path of ['/relay/worlds/1', '/relay/worlds/1/']) {
+    for (const accept of ['application/json', 'application/x-protobuf-lite']) {
+      const headers = { Accept: accept };
+      const anonymous = await f.app.request(path, { headers });
+      assert.equal(anonymous.status, 401);
+      assert.equal(await anonymous.text(), '');
+
+      const invalid = await f.app.request(path, {
+        headers: { ...headers, Authorization: 'Bearer invalid' },
+      });
+      assert.equal(invalid.status, 401);
+
+      const response = await f.request(path, { headers });
+      if (accept === 'application/json') {
+        assert.equal(response.status, 200);
+        const world = Schema.decodeUnknownSync(
+          Schema.Struct({
+            worldId: Schema.Number,
+            playerCount: Schema.Number,
+            friendsInWorld: Schema.Array(
+              Schema.Struct({
+                playerId: Schema.Number,
+                firstName: Schema.String,
+                lastName: Schema.String,
+                totalDistanceInMeters: Schema.Number,
+                rideDurationInSeconds: Schema.Number,
+              }),
+            ),
+          }),
+        )(await response.json());
+        assert.equal(world.worldId, 1);
+        assert.equal(world.playerCount, 1);
+        assert.deepEqual(world.friendsInWorld, [
+          {
+            playerId: f.rider.player_id,
+            firstName: 'Medium',
+            lastName: 'Rider',
+            totalDistanceInMeters: 1234,
+            rideDurationInSeconds: 567,
+          },
+        ]);
+      } else {
+        const world = await decode(response, DropInWorldSchema);
+        assert.equal(world.id, 1n);
+        assert.equal(world.zwifters, 1n);
+        assert.equal(world.followees.length, 1);
+        const rider = world.followees[0]!;
+        assert.equal(rider.id, state.id);
+        assert.equal(rider.firstName, 'Medium');
+        assert.equal(rider.lastName, 'Rider');
+        assert.equal(rider.distance, 1234n);
+        assert.equal(rider.time, 567n);
+        assert.equal(rider.power, 210n);
+        assert.equal(rider.x, 42);
+        assert.equal(rider.z, 84);
+      }
+    }
+  }
+});
 
 await test('Calendar clears pending map and climb selections for the launching client', async (t) => {
   const f = await mediumFixture(t);

@@ -306,6 +306,8 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     });
   });
   app.on('GET', ['/relay/worlds/:realm', '/relay/worlds/:realm/'], (c) => {
+    authenticated(c);
+
     const realm = Schema.decodeUnknownSync(NumberFromInput.check(Schema.isInt(), Schema.isGreaterThan(0)))(
       c.req.param('realm'),
     );

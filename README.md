@@ -25,6 +25,8 @@ Zluggish is a self-hosted, open-source server for [Zwift](https://zwift.com), wr
 > [!NOTE]
 > Zluggish is offline only. It does not connect to the public Zwift world, so you cannot join official races, group rides, club events or global leaderboards, and local progress is separate from your Zwift account. You can still ride with family and friends on the same Zluggish server.
 
+Relay world listings require a signed-in rider, including JSON and protobuf requests to `/relay/worlds/:realm`.
+
 ## What's new compared to zwift-offline
 
 Zluggish is a rewrite of [zwift-offline](https://github.com/zoffline/zwift-offline) and [fatsbrown's fork](https://github.com/fatsbrown/zwift-offline). It keeps their features and adds:
