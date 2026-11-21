@@ -1,9 +1,12 @@
 import { DeliveryRefusedError, refused } from '#src/errors';
 import type { RiderDocuments } from '#src/repositories/rider-document.repository';
 import { SessionRepository } from '#src/repositories/session.repository';
+import { decodeGarminImport, garminActivityId } from '#src/dtos/remote-ids.dto';
 import type { OAuth1Token, TokenStore, Tokens } from 'garminconnect-js';
 import { Garmin, GarminAuthError, GarminClient, GarminHttpError, MemoryTokenStore } from 'garminconnect-js';
-import { Schema } from 'effect';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { Option, Schema } from 'effect';
 
 const oauth1 = Schema.Struct({
   oauth_token: Schema.String,
@@ -106,7 +109,7 @@ export class GarminRepository {
   }
 
   /** Garmin rejects a duplicate import with 409: the activity is already there. */
-  async uploadGarmin(store: TokenStore, domain: string, filename: string, fit: Uint8Array) {
+  async uploadGarmin(store: TokenStore, domain: string, filename: string, fit: Uint8Array): Promise<string | null> {
     const client = this.garminClient(store, domain);
 
     if (!(await client.loadTokens())) {
@@ -114,15 +117,17 @@ export class GarminRepository {
     }
 
     try {
-      await new Garmin(client).importActivity(
+      const result = await new Garmin(client).importActivity(
         new SessionRepository().binaryBlob(fit),
         filename.endsWith('.fit') ? filename : 'activity.fit',
       );
+
+      return Option.match(decodeGarminImport(result), { onNone: () => null, onSome: garminActivityId });
     } catch (error) {
       const http = error instanceof GarminHttpError ? error : error instanceof Error ? error.cause : null;
 
       if (http instanceof GarminHttpError && http.status === 409) {
-        return;
+        return null;
       }
 
       if (http instanceof GarminHttpError && refused(http.status)) {
@@ -133,6 +138,23 @@ export class GarminRepository {
         throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
       }
       throw error;
+    }
+  }
+
+  /** The photos of a ride, one request each, added to an activity Garmin already imported. */
+  async postActivityImages(store: TokenStore, domain: string, activityId: string, photos: ReadonlyArray<string>) {
+    const client = this.garminClient(store, domain);
+
+    if (!(await client.loadTokens())) {
+      throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
+    }
+
+    for (const photo of photos) {
+      await client.upload(
+        new Blob([readFileSync(photo)], { type: 'image/jpeg' }),
+        basename(photo),
+        `/activity-service/activity/${activityId}/image`,
+      );
     }
   }
 }

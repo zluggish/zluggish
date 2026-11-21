@@ -1,4 +1,5 @@
 import { isIntervalsAthleteId } from '#src/dtos/intervals.dto';
+import { decodeIntervalsImport, intervalsActivityId } from '#src/dtos/remote-ids.dto';
 import { RuntimeContext } from '#src/context';
 import { UploadProvider, UploadState } from '#src/enum';
 import type { RemovableCredentialFile, JobType } from '#src/enum';
@@ -18,7 +19,7 @@ import type { StoredEntry } from '#src/dtos/workout.dto';
 import { WorkoutsService } from '#src/services/workout.service';
 import { clearField, clone, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
-import { Context, Effect, Layer, Schema } from 'effect';
+import { Context, Effect, Layer, Option, Schema } from 'effect';
 
 const isoDate = (value: string | null | undefined) =>
   value && /^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/.test(value) && !Number.isNaN(Date.parse(value.slice(0, 10)))
@@ -81,6 +82,21 @@ const make = Effect.gen(function* () {
   const repositories = context.accounts.repositories;
   const workoutsService = yield* WorkoutsService;
   const jobs = yield* JobsService;
+
+  /** Remember the id of the activity a provider created; a failure is only reported because the upload already happened. */
+  function rememberRemote(attempt: Attempt | undefined, id: string | null) {
+    if (!attempt || !id) {
+      return;
+    }
+
+    try {
+      repositories.uploadsRepository.setRemote(attempt.activity, attempt.provider, attempt.token, id);
+    } catch (error) {
+      context.world.lifecycle.log.warn('upload.remote_id', 'Could not store the remote activity id', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   function configured(player: number) {
     const settings = SettingsService.resolveRiderSettings(context.config.riderDefaults, context.settings.read(player));
@@ -375,10 +391,30 @@ const make = Effect.gen(function* () {
         return zwift(player, activity, attempt);
       }
 
+      case 'garmin': {
+        return garmin(player, activity, attempt, garminPhotos(player, attempt.activity));
+      }
+
+      case 'intervals': {
+        return intervals(player, activity, attempt);
+      }
+
       default: {
-        return ({ strava, garmin, runalyze, intervals } as const)[attempt.provider](player, activity);
+        return ({ strava, runalyze } as const)[attempt.provider](player, activity);
       }
     }
+  }
+
+  /** Whether this rider let Garmin Connect receive the photos of a ride. */
+  function sendsGarminPhotos(player: number): boolean {
+    const settings = SettingsService.resolveRiderSettings(context.config.riderDefaults, context.settings.read(player));
+
+    return settings.uploads.garmin.photos.enabled;
+  }
+
+  /** Ride photos are opt-in: with `uploads.garmin.photos.enabled` off, Garmin gets only the FIT file. */
+  function garminPhotos(player: number, activity: number) {
+    return sendsGarminPhotos(player) ? photosNow(player, activity) : [];
   }
 
   /** Ready photos and videos only: a reserved row may have no complete file yet. */
@@ -440,17 +476,31 @@ const make = Effect.gen(function* () {
     );
   }
 
-  async function garmin(player: number, activity: Activity) {
+  async function garmin(player: number, activity: Activity, attempt?: Attempt, photos: ReadonlyArray<string> = []) {
     if (!repositories.riderDocuments.has(player, 'garth/oauth1_token.json')) {
       throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
     }
 
-    await repositories.garminRepository.uploadGarmin(
-      repositories.garminRepository.tokenStore(repositories.riderDocuments, player),
-      context.config.integrations.garmin.domain,
-      activity.fitFilename,
-      activity.fit,
-    );
+    const store = repositories.garminRepository.tokenStore(repositories.riderDocuments, player);
+    const domain = context.config.integrations.garmin.domain;
+
+    const id = await repositories.garminRepository.uploadGarmin(store, domain, activity.fitFilename, activity.fit);
+
+    rememberRemote(attempt, id);
+
+    const images = photos.filter((photo) => photo.endsWith('.jpg'));
+
+    if (id === null || images.length === 0) {
+      return;
+    }
+
+    try {
+      await repositories.garminRepository.postActivityImages(store, domain, id, images);
+    } catch (error) {
+      context.world.lifecycle.log.warn('upload.garmin_photos', 'The photos could not be added to the Garmin activity', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async function runalyze(player: number, activity: Activity) {
@@ -473,7 +523,7 @@ const make = Effect.gen(function* () {
     );
   }
 
-  async function intervals(player: number, activity: Activity) {
+  async function intervals(player: number, activity: Activity, attempt?: Attempt) {
     const credentials = repositories.connectionsRepository.read(player, 'intervals');
 
     if (!credentials) {
@@ -494,7 +544,7 @@ const make = Effect.gen(function* () {
     const form = new FormData();
     form.set('file', repositories.sessionRepository.binaryBlob(activity.fit), 'file');
 
-    await checked(
+    const response = await checked(
       await fetch(`https://intervals.icu/api/v1/athlete/${athlete}/activities?${query}`, {
         method: 'POST',
         headers: {
@@ -505,6 +555,11 @@ const make = Effect.gen(function* () {
       }),
       'intervals',
     );
+
+    const body: unknown = await response.json().catch(() => null);
+    const id = Option.match(decodeIntervalsImport(body), { onNone: () => null, onSome: intervalsActivityId });
+
+    rememberRemote(attempt, id);
 
     if (paired !== null) {
       Effect.runSync(workouts.removeEvent(player, paired));
@@ -670,8 +725,14 @@ const make = Effect.gen(function* () {
       return yield* Effect.promise(() => freeStrava(player, activity, photos));
     }),
 
-    garmin: Effect.fn('UploadsService.garmin')(function* (player: number, activity: Activity) {
-      return yield* Effect.promise(() => garmin(player, activity));
+    garmin: Effect.fn('UploadsService.garmin')(function* (
+      player: number,
+      activity: Activity,
+      photos: ReadonlyArray<string> = [],
+    ) {
+      const paths = sendsGarminPhotos(player) ? photos : [];
+
+      return yield* Effect.promise(() => garmin(player, activity, undefined, paths));
     }),
 
     runalyze: Effect.fn('UploadsService.runalyze')(function* (player: number, activity: Activity) {

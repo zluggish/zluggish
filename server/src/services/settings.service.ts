@@ -16,6 +16,11 @@ function resolveRiderSettings(defaults: RiderSettings, overrides: Overrides) {
       strava: {
         method: overrides['uploads.strava.method'] ?? defaults.uploads.strava.method,
       },
+      garmin: {
+        photos: {
+          enabled: overrides['uploads.garmin.photos.enabled'] ?? defaults.uploads.garmin.photos.enabled,
+        },
+      },
     },
     devices: {
       zwiftClick: {

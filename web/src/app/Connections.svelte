@@ -8,15 +8,17 @@
   let {
     api,
     stravaMethod = $bindable(),
+    garminPhotos = $bindable(),
     bridgeFolder = $bindable(),
     saved,
     save,
   }: {
     api: Api;
     stravaMethod: string;
+    garminPhotos: boolean;
     bridgeFolder: string;
     /** The settings the server holds, so a tile does not change before its choice is saved. */
-    saved: { stravaMethod: string; bridgeFolder: string };
+    saved: { stravaMethod: string; garminPhotos: boolean; bridgeFolder: string };
     save: () => Promise<void>;
   } = $props();
 
@@ -270,6 +272,19 @@
       }
 
       message = 'Upload method saved.';
+    });
+  }
+
+  function savePhotos() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        garminPhotos = saved.garminPhotos;
+        throw error;
+      }
+
+      message = 'Setting saved.';
     });
   }
 
@@ -608,6 +623,11 @@
         {@render storedList('strava')}
       {:else if open === 'garmin'}
         <p class="muted">Upload finished rides to Garmin Connect.</p>
+        <label class="check"
+          ><input type="checkbox" bind:checked={garminPhotos} disabled={busy} onchange={savePhotos} /> Send the photos of
+          a ride to Garmin Connect</label
+        >
+        <p class="muted">Off by default: Garmin then gets only the FIT file.</p>
         {@render credentials('garmin')}
         {#if mfa}<TextField id="garmin-code" label="Verification code" bind:value={code} maxlength={32} />{/if}
         <div class="actions">

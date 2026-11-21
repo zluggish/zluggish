@@ -20,6 +20,7 @@ These commands need an existing local rider, identified by a numeric `--user ID`
 | `ghosts.enabled`                      | `true` or `false`                |
 | `uploads.zwift.enabled`               | `true` or `false`                |
 | `uploads.strava.method`               | `"paid"` or `"free"`             |
+| `uploads.garmin.photos.enabled`       | `true` or `false`                |
 | `devices.zwiftClick.enabled`          | `true` or `false`                |
 | `workouts.trainingpeaks.bridgeFolder` | A JSON string with a folder path |
 
