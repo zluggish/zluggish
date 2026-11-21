@@ -22,16 +22,31 @@ import {
 import { link, mkdir, open, readdir, readFile, rename, rm, stat, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
+// A secondary close/cleanup failure must not replace the operation's original error.
+function cleanupSync(action: () => void, failed: boolean) {
+  try {
+    action();
+  } catch (error) {
+    if (!failed) {
+      throw error;
+    }
+  }
+}
+
 function syncDirectory(path: string) {
   if (process.platform === 'win32') {
     return;
   }
   const fd = openSync(path, 'r');
+  let failed = false;
 
   try {
     fsyncSync(fd);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    closeSync(fd);
+    cleanupSync(() => closeSync(fd), failed);
   }
 }
 
@@ -39,16 +54,21 @@ function syncDirectory(path: string) {
 function publish(path: string, text: string | Uint8Array, replace: boolean) {
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.${new CryptoRepository().randomUUID()}.tmp`;
-  const fd = openSync(temporary, 'wx', 0o600);
+  let failed = false;
 
   try {
-    writeFileSync(fd, text, 'utf8');
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
+    const fd = openSync(temporary, 'wx', 0o600);
 
-  try {
+    try {
+      writeFileSync(fd, text, 'utf8');
+      fsyncSync(fd);
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      cleanupSync(() => closeSync(fd), failed);
+    }
+
     if (replace) {
       renameSync(temporary, path);
     } else {
@@ -57,8 +77,11 @@ function publish(path: string, text: string | Uint8Array, replace: boolean) {
     }
 
     syncDirectory(dirname(path));
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    rmSync(temporary, { force: true });
+    cleanupSync(() => rmSync(temporary, { force: true }), failed);
   }
 }
 
