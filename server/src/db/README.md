@@ -74,4 +74,6 @@ the WAL without a flush on the main thread. `DurabilityRepository.flush()` flush
 WAL on the libuv thread pool. The HTTP middleware waits for it before the response of
 any request that changed the database, and a delivery waits for it after it commits
 `sending`. Work that acknowledges a save outside HTTP must also wait for `flush()`.
-Offline commands keep `synchronous=FULL`.
+Relay nonce reservations temporarily use `synchronous=FULL` and commit outside any
+transaction before a synchronous socket send. This prevents power loss from rolling
+back a nonce that has already been used. Offline commands keep `synchronous=FULL`.

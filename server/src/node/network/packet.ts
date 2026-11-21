@@ -15,10 +15,10 @@ export interface PacketHeader {
 
 function nonce(iv: InitializationVector) {
   const data = Buffer.alloc(12);
-  data.writeInt16BE(iv.device, 2);
-  data.writeInt16BE(iv.channel, 4);
-  data.writeInt16BE(iv.connection, 6);
-  data.writeInt32BE(iv.sequence, 8);
+  data.writeUInt16BE(iv.device, 2);
+  data.writeUInt16BE(iv.channel, 4);
+  data.writeUInt16BE(iv.connection, 6);
+  data.writeUInt32BE(iv.sequence, 8);
 
   return data;
 }
@@ -30,21 +30,21 @@ export function encodePacket(payload: Uint8Array, key: Uint8Array, iv: Initializ
   if (fields.relay !== undefined) {
     flags |= 4;
     const data = Buffer.alloc(4);
-    data.writeInt32BE(fields.relay);
+    data.writeUInt32BE(fields.relay);
     parts.push(data);
   }
 
   if (fields.connection !== undefined) {
     flags |= 2;
     const data = Buffer.alloc(2);
-    data.writeInt16BE(fields.connection);
+    data.writeUInt16BE(fields.connection);
     parts.push(data);
   }
 
   if (fields.sequence !== undefined) {
     flags |= 1;
     const data = Buffer.alloc(4);
-    data.writeInt32BE(fields.sequence);
+    data.writeUInt32BE(fields.sequence);
     parts.push(data);
   }
 

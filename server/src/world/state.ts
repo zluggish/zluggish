@@ -24,7 +24,12 @@ export function forward(state: PlayerState) {
   return (state.f19 & 4) !== 0;
 }
 
-/** Per authenticated relay; only accepted packets advance counters. Never an anti-replay policy. */
+/** Durable per-key nonce history. A connection identifier is never reused for TCP. */
+export interface RelayHistory {
+  tcp: Array<number>;
+  udp: Array<[number, number, number]>;
+}
+
 export class Relay {
   tcpConnection = 0;
 
@@ -38,31 +43,82 @@ export class Relay {
 
   udpWrite = 0;
 
+  private history: RelayHistory = { tcp: [], udp: [] };
+
+  private checkpoint: ((history: RelayHistory) => void) | undefined;
+
+  private failed = false;
+
   constructor(readonly key: Buffer) {}
 
-  acceptUdp(connection: number, explicitConnection?: number, sequence?: number) {
-    if (explicitConnection !== undefined && explicitConnection !== this.udpConnection) {
-      this.udpWrite = 0;
-    }
-    this.udpConnection = connection;
-    this.udpRead = sequence ?? this.udpRead + 1;
+  protect(history: RelayHistory, checkpoint: (history: RelayHistory) => void) {
+    this.history = history;
+    this.checkpoint = checkpoint;
   }
 
-  acceptTcp(connection: number, hello: boolean) {
+  private save() {
+    if (this.failed) {
+      throw new Error('Relay persistence failed');
+    }
+    try {
+      this.checkpoint?.(this.history);
+    } catch (error) {
+      this.failed = true;
+      throw error;
+    }
+  }
+
+  acceptUdp(connection: number, _explicitConnection?: number, sequence = this.udpRead) {
+    const previous = this.history.udp.find(([id]) => id === connection);
+    if (previous && sequence <= previous[1]) {
+      throw new Error('Replayed UDP packet');
+    }
+    const entry: [number, number, number] = previous ?? [connection, -1, 0];
+    if (!previous) {
+      this.history.udp.push(entry);
+    }
+    entry[1] = sequence;
+    this.save();
+    this.udpConnection = connection;
+    this.udpRead = sequence + 1;
+    this.udpWrite = entry[2];
+  }
+
+  acceptTcp(connection: number, hello: boolean, sequence = hello ? 0 : this.tcpRead) {
     if (hello) {
+      if (sequence !== 0 || this.history.tcp.includes(connection)) {
+        throw new Error('Reused TCP connection');
+      }
+      // Burn the entire TCP connection ID before any reply. After a restart
+      // its implicit output counter cannot be reconstructed safely.
+      this.history.tcp.push(connection);
+      this.save();
       this.tcpConnection = connection;
       this.tcpRead = 1;
       this.tcpWrite = 0;
     } else {
+      if (connection !== this.tcpConnection || sequence !== this.tcpRead) {
+        throw new Error('Unexpected TCP sequence');
+      }
       this.tcpRead++;
     }
   }
 
   nextUdp() {
-    return this.udpWrite++;
+    const entry = this.history.udp.find(([id]) => id === this.udpConnection);
+    if (!entry || entry[2] > 0xff_ff_ff_ff) {
+      throw new Error('UDP nonce space exhausted');
+    }
+    const sequence = entry[2]++;
+    this.save();
+    this.udpWrite = entry[2];
+    return sequence;
   }
 
   nextTcp() {
+    if (this.failed || this.tcpWrite > 0xff_ff_ff_ff) {
+      throw new Error('TCP nonce space exhausted');
+    }
     return this.tcpWrite++;
   }
 }
@@ -141,6 +197,7 @@ export class World {
       throw new Error('Invalid relay key');
     }
 
+    this.disconnect?.(playerId);
     const relay = new Relay(Buffer.from(key));
 
     this.relays.set(playerId, relay);

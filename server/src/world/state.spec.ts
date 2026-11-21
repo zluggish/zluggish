@@ -16,10 +16,10 @@ await test('presence and cleanup use different strict protocol-time boundaries',
 await test('relay connection events preserve implicit sequences and reset only on connection changes', () => {
   const relay = new Relay(Buffer.alloc(16));
   relay.acceptUdp(7, 7, 42);
-  assert.equal(relay.udpRead, 42);
+  assert.equal(relay.udpRead, 43);
   assert.equal(relay.nextUdp(), 0);
   relay.acceptUdp(7, 7);
-  assert.equal(relay.udpRead, 43);
+  assert.equal(relay.udpRead, 44);
   assert.equal(relay.nextUdp(), 1);
   relay.acceptUdp(8, 8, 0);
   assert.equal(relay.nextUdp(), 0);
@@ -32,6 +32,49 @@ await test('relay connection events preserve implicit sequences and reset only o
   relay.acceptTcp(9, true);
   assert.equal(relay.tcpRead, 1);
   assert.equal(relay.nextTcp(), 0);
+});
+
+await test('relay rejects TCP replay and preserves UDP nonce history across switches and restart', () => {
+  const key = Buffer.alloc(16, 7);
+  let saved = { tcp: [] as Array<number>, udp: [] as Array<[number, number, number]> };
+  const relay = new Relay(key);
+  relay.protect(saved, (history) => {
+    saved = structuredClone(history);
+  });
+  relay.acceptTcp(7, true);
+  assert.equal(relay.nextTcp(), 0);
+  assert.throws(() => relay.acceptTcp(7, true), /Reused/);
+  relay.acceptUdp(7, 7, 42);
+  assert.equal(relay.nextUdp(), 0);
+  assert.throws(() => relay.acceptUdp(7, 7, 42), /Replayed/);
+  relay.acceptUdp(8, 8, 0);
+  assert.equal(relay.nextUdp(), 0);
+  relay.acceptUdp(7, 7, 43);
+  assert.equal(relay.nextUdp(), 1);
+  const restarted = new Relay(key);
+  restarted.protect(saved, () => {});
+  assert.throws(() => restarted.acceptTcp(7, true), /Reused/);
+  restarted.acceptTcp(8, true);
+  assert.equal(restarted.nextTcp(), 0);
+  assert.throws(() => restarted.acceptUdp(7, 7, 43), /Replayed/);
+  restarted.acceptUdp(7, 7, 44);
+  assert.equal(restarted.nextUdp(), 2);
+});
+
+await test('relay fails closed after persistence failure and before counter wrap', () => {
+  const relay = new Relay(Buffer.alloc(16));
+  relay.protect({ tcp: [], udp: [[7, 0, 2 ** 32]] }, () => {});
+  relay.acceptUdp(7, 7, 1);
+  assert.throws(() => relay.nextUdp(), /exhausted/);
+  relay.acceptTcp(7, true);
+  relay.tcpWrite = 2 ** 32;
+  assert.throws(() => relay.nextTcp(), /exhausted/);
+  relay.protect({ tcp: [], udp: [] }, () => {
+    throw new Error('disk failed');
+  });
+  assert.throws(() => relay.acceptTcp(8, true), /disk failed/);
+  assert.throws(() => relay.nextTcp(), /exhausted/);
+  assert.throws(() => relay.acceptUdp(8, 8, 0), /persistence failed/);
 });
 
 await test('responses split nearby riders at the same boundaries as re-encoding each packet', () => {

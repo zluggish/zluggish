@@ -79,6 +79,23 @@ Coming from zwift-offline? Read [Migrate from zwift-offline](https://docs.zluggi
 
 Future Zwift updates can break compatibility. See [client updates](https://docs.zluggish.com/troubleshooting/client-updates/) and the [CHANGELOG](CHANGELOG) before you update. Keep Zluggish on a trusted local network; it is not designed for exposure to the internet.
 
+## Relay reconnect compatibility
+
+Relay replay protection keeps per-key connection and sequence history in the database.
+TCP reconnects must use a previously unused connection ID with sequence zero; restarting
+with the same ID is rejected. UDP replies keep their sequence across connection switches,
+and duplicate or out-of-order datagrams are dropped. Implicit UDP sequences advance to
+the next value after an explicit sequence. The packet format is unchanged, but clients
+that reset counters under an existing key must log in with a new random key instead.
+Existing sessions from versions without nonce history cannot resume after an upgrade;
+start a new client login with a fresh key. Preserve the nonce history with the database.
+After restoring an older backup or losing that history, rotate relay keys before riding.
+Real-client reconnect behavior on Windows, macOS and Android has not been verified for
+these stricter rules.
+Rotate the key when connection IDs or sequence numbers are exhausted. The protocol has
+no server challenge: this rejects previously accepted packets, but cannot prove that
+a previously unseen hello was sent by a live client.
+
 ## Community
 
 Join the community [Discord server](https://discord.gg/GMdn8F8) and [Strava club](https://www.strava.com/clubs/zoffline).

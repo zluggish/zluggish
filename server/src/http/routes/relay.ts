@@ -1,3 +1,4 @@
+import { RideCompletionService } from '#src/services/ride-completion.service';
 import { AccountsService } from '#src/services/auth.service';
 import { WorkoutsService } from '#src/services/workout.service';
 import { FilesService } from '#src/services/files.service';
@@ -26,7 +27,7 @@ import {
   TeleportTargetsSchema,
 } from '#src/protocol/generated/world_pb';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
-import { course, worldTime } from '#src/world/state';
+import { Relay, course, worldTime } from '#src/world/state';
 import { create, fromJsonString, toBinary, toJsonString } from '@bufbuild/protobuf';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -71,6 +72,8 @@ export function relayRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       ) {
         throw new HTTPException(401);
       }
+      const relay = new Relay(Buffer.from(request.key));
+      yield* RideCompletionService.use((service) => service.protectRelay(user.player_id, relay, true));
       runtime.world.login(BigInt(user.player_id), request.key);
 
       const imported = yield* documentsService.text(user.player_id, 'economy_config.txt');
