@@ -1,3 +1,4 @@
+import { WorkoutPublication } from '#src/repositories/workout-publication.repository';
 import { openDatabase } from '#src/db/open';
 import { AccountsRepository } from '#src/repositories/accounts.repository';
 import { BookmarksRepository } from '#src/repositories/bookmark.repository';
@@ -39,6 +40,8 @@ export class Repositories {
   readonly loggingRepository = new LoggingRepository();
 
   readonly db;
+
+  readonly workoutPublication: WorkoutPublication;
 
   private settings: SettingsStore | undefined;
 
@@ -127,6 +130,7 @@ export class Repositories {
     this.completionRepository = new Completions(this.db);
     this.cryptoRepository = new CryptoRepository();
     this.filesRepository = new AssetFiles();
+    this.workoutPublication = new WorkoutPublication(this.db, storage, this.filesRepository);
     this.lockRepository = new LockRepository();
     this.profileJsonRepository = new ProfileJsonRepository();
     this.profileDownloadRepository = new ProfileDownloadRepository(this.loggingRepository);

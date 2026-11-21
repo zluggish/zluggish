@@ -162,33 +162,6 @@ const make = Effect.gen(function* () {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
-  // Publication is synchronous: capture -> replace -> commit, or restore on exception.
-  // This is exception rollback, not a durable crash journal; no published marker is invented.
-  function publishFiles(files: ReadonlyMap<string, string | Uint8Array>, commit?: () => void) {
-    const previous = new Map<string, Buffer | null>();
-
-    try {
-      for (const [file, content] of files) {
-        previous.set(
-          file,
-          repositories.filesRepository.existsSync(file) ? repositories.filesRepository.readFileSync(file) : null,
-        );
-        repositories.filesRepository.writeDurable(file, content, true);
-      }
-
-      commit?.();
-    } catch (error) {
-      for (const [file, content] of previous) {
-        if (content === null) {
-          repositories.filesRepository.rmSync(file, { force: true });
-        } else {
-          repositories.filesRepository.writeDurable(file, content, true);
-        }
-      }
-      throw error;
-    }
-  }
-
   function providerOf(id: number) {
     const settings = SettingsService.resolveRiderSettings(runtime.config.riderDefaults, runtime.settings.read(id));
 
@@ -527,7 +500,7 @@ const make = Effect.gen(function* () {
     pendingFiles.set(resolve(runtime.profiles.folder(id), 'active_workout_provider.txt'), 'intervals-icu');
     signal.throwIfAborted();
     // Publication is synchronous: no request can observe new metadata before all files exist.
-    publishFiles(pendingFiles);
+    repositories.workoutPublication.publish(pendingFiles);
 
     return `Synced ${entries.length} Intervals.icu workouts.`;
   }
@@ -574,11 +547,8 @@ const make = Effect.gen(function* () {
     }
     pendingFiles.set(resolve(runtime.profiles.folder(id), 'active_workout_provider.txt'), 'trainingpeaks');
     signal.throwIfAborted();
-    const db = runtime.accounts.db;
     const timestamp = Math.floor(Date.now() / 1000);
-    db.exec('BEGIN IMMEDIATE');
-
-    try {
+    repositories.workoutPublication.publish(pendingFiles, () => {
       for (const { filename } of imports) {
         const repository = repositories.storageRepository;
         const old = repository.findZfile(id, 'customworkouts', filename);
@@ -589,14 +559,7 @@ const make = Effect.gen(function* () {
           repository.insertZfile(id, 'customworkouts', filename, timestamp);
         }
       }
-
-      publishFiles(pendingFiles, () => {
-        db.exec('COMMIT');
-      });
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
+    });
 
     return `Imported ${imports.length} TrainingPeaks workouts.`;
   }
