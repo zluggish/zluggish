@@ -39,6 +39,7 @@ export interface GamePageModel {
   zwiftVersion?: string;
   /** Where riders open the web app, from the configured public URL. Absent when none is set. */
   webApp?: string | null;
+  healthHosts?: Array<string>;
   forms: Array<GameForm>;
   /** Shown as a back button beside the title; it navigates and never signs out. */
   back?: { href: string; label: string };

@@ -1,6 +1,7 @@
 import { packageRoot } from '#src/config/load';
 import type { FormResult, GamePageModel, GameSaved } from '#src/dtos/game-app.dto';
 import { browserJson } from '#src/http/game/results';
+import { zwiftHostNames } from '#src/http/client-setup';
 import { RuntimeContext } from '#src/context';
 import type { Context } from 'hono';
 import { Effect, Schema } from 'effect';
@@ -37,7 +38,14 @@ const document = Effect.fn('game.document')(function* (props: GamePageModel, ren
 /** The launcher page for model, or its form result as JSON when the browser posted with fetch. */
 export const gamePage = Effect.fn('game.page')(function* (c: Context, page: GamePageModel, redirect?: string) {
   const { config } = yield* RuntimeContext;
-  const shown: GamePageModel = { ...page, webApp: config.network.web.enabled ? config.network.web.publicUrl : null };
+  const shown: GamePageModel = {
+    ...page,
+    webApp: config.network.web.enabled ? config.network.web.publicUrl : null,
+  };
+
+  if (page.kind === 'login' || page.kind === 'unlock') {
+    shown.healthHosts = zwiftHostNames;
+  }
 
   c.header('Cache-Control', 'no-store');
   const tls = yield* TlsService;

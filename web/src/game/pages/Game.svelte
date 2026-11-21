@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { checkLauncherHosts } from '../health';
   import { request } from '../../lib/connection';
   import Layout from '../../components/Layout.svelte';
   import Form from '../../components/Form.svelte';
@@ -8,6 +9,33 @@
   let { page }: { page: GamePageModel } = $props();
   let current = $state(untrack(() => page));
   let locked = $state(false);
+  let checking = $state(untrack(() => !!page.healthHosts));
+  let failedHosts = $state<Array<string>>([]);
+
+  onMount(() => {
+    const hosts = current.healthHosts;
+    if (!hosts) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 3000);
+    let active = true;
+    void checkLauncherHosts(hosts, controller.signal).then((failures) => {
+      window.clearTimeout(timeout);
+      if (!active) {
+        return;
+      }
+      failedHosts = failures;
+      checking = false;
+    });
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  });
 
   // Counts failures handed up from the user list, so the same message twice is shown and announced again.
   let failures = $state(0);
@@ -66,6 +94,13 @@
   });
 </script>
 
+{#snippet warning(title: string, message: string)}
+  <p class="security" role="alert">
+    <strong>{title}</strong>
+    {message}
+  </p>
+{/snippet}
+
 <svelte:head><title>{current.title}</title></svelte:head>
 
 <Layout
@@ -84,45 +119,59 @@
       </a>
     {/if}
   {/snippet}
-  {#if current.warning}<p class="security" role="alert">
-      <strong>Unsafe connection.</strong>
-      {current.warning}
-    </p>{/if}
-  {#key failures}{#if current.message}<p class="notice" role={current.failed ? 'alert' : 'status'}>
-        {current.message}
-      </p>{/if}{/key}
-  {#if locked}<p class="error" role="alert">
-      Your session or user changed. <a href="/login/">Sign in</a> or
-      <button type="button" onclick={() => location.reload()}>Reload this page</button>.
-    </p>{/if}
-  {#each current.forms as model (model.id)}
-    <div hidden={current.kind === 'dashboard' && model.id === 'switch'}>
-      <Form
-        {model}
-        csrf={current.csrf}
-        {locked}
-        onpage={(value) => {
-          if (value.kind !== 'message') current = value;
-        }}
-        onexpire={expire}
-        onfail={model.user
-          ? (message) => {
-              current = { ...current, message, failed: true };
-              failures++;
-            }
-          : undefined}
-      >
-        {#snippet actions()}
-          {#if current.kind === 'dashboard' && model.id === 'launch'}
-            <button type="submit" form="game-form-switch" disabled={locked}>Switch rider</button>
-          {/if}
-        {/snippet}
-      </Form>
-    </div>
-  {/each}
+  {#if current.warning}{@render warning('Unsafe connection.', current.warning)}{/if}
+  {#if (current.kind === 'login' || current.kind === 'unlock') && failedHosts.length}
+    {@render warning('Connection check failed.', `The launcher could not verify ${failedHosts.join(', ')}.`)}
+  {/if}
+  {#if checking}<p class="checking-status" role="status">Checking connections…</p>{/if}
+  <div class:checking>
+    {#key failures}{#if current.message}<p class="notice" role={current.failed ? 'alert' : 'status'}>
+          {current.message}
+        </p>{/if}{/key}
+    {#if locked}<p class="error" role="alert">
+        Your session or user changed. <a href="/login/">Sign in</a> or
+        <button type="button" onclick={() => location.reload()}>Reload this page</button>.
+      </p>{/if}
+    {#each current.forms as model (model.id)}
+      <div hidden={current.kind === 'dashboard' && model.id === 'switch'}>
+        <Form
+          {model}
+          csrf={current.csrf}
+          {locked}
+          onpage={(value) => {
+            if (value.kind !== 'message') current = value;
+          }}
+          onexpire={expire}
+          onfail={model.user
+            ? (message) => {
+                current = { ...current, message, failed: true };
+                failures++;
+              }
+            : undefined}
+        >
+          {#snippet actions()}
+            {#if current.kind === 'dashboard' && model.id === 'launch'}
+              <button type="submit" form="game-form-switch" disabled={locked}>Switch rider</button>
+            {/if}
+          {/snippet}
+        </Form>
+      </div>
+    {/each}
+  </div>
 </Layout>
 
 <style>
+  .checking-status {
+    display: none;
+  }
+  @media (scripting: enabled) {
+    .checking-status {
+      display: block;
+    }
+    .checking {
+      display: none;
+    }
+  }
   .web-app {
     display: inline-flex;
     align-items: center;

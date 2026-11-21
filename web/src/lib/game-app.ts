@@ -47,6 +47,7 @@ export const gamePageModel: z.ZodType<GamePageModel> = z.object({
   version: z.string(),
   zwiftVersion: z.string().optional(),
   webApp: z.string().nullable().optional(),
+  healthHosts: z.array(z.string()).optional(),
   forms: z.array(gameForm),
   back: z.object({ href: z.string(), label: z.string() }).optional(),
   message: z.string().optional(),

@@ -79,6 +79,51 @@ async function signIn(page: Page, origin: string, id: number, password = 'test-p
   await page.waitForURL('**/user/**');
 }
 
+await test('launcher checks each host before showing sign-in and reports failed checks', async (t) => {
+  const f = await browserFixture(t);
+  await f.accounts.create('Connection Rider', 'test-password');
+  const page = await f.browser.newPage();
+  const checked = new Set<string>();
+  const pending = Promise.withResolvers<void>();
+  t.after(() => pending.resolve());
+
+  await page.route('https://*.zwift.com/health/launcher', async (route) => {
+    const { hostname } = new URL(route.request().url());
+    checked.add(hostname);
+    if (hostname === 'secure.zwift.com') {
+      await pending.promise;
+    }
+    await route.fulfill({
+      headers: { 'access-control-allow-origin': '*' },
+      body: hostname === 'cdn.zwift.com' ? 'other server' : 'zluggish launcher',
+    });
+  });
+  await page.route('https://loveturtle.zwift.com/**', async (route) => {
+    checked.add('loveturtle.zwift.com');
+    await route.abort();
+  });
+
+  await page.goto(`${f.origin}/login/`);
+  await page.getByText('Checking connections…').waitFor();
+  const rider = page.getByRole('button', { name: 'Connection Rider' });
+  assert.equal(await rider.isVisible(), false);
+
+  pending.resolve();
+  await page.getByText('The launcher could not verify cdn.zwift.com, loveturtle.zwift.com.').waitFor();
+  assert.deepEqual(
+    checked,
+    new Set([
+      'us-or-rly101.zwift.com',
+      'secure.zwift.com',
+      'cdn.zwift.com',
+      'launcher.zwift.com',
+      'loveturtle.zwift.com',
+    ]),
+  );
+  await rider.click();
+  await page.getByLabel('Password', { exact: true }).waitFor();
+});
+
 for (const javaScriptEnabled of [true, false]) {
   await test(`web-created rider, protected login and native POST with JavaScript ${javaScriptEnabled}`, async (t) => {
     const f = await browserFixture(t);

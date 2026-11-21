@@ -99,6 +99,12 @@ export function createGameApp(metadata: PublicMetadata, runtime?: Runtime) {
     staticRoutes(app, runtime);
   }
 
+  app.get('/health/launcher', (c) =>
+    c.text('zluggish launcher', 200, {
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-store',
+    }),
+  );
   app.get('/health', (c) => c.json({ name: 'zluggish', version: packageVersion(), status: 'ok' }));
   app.get('/', (c) =>
     c.html(
