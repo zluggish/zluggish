@@ -161,11 +161,23 @@ export class RiderPool {
 
     apply(source);
     apply(overrides);
-    profile.bodyType = choose(profile.isMale ? 'body_types_male' : 'body_types_female');
+
+    // A riders file that names the body type or the facial hair of a rider keeps them; the rest is drawn.
+    const given = (...names: Array<string>) =>
+      names.some((name) => source[name] !== undefined || overrides[name] !== undefined);
+
+    if (!given('bodyType', 'body_type')) {
+      profile.bodyType = choose(profile.isMale ? 'body_types_male' : 'body_types_female');
+    }
 
     if (profile.isMale) {
-      profile.facialHairType = choose('facial_hair_types');
-      profile.facialHairColour = Math.floor(rng.between(0, 5));
+      if (!given('facialHairType', 'facial_hair_type')) {
+        profile.facialHairType = choose('facial_hair_types');
+      }
+
+      if (!given('facialHairColour', 'facial_hair_colour')) {
+        profile.facialHairColour = Math.floor(rng.between(0, 5));
+      }
     }
 
     return profile;

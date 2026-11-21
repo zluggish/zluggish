@@ -30,6 +30,6 @@ A large multiplier can decrease the performance.
 
 To set the names, nationalities and equipment of bots, make a file `bot.txt` in the `storage` folder.
 
-If you have a catalogue from zwift-offline, keep it. Set `bots.ridersFile` to its path in `zluggish.config.ts`. The old Python catalogue helper is not included.
+If you have a catalogue from zwift-offline, keep it. Set `bots.ridersFile` to its path in `zluggish.config.ts`. The old Python catalogue helper is not included. A rider in the catalogue keeps the `weight_in_grams`, `height_in_millimeters`, `body_type` and `facial_hair_type` that you give; the fields you leave out are drawn at random. `body_type` sets the skin tone and build, so name it to give a rider a fixed look.
 
 For random bots, see the [zoffline-bots repository](https://github.com/oldnapalm/zoffline-bots).
