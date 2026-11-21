@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 export const SystemFlag = {
   /** Set by restore; stops every automatic delivery until an operator clears it. */
   UploadPause: 'uploads.paused',
+  ZwiftUpdatesAllowed: 'zwift.updates_allowed',
 } as const;
 
 export type SystemFlag = (typeof SystemFlag)[keyof typeof SystemFlag];

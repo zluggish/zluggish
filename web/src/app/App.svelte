@@ -33,8 +33,9 @@
     userSchema,
     userSettingsSchema,
     usersResponse,
+    zwiftUpdatesResponse,
   } from './schemas';
-  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting } from './schemas';
+  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting, ZwiftUpdates } from './schemas';
   import type { TlsStatus } from './tls';
 
   type Pending = { title: string; detail: string; label: string; destructive: boolean; confirm: () => Promise<void> };
@@ -117,6 +118,7 @@
   let backupMessage = $state('');
   let backupOperation = crypto.randomUUID();
   let serverConfig = $state<{ rows: Array<[string, string]> } | null>(null);
+  let zwiftUpdates = $state<ZwiftUpdates | null>(null);
   let worldSettings = $state<Array<WorldSetting>>([]);
   let worldSetting = $state<WorldSetting | null>(null);
   let worldValues = $state<Record<string, string | number | boolean>>({});
@@ -361,10 +363,17 @@
   }
 
   async function loadServer() {
+    zwiftUpdates = null;
     const body = await api(serverSettingsResponse, '/api/manage/settings');
     worldSettings = body.worldSettings;
     serverConfig = { rows: body.configuration };
+    zwiftUpdates = body.zwiftUpdates;
     events = (await api(eventsResponse, '/api/manage/events')).events;
+  }
+
+  async function saveZwiftUpdates(allowed: boolean) {
+    zwiftUpdates = await api(zwiftUpdatesResponse, '/api/manage/server/zwift-updates', 'PATCH', { allowed });
+    done(allowed ? 'Zwift updates are allowed.' : 'Zwift updates are on hold.');
   }
 
   async function createBackup() {
@@ -1101,6 +1110,37 @@
               pending = confirmation;
             }}
           />
+
+          {#if zwiftUpdates}
+            <section class="panel">
+              <h2>Zwift client updates</h2>
+              <p>
+                <strong>{zwiftUpdates.allowed && zwiftUpdates.available ? 'Allowed' : 'On hold'}</strong>
+                · Bundled game version {zwiftVersion}
+              </p>
+              <p class="muted">Applies to Windows and macOS launchers redirected to this server.</p>
+              {#if !zwiftUpdates.available}
+                <p class="muted">The CDN proxy is disabled in the server configuration.</p>
+              {/if}
+              {#if zwiftUpdates.allowed}
+                <button disabled={busy} onclick={() => run(() => saveZwiftUpdates(false))}>Hold updates</button>
+              {:else}
+                <button
+                  disabled={busy || !zwiftUpdates.available}
+                  onclick={() => {
+                    pending = {
+                      title: 'Allow Zwift updates?',
+                      detail:
+                        'Redirected desktop clients can download updates from Zwift. A game or launcher update can break compatibility. Hold updates again when you’re done.',
+                      label: 'Allow updates',
+                      destructive: false,
+                      confirm: () => saveZwiftUpdates(true),
+                    };
+                  }}>Allow updates</button
+                >
+              {/if}
+            </section>
+          {/if}
 
           <section class="panel">
             <h2>Backups</h2>

@@ -7,11 +7,12 @@ const resolver = new Resolver();
 resolver.setServers(['8.8.8.8', '8.8.4.4']);
 
 /** Resolve the upstream independently of the client's local Zwift hostname redirect. */
-export async function fetchCdn(path: string): Promise<Response> {
+export async function fetchCdn(path: string, range?: string): Promise<Response> {
   return new Promise((done, fail) => {
     const req = request(
       `https://cdn.zwift.com${path}`,
       {
+        ...(range && { headers: { Range: range } }),
         lookup(hostname, options, callback) {
           resolver.resolve4(hostname, (error, addresses) => {
             if (error || !addresses[0]) {

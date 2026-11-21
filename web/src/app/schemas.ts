@@ -51,9 +51,13 @@ export const worldSettingSchema = z.object({
 
 export type WorldSetting = z.infer<typeof worldSettingSchema>;
 
+export const zwiftUpdatesResponse = z.object({ allowed: z.boolean(), available: z.boolean() });
+export type ZwiftUpdates = z.infer<typeof zwiftUpdatesResponse>;
+
 export const serverSettingsResponse = z.object({
   worldSettings: z.array(worldSettingSchema),
   configuration: z.array(z.tuple([z.string(), z.string()])),
+  zwiftUpdates: zwiftUpdatesResponse,
 });
 
 /** A saved world setting without its fields, which the server only lists. */

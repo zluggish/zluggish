@@ -39,6 +39,7 @@ import { DiscordService } from '#src/services/discord.service';
 import { MatrixService } from '#src/services/matrix.service';
 import { AccountsService } from '#src/services/auth.service';
 import { SessionsService } from '#src/services/browser-session.service';
+import { ZwiftUpdatesService } from '#src/services/zwift-updates.service';
 import { Layer, ManagedRuntime } from 'effect';
 
 const foundationLayer = Layer.mergeAll(
@@ -56,6 +57,7 @@ const foundationLayer = Layer.mergeAll(
   FilesService.layer,
   DocumentsService.layer,
   TlsService.layer,
+  ZwiftUpdatesService.layer,
 );
 
 const sharedLayer = Layer.mergeAll(UploadsService.layer, ChatService.layer).pipe(Layer.provideMerge(foundationLayer));
@@ -130,6 +132,7 @@ export type AppServices =
   | MetricsService
   | GoalService
   | SettingsService
+  | ZwiftUpdatesService
   | RecordsService;
 
 export function appLayer(context: RepositoryContext) {
