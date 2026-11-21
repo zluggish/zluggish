@@ -15,6 +15,12 @@ const delivery = Schema.Struct({
 
 export type Delivery = (typeof delivery)['Type'];
 
+const remoteIdRow = Schema.Struct({
+  activity_id: Schema.Finite,
+  provider: Schema.String,
+  remote_id: Schema.String,
+});
+
 /** Delivery records, separate from completion. pending -> sending (attempt token) ->
 sent | failed | ambiguous; pending | failed | ambiguous -> cancelled. Only the attempt
 that committed sending records its result. Records outlive their jobs.
@@ -122,6 +128,44 @@ export class UploadsRepository {
           .where('state', '=', 'sending'),
       ).changes !== 0
     );
+  }
+
+  /** Remember the id of the activity the provider created, before the delivery is recorded as sent. */
+  setRemote(activity: number | bigint, provider: string, attempt: string, remoteId: string): boolean {
+    return (
+      this.executor.run(
+        query
+          .updateTable('activity_upload')
+          .set({ remote_id: remoteId, updated_at: this.now() })
+          .where('activity_id', '=', activity)
+          .where('provider', '=', provider)
+          .where('attempt', '=', attempt)
+          .where('state', '=', 'sending'),
+      ).changes !== 0
+    );
+  }
+
+  /** Remote ids of sent deliveries for the given activities belonging to the player. */
+  remoteIds(
+    activities: Array<number>,
+    player: number,
+  ): Array<{ activity_id: number; provider: string; remote_id: string }> {
+    if (activities.length === 0) {
+      return [];
+    }
+
+    const rows = this.executor.all(
+      query
+        .selectFrom('activity_upload as u')
+        .innerJoin('activity as a', 'a.id', 'u.activity_id')
+        .select(['u.activity_id', 'u.provider', 'u.remote_id'])
+        .where('a.player_id', '=', player)
+        .where('u.activity_id', 'in', activities)
+        .where('u.state', '=', 'sent')
+        .where('u.remote_id', 'is not', null),
+    );
+
+    return rows.map((row) => Schema.decodeUnknownSync(remoteIdRow)(row));
   }
 
   /** Old confirmed or cancelled deliveries. Failed and ambiguous ones wait for a decision. */
