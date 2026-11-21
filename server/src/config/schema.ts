@@ -82,6 +82,7 @@ export const riderSettingsSchema = section({
   uploads: section({
     zwift: section({ enabled: flag(false) }),
     strava: section({ method: Schema.Enum(StravaMethod).pipe(withDefault('paid')) }),
+    garmin: section({ device: section({ enabled: flag(false) }) }),
   }),
   devices: section({ zwiftClick: section({ enabled: flag(false) }) }),
   workouts: section({ trainingpeaks: section({ bridgeFolder: optionalPath.pipe(withDefault('')) }) }),

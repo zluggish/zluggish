@@ -8,15 +8,17 @@
   let {
     api,
     stravaMethod = $bindable(),
+    garminDevice = $bindable(),
     bridgeFolder = $bindable(),
     saved,
     save,
   }: {
     api: Api;
     stravaMethod: string;
+    garminDevice: boolean;
     bridgeFolder: string;
     /** The settings the server holds, so a tile does not change before its choice is saved. */
-    saved: { stravaMethod: string; bridgeFolder: string };
+    saved: { stravaMethod: string; garminDevice: boolean; bridgeFolder: string };
     save: () => Promise<void>;
   } = $props();
 
@@ -55,6 +57,16 @@
 
   type Stored = { id: Credential; label: string; detail: string; effect: string };
 
+  /** The Edge that the FIT file sent to Garmin Connect says it was recorded on. */
+  type Device = { manufacturer: number; product: number; serial: number };
+
+  const garminDevicesSchema = z.object({
+    device: z.object({ manufacturer: z.number(), product: z.number(), serial: z.number() }).nullable(),
+    devices: z.array(z.object({ product: z.number(), name: z.string() })),
+  });
+
+  type GarminDevices = z.infer<typeof garminDevicesSchema>;
+
   let connections = $state<Record<Provider, Connection> | null>(null);
   let secrets = $state<Record<Provider, string>>({ strava: '', garmin: '', intervals: '' });
   let cookie = $state('');
@@ -69,6 +81,60 @@
     } catch {
       cookieStatus = 'error';
     }
+  }
+
+  /** The model chosen in the list, until it is saved; null shows the one that is saved. */
+  let deviceProduct = $state<string | null>(null);
+  let deviceSerial = $state('');
+
+  let garminDevices = $state<GarminDevices | null>(null);
+
+  const productChosen = $derived(deviceProduct ?? String(garminDevices?.device?.product ?? ''));
+
+  async function loadDevice() {
+    garminDevices = await api(garminDevicesSchema, '/api/me/connections/garmin/device');
+  }
+
+  const deviceName = (device: Device | null | undefined) =>
+    device
+      ? `${garminDevices?.devices.find((model) => model.product === device.product)?.name ?? `Product ${device.product}`} · serial number ${device.serial}`
+      : 'None';
+
+  function saveDevice() {
+    void run(async () => {
+      if (productChosen === '') {
+        await api(ignored, '/api/me/connections/garmin/device', 'DELETE');
+        message = 'Device removed.';
+      } else {
+        const product = Number(productChosen);
+
+        if (deviceSerial.trim() === '') {
+          await api(ignored, '/api/me/connections/garmin/device', 'PUT', { product });
+        } else {
+          await api(ignored, '/api/me/connections/garmin/device', 'PUT', { product, serial: Number(deviceSerial) });
+        }
+
+        message = 'Device saved.';
+      }
+
+      await loadDevice();
+      deviceProduct = null;
+      deviceSerial = '';
+    });
+  }
+
+  /** The device is opt-in; the chosen model and serial number stay while the setting is off. */
+  function saveDeviceSetting() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        garminDevice = saved.garminDevice;
+        throw error;
+      }
+
+      message = 'Setting saved.';
+    });
   }
 
   let code = $state('');
@@ -367,6 +433,7 @@
       if (connections?.strava.cookie && saved.stravaMethod === 'free') {
         void testCookie();
       }
+      void loadDevice();
     });
   });
 </script>
@@ -617,6 +684,42 @@
           {@render disconnectButton('garmin')}
         </div>
         {@render storedList('garmin')}
+        <h3>Device in the FIT file</h3>
+        <label class="check"
+          ><input type="checkbox" bind:checked={garminDevice} disabled={busy} onchange={saveDeviceSetting} /> Record rides
+          on a Garmin Edge</label
+        >
+        <p class="muted">Off by default: Garmin then gets the FIT file exactly as the game writes it.</p>
+        {#if garminDevice}
+          <p class="muted">
+            Garmin Connect gets each ride as recorded on this Edge. Strava and the other services get the file of the
+            game. Now: {deviceName(garminDevices?.device)}.
+          </p>
+          <label class="field" for="garmin-device"
+            >Model
+            <select
+              id="garmin-device"
+              value={productChosen}
+              disabled={busy}
+              onchange={(event) => (deviceProduct = event.currentTarget.value)}
+            >
+              <option value="">None: send the file of the game</option>
+              {#each garminDevices?.devices ?? [] as model (model.product)}
+                <option value={String(model.product)}>{model.name}</option>
+              {/each}
+            </select>
+          </label>
+          <TextField
+            id="garmin-serial"
+            label="Serial number"
+            bind:value={deviceSerial}
+            maxlength={10}
+            hint="Leave empty to keep the current one, or to get a number of your own."
+          />
+          <div class="actions">
+            <button disabled={busy} onclick={saveDevice}>Save device</button>
+          </div>
+        {/if}
       {:else if open === 'intervals'}
         <p class="muted">
           Upload finished rides and bring your planned cycling workouts into Zwift. Find the athlete ID and API key

@@ -209,6 +209,7 @@ export const RiderDocumentName = {
   ZwiftCredentialsBin: 'zwift_credentials.bin',
   IntervalsCredentialsBin: 'intervals_credentials.bin',
   GarminCredentialsBin: 'garmin_credentials.bin',
+  GarminDeviceTxt: 'garmin_device.txt',
   StravaApiBin: 'strava_api.bin',
   StravaTokenTxt: 'strava_token.txt',
   Strava4SessionTxt: 'strava4_session.txt',

@@ -17,6 +17,7 @@ import { UploadProvider } from '#src/enum';
 import { ApplicationError, UnreadableCredentialsError } from '#src/errors';
 import type { HttpRuntime } from '#src/http/runtime';
 import type { WebEnv } from '#src/http/web-app';
+import { GARMIN_DEVICES, defaultSerial, deviceText, parseDeviceIdentity } from '#src/world/fit-device';
 
 const provider = Schema.Literals(['strava', 'garmin', 'intervals']);
 
@@ -97,6 +98,62 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       });
     }),
   );
+
+  // Garmin device routes – registered before the generic :provider routes so garmin/device is not captured.
+  appRoutes.get('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      const text = yield* documentsService.text(player, 'garmin_device.txt');
+
+      return c.json({ device: parseDeviceIdentity(text ?? ''), devices: GARMIN_DEVICES });
+    }),
+  );
+
+  appRoutes.put('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      const deviceBody = Strict({
+        product: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535)),
+        serial: Schema.optional(
+          Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(4_294_967_295)),
+        ),
+      });
+
+      const input = Schema.decodeUnknownSync(deviceBody)(yield* Effect.promise(() => c.req.json()));
+
+      const current = parseDeviceIdentity((yield* documentsService.text(player, 'garmin_device.txt')) ?? '');
+      const serial = input.serial ?? current?.serial ?? defaultSerial(player);
+
+      yield* documentsService.put(player, 'garmin_device.txt', deviceText(input.product, serial));
+
+      return c.json({ ok: true });
+    }),
+  );
+
+  appRoutes.delete('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      yield* documentsService.remove(player, 'garmin_device.txt');
+
+      return c.json({ ok: true });
+    }),
+  );
+
   appRoutes.put('/api/me/connections/:provider', (c) =>
     Effect.gen(function* () {
       const webSessionsService = yield* WebSessionsService;

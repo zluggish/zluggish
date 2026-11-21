@@ -134,6 +134,7 @@ The available keys are:
 | `ghosts.enabled`                      | `true` or `false`                      |
 | `uploads.zwift.enabled`               | `true` or `false`                      |
 | `uploads.strava.method`               | `"paid"` or `"free"`                   |
+| `uploads.garmin.device.enabled`       | `true` or `false`                      |
 | `devices.zwiftClick.enabled`          | `true` or `false`                      |
 | `workouts.trainingpeaks.bridgeFolder` | A JSON string containing a folder path |
 

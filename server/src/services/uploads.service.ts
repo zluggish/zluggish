@@ -16,6 +16,7 @@ import type { JobHandler } from '#src/services/jobs.service';
 import { SettingsService } from '#src/services/settings.service';
 import type { StoredEntry } from '#src/dtos/workout.dto';
 import { WorkoutsService } from '#src/services/workout.service';
+import { parseDeviceIdentity, patchDeviceIdentity } from '#src/world/fit-device';
 import { clearField, clone, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { resolve } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
@@ -403,6 +404,37 @@ const make = Effect.gen(function* () {
     return paths;
   }
 
+  /** Whether this rider let Garmin Connect receive the FIT file as recorded on their Edge. */
+  function sendsGarminDevice(player: number): boolean {
+    const settings = SettingsService.resolveRiderSettings(context.config.riderDefaults, context.settings.read(player));
+
+    return settings.uploads.garmin.device.enabled;
+  }
+
+  /** The device is opt-in: with `uploads.garmin.device.enabled` off, Garmin gets the file of the game, and the
+  chosen model and serial number are kept so they survive turning the setting back on. */
+  function forGarmin(player: number, fit: Uint8Array) {
+    if (!sendsGarminDevice(player)) {
+      return fit;
+    }
+
+    const identity = parseDeviceIdentity(repositories.riderDocuments.text(player, 'garmin_device.txt') ?? '');
+
+    if (!identity) {
+      return fit;
+    }
+    const result = patchDeviceIdentity(fit, identity);
+
+    if (result.patched === 0) {
+      context.world.lifecycle.log.warn(
+        'garmin.device',
+        'The FIT file could not be given the Garmin device; it is sent as it is',
+      );
+    }
+
+    return result.patched > 0 ? result.fit : fit;
+  }
+
   async function strava(player: number, activity: Activity) {
     const text = repositories.riderDocuments.text(player, 'strava_token.txt');
 
@@ -449,7 +481,7 @@ const make = Effect.gen(function* () {
       repositories.garminRepository.tokenStore(repositories.riderDocuments, player),
       context.config.integrations.garmin.domain,
       activity.fitFilename,
-      activity.fit,
+      forGarmin(player, activity.fit),
     );
   }
 

@@ -99,6 +99,7 @@
   let regenerateButton = $state<HTMLButtonElement>();
   let ghosts = $state(false);
   let stravaMethod = $state('paid');
+  let garminDevice = $state(false);
   let bridgeFolder = $state('');
 
   let search = $state('');
@@ -398,6 +399,9 @@
     return {
       ghosts: Boolean(body.overrides['ghosts.enabled'] ?? body.defaults.ghosts.enabled),
       stravaMethod: String(body.overrides['uploads.strava.method'] ?? body.defaults.uploads.strava.method),
+      garminDevice: Boolean(
+        body.overrides['uploads.garmin.device.enabled'] ?? body.defaults.uploads.garmin.device.enabled,
+      ),
       bridgeFolder: String(
         body.overrides['workouts.trainingpeaks.bridgeFolder'] ?? body.defaults.workouts.trainingpeaks.bridgeFolder,
       ),
@@ -405,7 +409,7 @@
   }
 
   function applySettings(body: UserSettings) {
-    ({ ghosts, stravaMethod, bridgeFolder } = preferences(body));
+    ({ ghosts, stravaMethod, garminDevice, bridgeFolder } = preferences(body));
   }
 
   async function saveSettings() {
@@ -524,6 +528,7 @@
         ...current.overrides,
         'ghosts.enabled': ghosts,
         'uploads.strava.method': stravaMethod,
+        'uploads.garmin.device.enabled': garminDevice,
         'workouts.trainingpeaks.bridgeFolder': bridgeFolder,
       },
     };
@@ -1625,7 +1630,14 @@
         {/if}
       {:else if path === '/integrations'}
         {#if settings}
-          <Connections {api} bind:stravaMethod bind:bridgeFolder saved={preferences(settings)} save={saveSettings} />
+          <Connections
+            {api}
+            bind:stravaMethod
+            bind:garminDevice
+            bind:bridgeFolder
+            saved={preferences(settings)}
+            save={saveSettings}
+          />
         {/if}
       {:else}
         <form
