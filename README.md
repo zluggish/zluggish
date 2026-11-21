@@ -49,6 +49,11 @@ Zluggish is a rewrite of [zwift-offline](https://github.com/zoffline/zwift-offli
   </tr>
 </table>
 
+Game password sign-ins share a limit of 30 attempts per connecting peer and 10 per rider each minute.
+Excess attempts return HTTP 429 with a 60-second retry hint. At most four password checks run at once,
+with one per rider; remembered sign-ins and token exchanges remain available. These limits are local
+to each server process and use the direct connection address, not forwarded headers.
+
 ## Get started
 
 Zluggish needs some technical know-how to set up. You need a server that runs Docker (Linux, Windows or macOS; performance needs are very low) and a Zwift client on Windows, macOS or Android. iOS is not supported.

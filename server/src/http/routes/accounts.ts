@@ -1,3 +1,4 @@
+import { PasswordLimits } from '#src/http/password-limits';
 import { AccountsService } from '#src/services/auth.service';
 import { WorkoutsService } from '#src/services/workout.service';
 import { FilesService } from '#src/services/files.service';
@@ -110,6 +111,23 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   const accounts = runtime.effects.runSync(AccountsService);
   const sessions = runtime.effects.runSync(SessionsService);
   const { world } = runtime;
+  const passwordLimits = new PasswordLimits();
+
+  async function verifyPassword(c: Context<RuntimeEnv>, user: User | null, password: string) {
+    const release = passwordLimits.acquire(peerAddress(c), user?.player_id);
+
+    if (!release) {
+      c.header('Retry-After', '60');
+      const message = 'Too many password attempts. Try again in a minute.';
+
+      throw new HTTPException(429, { message, res: c.text(message, 429) });
+    }
+    try {
+      return user ? await accounts.verify(user, password) : false;
+    } finally {
+      release();
+    }
+  }
   app.use('*', async (c: Context<RuntimeEnv>, next: Next) => {
     const authorization = c.req.header('Authorization');
     const existing = getCookie(c, 'zluggish_session');
@@ -282,7 +300,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         if (!signedIn) {
           return runtime.effects.runPromise(gamePage(c, unlockPage(c, user)));
         }
-      } else if (user && (await accounts.verify(user, password))) {
+      } else if (await verifyPassword(c, user, password)) {
         signedIn = user;
       }
 
@@ -491,10 +509,13 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     if (form.username) {
       user = accounts.byUsername(Schema.decodeUnknownSync(Schema.String)(form.username));
 
-      if (
-        !user ||
-        !(await accounts.verify(user, Schema.decodeUnknownSync(Schema.String.pipe(orElse('')))(form.password)))
-      ) {
+      const valid = await verifyPassword(
+        c,
+        user,
+        Schema.decodeUnknownSync(Schema.String.pipe(orElse('')))(form.password),
+      );
+
+      if (!user || !valid) {
         runtime.world.lifecycle.diagnostic('auth.login_failed', 'Login rejected', true);
         throw new HTTPException(401);
       }

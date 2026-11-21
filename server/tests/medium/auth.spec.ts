@@ -194,3 +194,88 @@ await test('failed account creation rolls back rows and folders and leaves the s
   assert.equal(created.role, 'rider');
   assert.equal(existsSync(resolve(f.accounts.storage, String(nextId))), true);
 });
+
+await test('game password routes share throttling while refresh and remembered login still work', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  const tokens = f.sessions.tokens(f.rider, f.tokens);
+  const verify = t.mock.method(f.accounts, 'verify', () => Promise.resolve(false));
+
+  for (let i = 0; i < 9; i++) {
+    const response = await f.app.request(tokenPath, {
+      method: 'POST',
+      body: new URLSearchParams({ username: f.rider.username.toUpperCase(), password: 'wrong' }),
+    });
+    assert.equal(response.status, 401);
+  }
+  const blocked = await browser.form('/login/', {
+    player_id: String(f.rider.player_id),
+    step: 'password',
+    password: 'test-password',
+  });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('Retry-After'), '60');
+  assert.equal(verify.mock.callCount(), 9);
+  const blockedToken = await f.app.request(tokenPath, {
+    method: 'POST',
+    body: new URLSearchParams({ username: f.rider.username, password: 'test-password' }),
+  });
+  assert.equal(blockedToken.status, 429);
+  assert.equal(blockedToken.headers.get('Retry-After'), '60');
+  const refresh = await f.app.request(tokenPath, {
+    method: 'POST',
+    body: new URLSearchParams({ refresh_token: tokens.refresh_token }),
+  });
+  assert.equal(refresh.status, 200);
+  const opened = f.sessions.open();
+  const remembered = await f.app.request('/login/', {
+    method: 'POST',
+    headers: {
+      Cookie: `zluggish_session=${opened.id}; zluggish_remember_${f.rider.player_id}=${f.sessions.remember(f.rider)}`,
+    },
+    body: new URLSearchParams({ csrf_token: opened.session.csrf, player_id: String(f.rider.player_id) }),
+  });
+  assert.equal(remembered.status, 302);
+  assert.equal(verify.mock.callCount(), 9);
+});
+
+await test('overlapping password requests reject before hashing and release slots after errors', async (t) => {
+  const f = await mediumFixture(t);
+  const pending = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const verify = t.mock.method(f.accounts, 'verify', async () => {
+    started.resolve();
+    await pending.promise;
+    throw new Error('hash failure');
+  });
+  const request = () =>
+    f.app.request(tokenPath, {
+      method: 'POST',
+      body: new URLSearchParams({ username: f.rider.username, password: 'wrong' }),
+    });
+  const first = request();
+  await started.promise;
+  const blocked = await request();
+  assert.equal(blocked.status, 429);
+  assert.equal(verify.mock.callCount(), 1);
+  pending.resolve();
+  const failed = await first;
+  assert.equal(failed.status, 500);
+  verify.mock.mockImplementation(() => Promise.resolve(false));
+  const retried = await request();
+  assert.equal(retried.status, 401);
+});
+
+await test('unknown usernames and forged forwarding headers cannot bypass peer limits', async (t) => {
+  const f = await mediumFixture(t);
+  const verify = t.mock.method(f.accounts, 'verify', () => Promise.resolve(true));
+  for (let i = 0; i < 31; i++) {
+    const response = await f.app.request(tokenPath, {
+      method: 'POST',
+      headers: { 'X-Forwarded-For': `192.0.2.${i}`, 'X-Real-IP': `192.0.2.${i}` },
+      body: new URLSearchParams({ username: `unknown-${i}`, password: 'wrong' }),
+    });
+    assert.equal(response.status, i < 30 ? 401 : 429);
+  }
+  assert.equal(verify.mock.callCount(), 0);
+});
