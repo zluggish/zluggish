@@ -41,36 +41,31 @@ function openSessions(accounts: AccountsService['Service']) {
   function open(id?: string): OpenedSession {
     const now = Date.now();
 
-    for (const [key, session] of browsers) {
-      if (now - session.touched > 86_400_000) {
-        end(key);
+    // Map insertion order tracks last use. Reclaim only a bounded batch per request;
+    // never displace a live sign-in (anonymous sessions also hold CSRF state).
+    for (let reclaimed = 0; reclaimed < 64; reclaimed++) {
+      const oldest = browsers.entries().next().value;
+
+      if (!oldest || now - oldest[1].touched <= 86_400_000) {
+        break;
       }
+      end(oldest[0]);
     }
     const previous = id ? browsers.get(id) : undefined;
 
     if (id && previous) {
-      previous.touched = now;
+      end(id);
 
-      return { id, session: previous };
+      if (now - previous.touched <= 86_400_000) {
+        previous.touched = now;
+        browsers.set(id, previous);
+
+        return { id, session: previous };
+      }
     }
 
     if (browsers.size >= 10_000) {
-      let oldest: string | undefined;
-      let touched = Infinity;
-
-      for (const [key, session] of browsers) {
-        if (session.identity || !(session.touched < touched)) {
-          continue;
-        }
-
-        oldest = key;
-        touched = session.touched;
-      }
-
-      if (oldest === undefined) {
-        throw new ApplicationError({ status: 503, message: 'Too many browser sessions' });
-      }
-      end(oldest);
+      throw new ApplicationError({ status: 503, message: 'Too many browser sessions' });
     }
 
     const token = repositories.cryptoRepository.randomBytes(32).toString('base64url');
