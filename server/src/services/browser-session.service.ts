@@ -13,7 +13,16 @@ export interface BrowserSession {
 
 type BrowserEvent = { type: 'login'; identity: string } | { type: 'clear-selection' };
 
-const identityPayload = Schema.Struct({ session_cookie: Schema.String });
+const identityPayload = Schema.Struct({
+  session_cookie: Schema.String,
+  exp: Schema.Number,
+  iat: Schema.Number,
+  typ: Schema.String,
+});
+
+type TokenPurpose = 'access' | 'refresh';
+export const ACCESS_SECONDS = 6 * 3600;
+export const REFRESH_SECONDS = 90 * 86_400;
 
 export const REMEMBER_SECONDS = 90 * 86_400;
 
@@ -144,7 +153,7 @@ function openSessions(accounts: AccountsService['Service']) {
     return session.identity ? accounts.identity(session.identity) : null;
   }
 
-  function bearer(token: string) {
+  function bearer(token: string, purpose: TokenPurpose = 'access', now = Date.now()) {
     const payload = token.split('.', 2)[1];
 
     if (!payload) {
@@ -156,7 +165,30 @@ function openSessions(accounts: AccountsService['Service']) {
         JSON.parse(Buffer.from(payload, 'base64url').toString()),
       );
 
-      const identity = repositories.cryptoRepository.verifyIdentity(parsed.session_cookie, secret);
+      // The outer JWT uses Zwift's public "nosecret" key. Only the inner signature is authoritative.
+      const claims = repositories.cryptoRepository.verifyIdentity(parsed.session_cookie, secret) ?? '';
+      const match = /^game-v1:(access|refresh):(\d+:\d+):(\d+):(\d+)$/.exec(claims);
+
+      if (!match) {
+        return null;
+      }
+      const [, signedPurpose, identity, issued, expires] = match;
+      const iat = Number(issued);
+      const exp = Number(expires);
+
+      if (
+        signedPurpose !== purpose ||
+        !Number.isSafeInteger(iat) ||
+        !Number.isSafeInteger(exp) ||
+        exp <= iat ||
+        now < iat * 1000 ||
+        now >= exp * 1000 ||
+        parsed.iat !== iat ||
+        parsed.exp !== exp ||
+        parsed.typ !== (purpose === 'access' ? 'Bearer' : 'Refresh')
+      ) {
+        return null;
+      }
 
       return identity ? accounts.identity(identity) : null;
     } catch {
@@ -164,7 +196,9 @@ function openSessions(accounts: AccountsService['Service']) {
     }
   }
 
-  function token(identity: string, template: string) {
+  function token(identity: string, template: string, purpose: TokenPurpose, now = Date.now()) {
+    const iat = Math.floor(now / 1000);
+    const exp = iat + (purpose === 'access' ? ACCESS_SECONDS : REFRESH_SECONDS);
     const values = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
       Buffer.from(template.split('.', 2)[1] ?? '', 'base64url').toString(),
     );
@@ -172,7 +206,14 @@ function openSessions(accounts: AccountsService['Service']) {
     const body = Buffer.from(
       JSON.stringify({
         ...values,
-        session_cookie: repositories.cryptoRepository.signIdentity(identity, secret),
+        iat,
+        exp,
+        nbf: iat,
+        typ: purpose === 'access' ? 'Bearer' : 'Refresh',
+        session_cookie: repositories.cryptoRepository.signIdentity(
+          `game-v1:${purpose}:${identity}:${iat}:${exp}`,
+          secret,
+        ),
       }),
     ).toString('base64url');
 
@@ -193,11 +234,13 @@ function openSessions(accounts: AccountsService['Service']) {
       throw new ApplicationError({ status: 401, message: 'Account changed. Sign in again.' });
     }
 
+    const now = Date.now();
+
     return {
-      access_token: token(identity, templates.access),
-      expires_in: 1_000_021_600,
-      refresh_expires_in: 611_975_560,
-      refresh_token: token(identity, templates.refresh),
+      access_token: token(identity, templates.access, 'access', now),
+      expires_in: ACCESS_SECONDS,
+      refresh_expires_in: REFRESH_SECONDS,
+      refresh_token: token(identity, templates.refresh, 'refresh', now),
       token_type: 'bearer',
       id_token: templates.id,
       'not-before-policy': 1_408_478_984,

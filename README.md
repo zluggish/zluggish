@@ -67,6 +67,8 @@ Then follow the documentation:
 
 Coming from zwift-offline? Read [Migrate from zwift-offline](https://docs.zluggish.com/maintenance/migrating/) first, and back up your storage folder.
 
+Game access tokens expire after six hours; refresh credentials expire after 90 days. Only refresh credentials can renew game access. Updating from older versions invalidates existing game tokens, so sign in again through the launcher.
+
 ## Documentation
 
 | Topic                                                                           | Covers                                                            |
