@@ -14,7 +14,13 @@ const day = 24 * hour;
 /** A media reservation older than its upload token is abandoned. */
 const reservationMs = hour;
 
-export type RetentionCandidate = { path: string; bytes: number; reason: string };
+export type RetentionCandidate = {
+  path: string;
+  bytes: number;
+  reason: string;
+  identity?: string;
+  owner?: { kind: keyof ReturnType<Repositories['activitiesRepository']['owners']>; id: number };
+};
 
 export type RetentionPlan = {
   jobs: number;
@@ -45,11 +51,11 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
     const files: Array<RetentionCandidate> = [];
     const owners = repositories.activitiesRepository.owners();
 
-    const add = async (path: string, reason: string) => {
+    const add = async (path: string, reason: string, owner: NonNullable<RetentionCandidate['owner']>) => {
       const info = await repositories.filesRepository.statAsync(path);
 
       if (info) {
-        files.push({ path, bytes: info.bytes, reason });
+        files.push({ path, bytes: info.bytes, reason, identity: info.identity, owner });
       }
     };
 
@@ -66,10 +72,13 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
       const folder = resolve(storage, String(row.player_id));
 
       if (row.table === 'activity_image') {
-        await add(resolve(folder, 'images', `${row.id}.jpg`), 'abandoned upload');
+        await add(resolve(folder, 'images', `${row.id}.jpg`), 'abandoned upload', { kind: 'images', id: row.id });
       } else {
         for (const extension of ['mp4', 'mov']) {
-          await add(resolve(folder, 'medias', `${row.id}.${extension}`), 'abandoned upload');
+          await add(resolve(folder, 'medias', `${row.id}.${extension}`), 'abandoned upload', {
+            kind: 'media',
+            id: row.id,
+          });
         }
       }
     }
@@ -78,7 +87,10 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
 
     for (const entry of await repositories.filesRepository.entriesAsync(resolve(storage, 'activities'))) {
       if (entry.isFile() && /^\d+$/.test(entry.name) && !owners.charts.has(Number(entry.name))) {
-        await add(resolve(storage, 'activities', entry.name), 'orphaned chart');
+        await add(resolve(storage, 'activities', entry.name), 'orphaned chart', {
+          kind: 'charts',
+          id: Number(entry.name),
+        });
       }
     }
 
@@ -92,7 +104,10 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
         const activity = /^(\d+) - /.exec(entry.name)?.[1];
 
         if (activity !== undefined && !owners.activities.has(Number(activity))) {
-          await add(resolve(folder, 'fit', entry.name), 'orphaned FIT export');
+          await add(resolve(folder, 'fit', entry.name), 'orphaned FIT export', {
+            kind: 'activities',
+            id: Number(activity),
+          });
         }
       }
 
@@ -104,7 +119,10 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
           const id = /^(\d+)\.\w+$/.exec(entry.name)?.[1];
 
           if (id !== undefined && !owned.has(Number(id)) && !abandoned.has(`${table}:${id}`)) {
-            await add(resolve(folder, directory, entry.name), 'orphaned media');
+            await add(resolve(folder, directory, entry.name), 'orphaned media', {
+              kind: table === 'activity_image' ? 'images' : 'media',
+              id: Number(id),
+            });
           }
         }
       }
@@ -179,20 +197,59 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
   }
 
   async function apply(plan: RetentionPlan, now = Date.now()) {
+    let files = 0;
+    let bytes = 0;
     immediate(repositories.db, () => {
       repositories.jobsRepository.prune(now - retention.finishedJobsDays * day);
       repositories.uploadsRepository.prune(now - retention.deliveryRecordsDays * day);
 
-      for (const row of plan.media) {
-        repositories.activitiesRepository.deleteMedia(row.table, row.id);
+      // A preview is only a hint. A reservation may have become ready since then.
+      for (const table of ['activity_image', 'activity_media'] as const) {
+        const abandoned = new Set(
+          repositories.activitiesRepository.abandonedMedia(table, now - reservationMs).map((row) => row.id),
+        );
+        for (const row of plan.media) {
+          if (row.table === table && abandoned.has(row.id)) {
+            repositories.activitiesRepository.deleteMedia(table, row.id);
+          }
+        }
+      }
+    });
+
+    // Commit the reservation fence before touching files: a filesystem failure must
+    // never roll it back and let an in-flight upload mark a removed file ready.
+    immediate(repositories.db, () => {
+      const owners = repositories.activitiesRepository.owners();
+      for (const file of plan.files) {
+        const owner = file.owner;
+        if (
+          !owner ||
+          !file.identity ||
+          !repositories.filesRepository.removeUnchanged(
+            file.path,
+            file.identity,
+            () => !owners[owner.kind].has(owner.id),
+          )
+        ) {
+          continue;
+        }
+
+        files++;
+        bytes += file.bytes;
       }
     });
 
     for (const file of plan.files) {
+      if (file.owner) {
+        continue;
+      }
+
       await repositories.filesRepository.removeTreeAsync(file.path);
+      files++;
+      bytes += file.bytes;
     }
 
-    return { files: plan.files.length, bytes: plan.files.reduce((total, file) => total + file.bytes, 0) };
+    return { files, bytes };
   }
 
   async function size(path: string): Promise<number> {

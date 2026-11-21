@@ -250,3 +250,135 @@ await test('a media row is ready only after its file is durable', async (t) => {
     true,
   );
 });
+
+await test('an upload published while retention scans keeps its row and file', async (t) => {
+  const { f, id, folder, service } = await storage(t);
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const original = AssetFiles.prototype.entriesAsync;
+  let paused = false;
+  t.mock.method(AssetFiles.prototype, 'entriesAsync', async function (this: AssetFiles, path: string) {
+    if (!paused) {
+      paused = true;
+      entered.resolve();
+      await resume.promise;
+    }
+    return original.call(this, path);
+  });
+  const planning = Effect.runPromise(service.plan());
+  await entered.promise;
+  const image = await f.effects.runPromise(
+    ActivitiesService.use((uploads) => uploads.saveImage(f.rider.player_id, String(id), new Uint8Array([1]))),
+  );
+  resume.resolve();
+  const plan = await planning;
+  const path = resolve(folder, 'images', `${image}.jpg`);
+  assert.ok(
+    plan.files.some((file) => file.path === path),
+    'the scan used its earlier ownership snapshot',
+  );
+  await Effect.runPromise(service.apply(plan));
+  assert.ok(existsSync(path));
+  assert.equal(f.accounts.db.prepare('SELECT state FROM activity_image WHERE id=?').get(image)?.state, 'ready');
+});
+
+await test('a reservation completed after preview survives cleanup for images and videos', async (t) => {
+  const { f, id, folder, reserved, service } = await storage(t);
+  const repository = f.accounts.repositories.activitiesRepository;
+  const image = Number(repository.insertActivityImage(f.rider.player_id, id).lastInsertRowid);
+  f.accounts.db.prepare('UPDATE activity_image SET created_at=? WHERE id=?').run(Date.now() - day, image);
+  const path = resolve(folder, 'images', `${image}.jpg`);
+  write(path);
+  const plan = await Effect.runPromise(service.plan());
+  assert.ok(plan.media.some((row) => row.table === 'activity_image' && row.id === image));
+  assert.ok(repository.mediaState('activity_image', image, 'ready'));
+  assert.ok(repository.mediaState('activity_media', reserved, 'ready'));
+  await Effect.runPromise(service.apply(plan));
+  assert.ok(existsSync(path));
+  assert.ok(existsSync(resolve(folder, 'medias', `${reserved}.mp4`)));
+  assert.equal(f.accounts.db.prepare('SELECT state FROM activity_image WHERE id=?').get(image)?.state, 'ready');
+  assert.equal(repository.findActivityMedia(reserved)?.state, 'ready');
+});
+
+await test('cleanup preserves a file replaced after preview', async (t) => {
+  const { folder, service } = await storage(t);
+  const path = resolve(folder, 'images', '999.jpg');
+  const plan = await Effect.runPromise(service.plan());
+  new AssetFiles().writeDurable(path, 'replacement', true);
+  await Effect.runPromise(service.apply(plan));
+  assert.equal(readFileSync(path, 'utf8'), 'replacement');
+});
+
+await test('an in-flight upload cannot complete a reservation removed by cleanup', async (t) => {
+  const { f, id, folder, service } = await storage(t);
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const original = AssetFiles.prototype.writeDurableAsync;
+  let path = '';
+  t.mock.method(
+    AssetFiles.prototype,
+    'writeDurableAsync',
+    async function (this: AssetFiles, target: string, data: string | Uint8Array, replace = false) {
+      path = target;
+      entered.resolve();
+      await resume.promise;
+      return original.call(this, target, data, replace);
+    },
+  );
+  const uploading = f.effects.runPromise(
+    ActivitiesService.use((uploads) => uploads.saveImage(f.rider.player_id, String(id), new Uint8Array([1]))),
+  );
+  const rejected = assert.rejects(uploading);
+  await entered.promise;
+  f.accounts.db.prepare('UPDATE activity_image SET created_at=?').run(Date.now() - day);
+  const plan = await Effect.runPromise(service.plan());
+  assert.ok(plan.media.some((row) => row.table === 'activity_image'));
+  await Effect.runPromise(service.apply(plan));
+  resume.resolve();
+  await rejected;
+  assert.ok(path.startsWith(resolve(folder, 'images')));
+  assert.equal(existsSync(path), false);
+  assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM activity_image').get()?.n, 0);
+});
+
+await test('a removal failure cannot restore a reservation after deleting its file', async (t) => {
+  const { f, id, service } = await storage(t);
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const write = AssetFiles.prototype.writeDurableAsync;
+  let path = '';
+  t.mock.method(
+    AssetFiles.prototype,
+    'writeDurableAsync',
+    async function (this: AssetFiles, target: string, data: string | Uint8Array, replace = false) {
+      await write.call(this, target, data, replace);
+      path = target;
+      entered.resolve();
+      await resume.promise;
+    },
+  );
+  const uploading = f.effects.runPromise(
+    ActivitiesService.use((uploads) => uploads.saveImage(f.rider.player_id, String(id), new Uint8Array([1]))),
+  );
+  const rejected = assert.rejects(uploading);
+  await entered.promise;
+  f.accounts.db.prepare('UPDATE activity_image SET created_at=?').run(Date.now() - day);
+  const plan = await Effect.runPromise(service.plan());
+  const remove = AssetFiles.prototype.removeUnchanged;
+  t.mock.method(
+    AssetFiles.prototype,
+    'removeUnchanged',
+    function (this: AssetFiles, target: string, identity: string, eligible: () => boolean) {
+      const removed = remove.call(this, target, identity, eligible);
+      if (target === path && removed) {
+        throw new Error('removal interrupted');
+      }
+      return removed;
+    },
+  );
+  await assert.rejects(Effect.runPromise(service.apply(plan)), /removal interrupted/);
+  assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM activity_image').get()?.n, 0);
+  resume.resolve();
+  await rejected;
+  assert.equal(existsSync(path), false);
+});

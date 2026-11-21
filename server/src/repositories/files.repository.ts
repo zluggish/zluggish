@@ -172,13 +172,34 @@ export class AssetFiles {
     try {
       const info = await stat(path);
 
-      return { bytes: info.size, modified: info.mtimeMs, directory: info.isDirectory() };
+      return {
+        bytes: info.size,
+        modified: info.mtimeMs,
+        directory: info.isDirectory(),
+        identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`,
+      };
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
         return null;
       }
       throw error;
     }
+  }
+
+  /** No await between identity/ownership checks and unlink: local publishers cannot interleave. */
+  removeUnchanged(path: string, identity: string, eligible: () => boolean) {
+    if (!existsSync(path)) {
+      return false;
+    }
+    const info = lstatSync(path);
+    const current = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+
+    if (current !== identity || !eligible()) {
+      return false;
+    }
+    rmSync(path, { recursive: true, force: true });
+
+    return true;
   }
 
   async removeTreeAsync(path: string) {
