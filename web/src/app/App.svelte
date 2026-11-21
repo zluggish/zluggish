@@ -285,17 +285,35 @@
     return decode(schema, body);
   }
 
+  let destination: string | null = null;
+
   function go(next: string) {
-    if (next !== path) {
+    // An operation may redirect, but a newer navigation owns the browser URL.
+    if (destination === null && next !== location.pathname) {
       history.pushState({}, '', next);
     }
     path = next;
   }
 
   async function navigate(next: string) {
-    go(next);
-    message = '';
-    await run(enter);
+    if (next !== location.pathname) {
+      history.pushState({}, '', next);
+    }
+    destination = next;
+    await loadDestination();
+  }
+
+  async function loadDestination() {
+    if (busy || destination === null) {
+      return;
+    }
+
+    const next = destination;
+    await run(async () => {
+      path = next;
+      destination = null;
+      await enter();
+    });
   }
 
   async function run(work: () => Promise<void>, scope = '') {
@@ -315,6 +333,9 @@
       message = error instanceof Error ? error.message : 'Request failed.';
     } finally {
       busy = false;
+      // Keep route-dependent mutations and loads serial. Only the latest requested
+      // destination is loaded after the active operation (including failures).
+      await loadDestination();
     }
   }
 
@@ -804,8 +825,7 @@
 
   onMount(() => {
     const pop = () => {
-      path = location.pathname;
-      void run(enter);
+      void navigate(location.pathname);
     };
 
     window.addEventListener('popstate', pop);
