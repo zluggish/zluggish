@@ -122,6 +122,13 @@ export function startRideListeners(runtime: Runtime) {
         return;
       }
 
+      // Channel 4 has a one-byte header and a four-byte authentication tag.
+      // Drop unrepresentable messages without consuming a sequence number.
+      if (payload.length > 0xff_ff - 5) {
+        world.lifecycle.diagnostic('network.tcp_oversized', 'Dropped oversized relay message');
+
+        return;
+      }
       const packet = encodePacket(
         payload,
         relay.key,
@@ -266,40 +273,55 @@ export function startRideListeners(runtime: Runtime) {
 
             if (!timer) {
               timer = setInterval(() => {
-                if (playerId === null || active.get(playerId) !== socket) {
-                  return;
-                }
-                const updates = world.updates.get(playerId) ?? [];
-                const phone = world.phones.get(playerId);
+                try {
+                  if (playerId === null || active.get(playerId) !== socket) {
+                    return;
+                  }
+                  const updates = world.updates.get(playerId) ?? [];
+                  const phone = world.phones.get(playerId);
 
-                if (phone) {
-                  send(toBinary(ServerToClientSchema, phone));
-                  world.phones.delete(playerId);
-                }
-
-                world.updates.delete(playerId);
-
-                let response = create(ServerToClientSchema, {
-                  serverRealm: 1n,
-                  playerId,
-                  worldTime: worldTime(),
-                });
-
-                for (const update of updates) {
-                  response.updates.push(update);
-
-                  if (!(toBinary(ServerToClientSchema, response).length >= 1300)) {
-                    continue;
+                  if (phone) {
+                    send(toBinary(ServerToClientSchema, phone));
+                    world.phones.delete(playerId);
                   }
 
-                  send(toBinary(ServerToClientSchema, response));
-                  response = create(ServerToClientSchema, {
+                  world.updates.delete(playerId);
+
+                  let response = create(ServerToClientSchema, {
+                    serverRealm: 1n,
                     playerId,
                     worldTime: worldTime(),
                   });
-                }
 
-                send(toBinary(ServerToClientSchema, response));
+                  for (const update of updates) {
+                    response.updates.push(update);
+
+                    if (toBinary(ServerToClientSchema, response).length > 0xff_ff - 5) {
+                      response.updates.pop();
+                      send(toBinary(ServerToClientSchema, response));
+                      response = create(ServerToClientSchema, {
+                        playerId,
+                        worldTime: worldTime(),
+                        updates: [update],
+                      });
+                    }
+
+                    if (!(toBinary(ServerToClientSchema, response).length >= 1300)) {
+                      continue;
+                    }
+
+                    send(toBinary(ServerToClientSchema, response));
+                    response = create(ServerToClientSchema, {
+                      playerId,
+                      worldTime: worldTime(),
+                    });
+                  }
+
+                  send(toBinary(ServerToClientSchema, response));
+                } catch {
+                  world.lifecycle.diagnostic('network.tcp_send_failed', 'Closed failed relay stream');
+                  socket.destroy();
+                }
               }, 1000);
             }
           } else {

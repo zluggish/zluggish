@@ -283,10 +283,14 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const user = authenticated(c);
       const id = BigInt(user.player_id);
 
-      const update = parseProtobuf(
-        WorldAttributeSchema,
-        new Uint8Array(yield* Effect.promise(() => c.req.arrayBuffer())),
-      );
+      // Leave room for the ServerToClient envelope and encrypted TCP framing.
+      const maxAttributeBytes = 60 * 1024;
+      const bytes = new Uint8Array(yield* Effect.promise(() => c.req.arrayBuffer()));
+
+      if (bytes.length > maxAttributeBytes) {
+        throw new HTTPException(413);
+      }
+      const update = parseProtobuf(WorldAttributeSchema, bytes);
 
       update.worldTimeExpire = worldTime() + 60_000n;
       update.waF12 = 1n;
@@ -328,6 +332,9 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         }
       }
 
+      if (toBinary(WorldAttributeSchema, update).length > maxAttributeBytes) {
+        throw new HTTPException(413);
+      }
       runtime.world.enqueue(update, recipients);
 
       return c.body(null, 201);
