@@ -5,9 +5,8 @@ import { Readable } from 'node:stream';
 
 const resolver = new Resolver();
 
-resolver.setServers(['8.8.8.8', '8.8.4.4']);
+resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
-/** Resolve the upstream independently of the client's local Zwift hostname redirect. */
 export async function fetchCdn(path: string): Promise<Response> {
   return new Promise((done, fail) => {
     const req = request(

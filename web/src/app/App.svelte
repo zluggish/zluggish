@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { randomUUID } from '../lib/uuid';
   import { t } from '../lib/i18n/index';
   import { onMount } from 'svelte';
   import { requestJson, ConnectionError, connection } from '../lib/connection';
@@ -74,7 +75,7 @@
   let fieldErrors = $state<Record<string, Array<string>>>({});
   let conflict = $state<User | null>(null);
   let pending = $state<Pending | null>(null);
-  let operation = crypto.randomUUID();
+  let operation = randomUUID();
 
   let mode = $state<'new' | 'existing'>('new');
   let key = $state('');
@@ -123,7 +124,7 @@
   let certificateMode = $state<TlsStatus['mode'] | null>(null);
   let backingUp = $state(false);
   let backupMessage = $state('');
-  let backupOperation = crypto.randomUUID();
+  let backupOperation = randomUUID();
   let serverConfig = $state<{ rows: Array<[string, string]> } | null>(null);
   let worldSettings = $state<Array<WorldSetting>>([]);
   let worldSetting = $state<WorldSetting | null>(null);
@@ -296,7 +297,7 @@
     if (!response.ok) {
       // The server answered, so a retry is a new operation. A lost response keeps the ID for a safe retry.
       if (method !== 'GET') {
-        operation = crypto.randomUUID();
+        operation = randomUUID();
       }
       fieldErrors = fields.fieldErrors ?? {};
       const scope = selected && `/api/manage/users/${selected.player_id}`;
@@ -318,7 +319,7 @@
     }
 
     if (method !== 'GET') {
-      operation = crypto.randomUUID();
+      operation = randomUUID();
     }
 
     return decode(schema, body);
@@ -447,7 +448,7 @@
         result = await api(backupResponse, `/api/manage/server/backups/${backupOperation}`);
       }
 
-      backupOperation = crypto.randomUUID();
+      backupOperation = randomUUID();
       backupMessage = result.state === 'done' ? t('backup_success', { value1: result.name }) : t('backup_failure');
     } catch (error) {
       backupMessage = error instanceof Error ? error.message : t('backup_request_failed');

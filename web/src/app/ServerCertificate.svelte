@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { randomUUID } from '../lib/uuid';
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
   import { onMount } from 'svelte';
@@ -64,7 +65,7 @@
   });
 
   function rotate() {
-    const operation = crypto.randomUUID();
+    const operation = randomUUID();
 
     confirm({
       title: t('certificate_rotate_confirm'),

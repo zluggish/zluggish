@@ -11,7 +11,7 @@ const redirected = new Set(['secure.zwift.com', 'us-or-rly101.zwift.com', 'cdn.z
 export function startDns(advertisedIp: string, host: string, port = 53, log = new LoggingRepository()) {
   const socket = createSocket(host.includes(':') ? 'udp6' : 'udp4');
   const resolver = new Resolver({ timeout: 2000, tries: 1 });
-  resolver.setServers(['8.8.8.8', '8.8.4.4']);
+  resolver.setServers(['1.1.1.1', '1.0.0.1']);
   // Cache freshness is derived at lookup; handlers acquire/release one admission slot in try/finally.
   const cache = new Map<string, { ip: string; expires: number }>();
   let pending = 0;

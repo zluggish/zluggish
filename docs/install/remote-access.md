@@ -5,7 +5,11 @@ description: Reach the Zluggish web app and game server remotely through Cloudfl
 
 # Remote access
 
-Use Cloudflare Tunnel to reach Zluggish without forwarding ports on your router. Follow the setup for the access you need.
+By default, Zluggish listens to `127.0.0.1` which means it only accepts request from the local machine. This is fine if you are running Zwift on the same machine, but you will get an insecure http connection warning when browsing to the webapp.
+
+You can set up remote access to Zluggish in several ways, including a simple reverse proxy (only secure if restricted to your local network), Wireguard Tailscale or Cloudflare Tunnel. This guide will show how to set up Cloudflare.
+
+With this setup, you will get a TLS certificate for the webapp and you and your friends can run the Zwift app from any location.
 
 | Access                    | What to set up                                                                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
