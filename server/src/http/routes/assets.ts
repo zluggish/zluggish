@@ -6,7 +6,7 @@ import { FilesService } from '#src/services/files.service';
 import { packageRoot } from '#src/config/load';
 import { gamePage } from '#src/http/game/render';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
-import type { Env, Hono } from 'hono';
+import type { Context, Env, Hono } from 'hono';
 import { extname, relative, resolve } from 'node:path';
 
 const types = new Map([
@@ -89,11 +89,16 @@ export function assetRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       }),
     );
 
+  // Launcher 1.1.17 requests game assets over HTTPS; the CDN listener can proxy them.
+  const redirectToCdn = (c: Context<RuntimeEnv>) =>
+    // eslint-disable-next-line unicorn/prefer-https -- HTTP reaches the separate CDN listener and avoids a redirect loop.
+    c.redirect(`http://cdn.zwift.com${c.req.path}${new URL(c.req.url).search}`);
+
+  app.get('/gameassets/*', redirectToCdn);
+  app.get('/app/MacUpdate/*', redirectToCdn);
+  app.get('/static/web/launcher/app/*', redirectToCdn);
+
   serve('/style', resolve(runtime.assets, 'cdn/style'));
   serve('/static', resolve(runtime.assets, 'cdn/static'));
   serve('/mochi', resolve(runtime.config.storageDir, 'mochi'));
-
-  // Launcher 1.1.17 requests game assets over HTTPS; the CDN listener can proxy them.
-  // eslint-disable-next-line unicorn/prefer-https -- HTTP reaches the separate CDN listener and avoids a redirect loop.
-  app.get('/gameassets/*', (c) => c.redirect(`http://cdn.zwift.com${c.req.path}`));
 }

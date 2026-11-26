@@ -41,8 +41,9 @@
     userSchema,
     userSettingsSchema,
     usersResponse,
+    zwiftUpdatesResponse,
   } from './schemas';
-  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting } from './schemas';
+  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting, ZwiftUpdates } from './schemas';
   import type { TlsStatus } from './tls';
 
   type Pending = { title: string; detail: string; label: string; destructive: boolean; confirm: () => Promise<void> };
@@ -129,6 +130,7 @@
   let backupMessage = $state('');
   let backupOperation = randomUUID();
   let serverConfig = $state<{ rows: Array<[string, string]> } | null>(null);
+  let zwiftUpdates = $state<ZwiftUpdates | null>(null);
   let worldSettings = $state<Array<WorldSetting>>([]);
   let worldSetting = $state<WorldSetting | null>(null);
   let worldValues = $state<Record<string, string | number | boolean>>({});
@@ -430,10 +432,17 @@
   }
 
   async function loadServer() {
+    zwiftUpdates = null;
     const body = await api(serverSettingsResponse, '/api/manage/settings');
     worldSettings = body.worldSettings;
     serverConfig = { rows: body.configuration };
+    zwiftUpdates = body.zwiftUpdates;
     events = (await api(eventsResponse, '/api/manage/events')).events;
+  }
+
+  async function saveZwiftUpdates(allowed: boolean) {
+    zwiftUpdates = await api(zwiftUpdatesResponse, '/api/manage/server/zwift-updates', 'PATCH', { allowed });
+    done(allowed ? t('zwift_updates_allowed') : t('zwift_updates_held'));
   }
 
   async function createBackup() {
@@ -1209,6 +1218,40 @@
               pending = confirmation;
             }}
           />
+
+          {#if zwiftUpdates}
+            <section class="panel">
+              <h2>{t('zwift_client_updates')}</h2>
+              <p>
+                <strong
+                  >{zwiftUpdates.allowed && zwiftUpdates.available
+                    ? t('zwift_updates_status_allowed')
+                    : t('zwift_updates_status_held')}</strong
+                >
+                {t('bundled_game_version', { version: zwiftVersion })}
+              </p>
+              <p class="muted">{t('zwift_updates_scope')}</p>
+              {#if !zwiftUpdates.available}
+                <p class="muted">{t('cdn_proxy_disabled_config')}</p>
+              {/if}
+              {#if zwiftUpdates.allowed}
+                <button disabled={busy} onclick={() => run(() => saveZwiftUpdates(false))}>{t('hold_updates')}</button>
+              {:else}
+                <button
+                  disabled={busy || !zwiftUpdates.available}
+                  onclick={() => {
+                    pending = {
+                      title: t('allow_zwift_updates_title'),
+                      detail: t('allow_zwift_updates_detail'),
+                      label: t('allow_updates'),
+                      destructive: false,
+                      confirm: () => saveZwiftUpdates(true),
+                    };
+                  }}>{t('allow_updates')}</button
+                >
+              {/if}
+            </section>
+          {/if}
 
           <section class="panel">
             <h2>{t('backups')}</h2>

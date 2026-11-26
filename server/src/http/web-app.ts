@@ -15,6 +15,7 @@ import { effectRoutes } from '#src/http/effect';
 import { ZwiftAndroidService, zwiftAndroidChunkSize } from '#src/services/zwift-android.service';
 import { fileResponse } from '#src/http/file-response';
 import { RecordsService } from '#src/services/records.service';
+import { ZwiftUpdatesService } from '#src/services/zwift-updates.service';
 import { webConnectionRoutes } from '#src/http/web-connections';
 import { webProfileRoutes } from '#src/http/web-profile';
 import { Hono } from 'hono';
@@ -924,8 +925,31 @@ export function createWebApp(runtime: HttpRuntime) {
           riderDefaults: runtime.config.riderDefaults,
         }),
         worldSettings: yield* managementService.worldSettings(),
+        zwiftUpdates: {
+          allowed: yield* (yield* ZwiftUpdatesService).allowed(),
+          available: runtime.config.proxy.mode !== 'disabled',
+        },
         readOnly: true,
       });
+    }),
+  );
+
+  appRoutes.patch('/api/manage/server/zwift-updates', (c) =>
+    Effect.gen(function* () {
+      const { allowed } = Schema.decodeUnknownSync(Strict({ allowed: Schema.Boolean }))(
+        yield* Effect.promise(() => c.req.json()),
+      );
+
+      const available = runtime.config.proxy.mode !== 'disabled';
+      const zwiftUpdates = yield* ZwiftUpdatesService;
+
+      if (allowed && !available) {
+        throw new ApplicationError({ status: 409, message: t('cdn_proxy_disabled') });
+      }
+
+      yield* zwiftUpdates.setAllowed(allowed);
+
+      return c.json({ allowed, available });
     }),
   );
 
