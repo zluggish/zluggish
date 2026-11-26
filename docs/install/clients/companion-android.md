@@ -1,34 +1,47 @@
 ---
 sidebar_position: 5
-description: Publish and install Zwift Companion for Android on your Zluggish server.
+description: Publish and install Companion for Zluggish on Android and send Companion traffic to your server.
 ---
 
 # Companion (Android)
 
-The patched Companion app has the Zluggish icon and installs alongside the official app. It works without root.
+**Companion for Zluggish** trusts your server's certificate and installs alongside Zwift Companion from Google Play. You don't need to root your device.
 
-Download the patched app from the specific Zluggish server you want to connect to. Each server has its own certificate; an app downloaded from another server will not trust the server you want to use.
+If you just set up your Zluggish server, an administrator must [publish Companion](#publish-companion) before these instructions work.
 
 ## Install Companion
 
 1. In the [web app](../../usage/web-app.md), open **Apps → Zwift Companion → Android** on the Android device.
-2. Download and install the patched Companion app. If the download is missing or uses an old certificate, ask your administrator to [publish an updated build](#publish-companion).
-3. Point `secure.zwift.com` and `us-or-rly101.zwift.com` at your Zluggish server. Copy the entries from the setup page into [Virtual Hosts](dns-settings.md#virtual-hosts-android). For other options, see [DNS settings](dns-settings.md). Leave `cdn.zwift.com` on public DNS for Companion images.
-4. Open Companion with the Zluggish icon and sign in with your Zluggish account.
+2. Select **Download Companion**. The page shows the version and download size. If a download is unavailable, ask your administrator to [publish the app](#publish-companion).
+3. Open the downloaded file and allow your browser to install it. If Play Protect prompts about the unknown app, select **Install anyway**.
+4. [Change the DNS settings](#modify-android-dns-settings).
+5. Open **Companion for Zluggish** and sign in with your Zluggish login name and password.
 
-If Android uses a different resolver, check **Private DNS** in Android settings. The redirect affects both Companion installs. Turn it off before signing in to the official service.
+Download the app from the Zluggish server you want to connect to. Each server has its own certificate, so a build from another server will not trust it.
+
+## Update Companion
 
 When your administrator publishes an update or [rotates the server certificate](../certificate.md), download and install the new build from the same setup page.
 
+## Modify Android DNS settings
+
+The Android DNS settings need to be manually patched for the app to work. There are several methods documented on the [DNS settings page](dns-settings.md), but the [Virtual Hosts](dns-settings.md#virtual-hosts-android) method is usually the best place to start.
+
+Point `secure.zwift.com` and `us-or-rly101.zwift.com` at your Zluggish server. Copy the entries from the setup page into Virtual Hosts. Leave `cdn.zwift.com` on public DNS for Companion images.
+
+If Android's **Private DNS** setting bypasses your chosen DNS server, turn it off while you use the redirect. The redirect applies to both installed copies of Companion. Disable it before using the official service.
+
 ## Publish Companion
 
-An administrator does this once per app version. The server patches Companion to trust its own certificate and signs it as `com.zluggish.companion`, so riders can keep the Play Store app installed alongside it.
+An administrator does this once per app version.
 
-1. As an administrator, open **Manage → Android apps → Companion**.
+1. On the Zluggish server riders will connect to, open **Manage → Android apps → Companion** as an administrator.
 2. Select **Download and build** if offered. The server fetches the app from APKPure and patches it.
 3. To upload instead, use **Upload Companion**. The server accepts an APK or a split bundle (`.apks`, `.xapk` or `.apkm`). It can also rebuild a [zoffline-companion release](https://github.com/fatsbrown/zoffline-companion/releases/latest) or replace the certificate in an existing Zluggish Companion APK. Keep the page open until the upload finishes.
-4. Wait for patching and signing to finish. The page shows the build progress.
-5. On the Android device, open **Apps → Zwift Companion → Android** on this server, then [download and install the patched app](#install-companion).
+4. Wait for Zluggish to patch and sign the app. The server builds it in the background and shows its progress on the same page.
+5. When the build finishes, open **Apps → Zwift Companion → Android** on the Android device, then [download and install the patched app](#install-companion) from this server.
+
+The server keeps the last upload so **Build again** can rebuild it.
 
 If you replace an older build that used the official app ID, upload it again. Riders install the new app separately and sign in again.
 

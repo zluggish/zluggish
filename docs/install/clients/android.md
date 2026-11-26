@@ -18,7 +18,7 @@ If you just set up your Zluggish server, you must [download Zwift manually and l
 5. Open **Zwift for Zluggish** and sign in with your Zluggish login name and password. The first launch unpacks the game files.
 
 ## Update Zwift
-When there is a new app, the Zluggish administrator has to upload the latest version to Zluggish, and then the patched version needs to be downloaded from there.
+When there is a new app, the Zluggish administrator has to [upload the latest version to Zluggish](#publish-zwift-for-android), and then the patched version needs to be downloaded from there.
 
 ## Modify Android DNS settings
 
