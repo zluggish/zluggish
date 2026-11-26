@@ -13,8 +13,7 @@ Rides and progress stay on your server. Official events and global leaderboards 
 1. Check the [server and client requirements](https://docs.zluggish.com/install/requirements/).
 2. [Install the server and create an administrator](https://docs.zluggish.com/install/server/).
 3. Set up Zwift on [Windows](https://docs.zluggish.com/install/clients/windows/), [macOS](https://docs.zluggish.com/install/clients/macos/), [Linux with Wine](https://docs.zluggish.com/install/clients/linux/) or [Android](https://docs.zluggish.com/install/clients/android/).
-
-If you already use zwift-offline, [back up and migrate your storage](https://docs.zluggish.com/maintenance/migrating/) first.
+4. Get the [Companion app for Android](https://docs.zluggish.com/install/clients/companion-android/).
 
 ## Documentation
 

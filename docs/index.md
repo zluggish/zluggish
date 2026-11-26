@@ -19,7 +19,7 @@ Your Zluggish progress is separate from the official Zwift service. Official eve
 2. [Install the server and create an administrator](install/server.md).
 3. Set up Zwift on [Windows](install/clients/windows.md), [macOS](install/clients/macos.md), [Linux with Wine](install/clients/linux.md) or [Android](install/clients/android.md).
 
-If you already use zwift-offline, [back up and migrate your storage](maintenance/migrating.md) first.
+If you have an existing install of the legacy zwift-offline app, [back up and migrate your storage](maintenance/migrating.md) first.
 
 Join the community on [Discord](https://discord.gg/GMdn8F8) or [Strava](https://www.strava.com/clubs/zoffline).
 

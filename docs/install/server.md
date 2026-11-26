@@ -5,7 +5,7 @@ description: Install the Zluggish server with Docker Compose.
 
 # Install the server
 
-If you already use zwift-offline, read the [migration guide](../maintenance/migrating.md) first.
+If you have an existing install of the legacy zwift-offline app, read the [migration guide](../maintenance/migrating.md) first.
 
 1. Create a directory for Zluggish and a `docker/` subdirectory inside it.
 2. Save the [Compose file](https://raw.githubusercontent.com/zluggish/zluggish/main/docker/docker-compose.yml) as `docker/docker-compose.yml`.
