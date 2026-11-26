@@ -49,4 +49,6 @@ Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traf
 
    ![Cloudflare Gateway DNS policy scope with Host in matching all four Zwift game hostnames](../../media/screenshots/cloudflare-gateway-dns-hosts.png)
 
-2. Set the action to **Override** and enter the server's private IP in **Override Hostname**.
+2. Set the action to **Override** and enter the server's private IP in **Override destination**. Replace the example `192.168.1.100` below with your server's private IP.
+
+   ![Cloudflare Gateway DNS policy with the Override action and an example override destination of 192.168.1.100](../../media/screenshots/cloudflare-gateway-dns-override.png)
