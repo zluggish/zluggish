@@ -49,7 +49,10 @@ Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traf
    - For the game, match `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
    - For Companion alone, match `secure.zwift.com` and `us-or-rly101.zwift.com`.
 
-2. Set the action to **Override** and enter the server's private IP in **Override Hostname**.
+2. Set the action to **Override** and enter the server's private IP in **Override destination**. Replace the example `192.168.1.100` below with your server's private IP.
+
+   ![Cloudflare Gateway DNS policy with the Override action and an example override destination of 192.168.1.100](../../media/screenshots/cloudflare-gateway-dns-override.png)
+
 3. Scope the policy to your riders, for example with **User Email**. It redirects official Zwift traffic for devices that match it.
 4. If you use a desktop setup script, turn off **Patch hosts file** in **Advanced settings** and remove any old Zluggish entries from the hosts file.
 
