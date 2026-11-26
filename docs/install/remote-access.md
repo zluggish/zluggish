@@ -45,9 +45,9 @@ If port 8080 is reachable over the private route and the web listener is enabled
 
 Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traffic-controls/dns-policies/#override) to resolve the Zwift hostnames to the private IP.
 
-1. Use the **Host** selector and **in** operator to match the hostnames for your app.
-   - For the game, match `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
-   - For Companion alone, match `secure.zwift.com` and `us-or-rly101.zwift.com`.
+1. Use the **Host** selector and **in** operator: `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
+
+   ![Cloudflare Gateway DNS policy scope with Host in matching all four Zwift game hostnames](../../media/screenshots/cloudflare-gateway-dns-hosts.png)
 
 2. Set the action to **Override** and enter the server's private IP in **Override Hostname**.
 3. Scope the policy to your riders, for example with **User Email**. It redirects official Zwift traffic for devices that match it.

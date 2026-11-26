@@ -27,8 +27,6 @@ On your local network, use the server's LAN IP address. For example, if your ser
 
 Replace `192.168.1.100` with your server's actual IP address.
 
-For **Companion alone**, redirect only `us-or-rly101.zwift.com` and `secure.zwift.com`. Leave `cdn.zwift.com` on public DNS so Companion can load images.
-
 ## Setup script (Windows, macOS and Linux)
 
 Use the setup script in your device's guide by default. It adds the required entries to the computer's hosts file, so you do not need a separate DNS server.
