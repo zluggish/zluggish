@@ -5,7 +5,7 @@ description: Fix problems when Zwift is newer than Zluggish, or when an update f
 
 # Zwift client updates
 
-Zwift updates can break compatibility with Zluggish. Before you update Zwift, see [Update the Zwift client](../maintenance/update.md#update-the-zwift-client).
+Zwift updates can break compatibility with Zluggish. Before you update Zwift, see [Update the Zwift client](../install/update.md#update-the-zwift-client).
 
 ## Zluggish is older than the Zwift client
 
