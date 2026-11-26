@@ -5,8 +5,38 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+# Superseded PR runs no longer need to occupy test runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  changes:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      runtime: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' }}
+      container: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' || steps.filter.outputs.container == 'true' }}
+      translations: ${{ github.event_name != 'pull_request' || steps.filter.outputs.translations == 'true' }}
+      lint: ${{ github.event_name != 'pull_request' || steps.filter.outputs.lint == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+      # The PR API compares the entire PR (including forks), rather than only its latest push.
+      - uses: dorny/paths-filter@v4
+        if: github.event_name == 'pull_request'
+        id: filter
+        with:
+          filters: .github/filters.yml
+
   server:
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -41,6 +71,8 @@ jobs:
           fi
 
   translations:
+    needs: changes
+    if: needs.changes.outputs.translations == 'true'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -50,6 +82,7 @@ jobs:
       - run: mise run i18n:test
 
   quality:
+    needs: changes
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -59,11 +92,14 @@ jobs:
       - run: mise run install
         working-directory: server
       - run: mise run lint
+        if: needs.changes.outputs.lint == 'true'
         working-directory: server
       - run: mise run format
         working-directory: server
 
   container:
+    needs: changes
+    if: needs.changes.outputs.container == 'true'
     runs-on: ubuntu-26.04
     strategy:
       matrix:
@@ -77,6 +113,8 @@ jobs:
       - run: docker run --rm -i --platform ${{ matrix.platform }} --read-only --tmpfs /tmp --entrypoint node zluggish:test --input-type=module < server/scripts/smoke-storage.mjs
 
   launcher-browser:
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-26.04
     defaults:
       run:

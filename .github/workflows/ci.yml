@@ -18,12 +18,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      runtime: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' }}
+      container: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' || steps.filter.outputs.container == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+      # The PR API compares the entire PR (including forks), rather than only its latest push.
+      - uses: dorny/paths-filter@v4
+        if: github.event_name == 'pull_request'
+        id: filter
+        with:
+          filters: .github/filters.yml
+
   docker:
+    needs: changes
     # Fork pull requests get a read-only token and cannot push; merge queue branches are rebuilt on main anyway.
     if: >-
-      github.event_name != 'pull_request' ||
+      needs.changes.outputs.container == 'true' &&
+      (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      !startsWith(github.head_ref, 'mergify/merge-queue/'))
+      !startsWith(github.head_ref, 'mergify/merge-queue/')))
     runs-on: ubuntu-26.04
     steps:
       - name: Checkout
