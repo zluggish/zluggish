@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Decoder, Stream } from '@garmin/fitsdk';
 import { Schema } from 'effect';
 
@@ -34,7 +35,7 @@ export class FitDecoder {
     const decoder = new Decoder(Stream.fromByteArray(bytes));
 
     if (!decoder.isFIT()) {
-      throw new Error('Invalid FIT activity');
+      throw new Error(t('invalid_fit_activity'));
     }
 
     const { messages, errors } = decoder.read({
@@ -43,7 +44,7 @@ export class FitDecoder {
     });
 
     if (errors.length > 0) {
-      throw new AggregateError(errors, 'Invalid FIT activity', { cause: errors[0] });
+      throw new AggregateError(errors, t('invalid_fit_activity'), { cause: errors[0] });
     }
 
     return {

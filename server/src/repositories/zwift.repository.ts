@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Schema } from 'effect';
 
 export const officialRelay = 'https://us-or-rly101.zwift.com';
@@ -20,7 +21,7 @@ export class ZwiftRepository {
     });
 
     if (!response.ok) {
-      throw new Error('Zwift login was rejected');
+      throw new Error(t('zwift_login_was_rejected'));
     }
 
     return Schema.decodeUnknownSync(
@@ -35,7 +36,7 @@ export class ZwiftRepository {
   }
 
   officialHeaders = (token: string) => ({
-    Authorization: `Bearer ${token}`,
+    Authorization: t('zwift_bearer', { value1: token }),
     'User-Agent': 'Zwift/115 CFNetwork/758.0.2 Darwin/15.0.0',
     'Accept-Language': 'en-us',
   });

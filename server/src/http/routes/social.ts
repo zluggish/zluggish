@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { AccountsService } from '#src/services/auth.service';
 import { FilesService } from '#src/services/files.service';
 import { ProfilesService } from '#src/services/profile.service';
@@ -77,7 +78,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
                 : Effect.succeed(
                     create(PlayerProfileSchema, {
                       id: BigInt(id),
-                      lastName: id > 9_000_000 && id < 10_000_000 ? 'Bookmark' : '',
+                      lastName: id > 9_000_000 && id < 10_000_000 ? t('bookmark') : '',
                     }),
                   ),
             ),
@@ -283,10 +284,14 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const user = authenticated(c);
       const id = BigInt(user.player_id);
 
-      const update = parseProtobuf(
-        WorldAttributeSchema,
-        new Uint8Array(yield* Effect.promise(() => c.req.arrayBuffer())),
-      );
+      // Leave room for the ServerToClient envelope and encrypted TCP framing.
+      const maxAttributeBytes = 60 * 1024;
+      const bytes = new Uint8Array(yield* Effect.promise(() => c.req.arrayBuffer()));
+
+      if (bytes.length > maxAttributeBytes) {
+        throw new HTTPException(413);
+      }
+      const update = parseProtobuf(WorldAttributeSchema, bytes);
 
       update.worldTimeExpire = worldTime() + 60_000n;
       update.waF12 = 1n;
@@ -302,7 +307,7 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         update.payload = toBinary(SocialPlayerActionSchema, action);
 
         if (action.message.startsWith('.')) {
-          const reply = runtime.world.simulation?.command(id, action.message.slice(1)) ?? 'Simulation is unavailable.';
+          const reply = runtime.world.simulation?.command(id, action.message.slice(1)) ?? t('simulation_unavailable');
 
           yield* socialService.sendMessage(reply, [id]);
 
@@ -328,6 +333,9 @@ export function socialRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         }
       }
 
+      if (toBinary(WorldAttributeSchema, update).length > maxAttributeBytes) {
+        throw new HTTPException(413);
+      }
       runtime.world.enqueue(update, recipients);
 
       return c.body(null, 201);

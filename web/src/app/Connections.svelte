@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index';
   import { onMount } from 'svelte';
   import TextField from './TextField.svelte';
   import { z } from 'zod';
@@ -8,15 +9,19 @@
   let {
     api,
     stravaMethod = $bindable(),
+    garminDevice = $bindable(),
+    intervalsUpload = $bindable(),
     bridgeFolder = $bindable(),
     saved,
     save,
   }: {
     api: Api;
     stravaMethod: string;
+    garminDevice: boolean;
+    intervalsUpload: boolean;
     bridgeFolder: string;
     /** The settings the server holds, so a tile does not change before its choice is saved. */
-    saved: { stravaMethod: string; bridgeFolder: string };
+    saved: { stravaMethod: string; garminDevice: boolean; intervalsUpload: boolean; bridgeFolder: string };
     save: () => Promise<void>;
   } = $props();
 
@@ -55,6 +60,16 @@
 
   type Stored = { id: Credential; label: string; detail: string; effect: string };
 
+  /** The Edge that the FIT file sent to Garmin Connect says it was recorded on. */
+  type Device = { manufacturer: number; product: number; serial: number };
+
+  const garminDevicesSchema = z.object({
+    device: z.object({ manufacturer: z.number(), product: z.number(), serial: z.number() }).nullable(),
+    devices: z.array(z.object({ product: z.number(), name: z.string() })),
+  });
+
+  type GarminDevices = z.infer<typeof garminDevicesSchema>;
+
   let connections = $state<Record<Provider, Connection> | null>(null);
   let secrets = $state<Record<Provider, string>>({ strava: '', garmin: '', intervals: '' });
   let cookie = $state('');
@@ -69,6 +84,65 @@
     } catch {
       cookieStatus = 'error';
     }
+  }
+
+  /** The model chosen in the list, until it is saved; null shows the one that is saved. */
+  let deviceProduct = $state<string | null>(null);
+  let deviceSerial = $state('');
+
+  let garminDevices = $state<GarminDevices | null>(null);
+
+  const productChosen = $derived(deviceProduct ?? String(garminDevices?.device?.product ?? ''));
+
+  async function loadDevice() {
+    garminDevices = await api(garminDevicesSchema, '/api/me/connections/garmin/device');
+  }
+
+  const deviceName = (device: Device | null | undefined) =>
+    device
+      ? t('garmin_device_identity', {
+          model:
+            garminDevices?.devices.find((model) => model.product === device.product)?.name ??
+            t('garmin_device_product', { product: device.product }),
+          serial: device.serial,
+        })
+      : t('garmin_device_none');
+
+  function saveDevice() {
+    void run(async () => {
+      if (productChosen === '') {
+        await api(ignored, '/api/me/connections/garmin/device', 'DELETE');
+        message = t('garmin_device_removed');
+      } else {
+        const product = Number(productChosen);
+
+        if (deviceSerial.trim() === '') {
+          await api(ignored, '/api/me/connections/garmin/device', 'PUT', { product });
+        } else {
+          await api(ignored, '/api/me/connections/garmin/device', 'PUT', { product, serial: Number(deviceSerial) });
+        }
+
+        message = t('garmin_device_saved');
+      }
+
+      await loadDevice();
+      deviceProduct = null;
+      deviceSerial = '';
+    });
+  }
+
+  /** The device is opt-in; the chosen model and serial number stay while the setting is off. */
+  function saveDeviceSetting() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        garminDevice = saved.garminDevice;
+        throw error;
+      }
+
+      message = t('garmin_setting_saved');
+    });
   }
 
   let code = $state('');
@@ -87,22 +161,24 @@
   let pressedBackdrop = false;
 
   const integrations: Array<{ name: Integration; title: string }> = [
-    { name: 'strava', title: 'Strava' },
-    { name: 'garmin', title: 'Garmin' },
-    { name: 'intervals', title: 'Intervals.icu' },
-    { name: 'trainingpeaks', title: 'TrainingPeaks' },
+    { name: 'strava', title: t('connections_strava_title') },
+    { name: 'garmin', title: t('connections_garmin_title') },
+    { name: 'intervals', title: t('intervals_icu') },
+    { name: 'trainingpeaks', title: t('connections_trainingpeaks_title') },
   ];
 
   const fields: Record<Provider, { username: string; secret: string }> = {
-    strava: { username: 'Client ID', secret: 'Client secret' },
-    garmin: { username: 'Email', secret: 'Password' },
-    intervals: { username: 'Athlete ID', secret: 'API key' },
+    strava: { username: t('client_id'), secret: t('client_secret') },
+    garmin: { username: t('email'), secret: t('password') },
+    intervals: { username: t('athlete_id'), secret: t('api_key') },
   };
 
   /** Connected means finished rides (or workouts) actually flow, not just that something was typed in. */
   function status(name: Integration, all: Record<Provider, Connection>) {
     if (name === 'trainingpeaks') {
-      return saved.bridgeFolder ? { connected: true, text: 'Folder set' } : { connected: false, text: 'No folder set' };
+      return saved.bridgeFolder
+        ? { connected: true, text: t('folder_set') }
+        : { connected: false, text: t('folder_unset') };
     }
 
     const connection = all[name];
@@ -119,16 +195,16 @@
     return {
       connected,
       text: connected
-        ? 'Connected'
+        ? t('connected')
         : name === 'strava' && saved.stravaMethod === 'free' && connection.cookie
           ? cookieStatus === 'invalid'
-            ? 'Session expired or invalid'
-            : 'Session saved · Not verified'
+            ? t('session_expired_or_invalid')
+            : t('session_saved_not_verified')
           : connection.unreadable
-            ? 'Credentials unreadable · Enter them again'
+            ? t('connections_credentials_unreadable')
             : connection.saved
-              ? 'Credentials saved'
-              : 'Not connected',
+              ? t('credentials_saved')
+              : t('not_connected'),
     };
   }
 
@@ -144,7 +220,7 @@
       jobs = (await api(jobsResponse, '/api/me/uploads')).jobs;
     } catch (error) {
       failed = true;
-      message = error instanceof Error ? error.message : 'Could not save connection.';
+      message = error instanceof Error ? error.message : t('connection_save_error');
     } finally {
       busy = false;
     }
@@ -178,27 +254,27 @@
       if (connection.saved) {
         items.push({
           id: 'strava/api',
-          label: 'API application',
-          detail: 'Client ID and secret',
-          effect: 'Authorizing again needs the client ID and secret.',
+          label: t('api_application'),
+          detail: t('client_id_and_secret'),
+          effect: t('connections_strava_reauthorize_hint'),
         });
       }
 
       if (connection.authorized) {
         items.push({
           id: 'strava/authorization',
-          label: 'Authorization',
-          detail: 'Access granted to your API application',
-          effect: 'API uploads stop until you authorize again.',
+          label: t('authorization'),
+          detail: t('connections_strava_api_access_hint'),
+          effect: t('connections_strava_revoke_warning'),
         });
       }
 
       if (connection.cookie) {
         items.push({
           id: 'strava/cookie',
-          label: 'Session cookie',
-          detail: '_strava4_session',
-          effect: 'Session cookie uploads stop until you save a new cookie.',
+          label: t('session_cookie'),
+          detail: t('strava4_session'),
+          effect: t('connections_strava_cookie_removal_warning'),
         });
       }
 
@@ -208,18 +284,18 @@
     if (connection.saved) {
       items.push({
         id: 'garmin/credentials',
-        label: 'Email and password',
-        detail: 'Garmin Connect sign-in',
-        effect: 'Authorizing again needs your email and password.',
+        label: t('email_and_password'),
+        detail: t('garmin_connect_sign_in'),
+        effect: t('connections_garmin_reauthorize_hint'),
       });
     }
 
     if (connection.authorized) {
       items.push({
         id: 'garmin/authorization',
-        label: 'Authorization',
-        detail: 'Sign-in tokens from Garmin Connect',
-        effect: 'Garmin uploads stop until you authorize again.',
+        label: t('authorization'),
+        detail: t('connections_garmin_token_hint'),
+        effect: t('connections_garmin_revoke_warning'),
       });
     }
 
@@ -240,7 +316,7 @@
         code = '';
       }
 
-      message = `${item.label} removed.`;
+      message = t('removed', { value1: item.label });
     });
   }
 
@@ -256,7 +332,7 @@
         secret: secrets[name],
       });
       secrets[name] = '';
-      message = 'Credentials saved.';
+      message = t('connections_credentials_saved_status');
     });
   }
 
@@ -269,7 +345,20 @@
         throw error;
       }
 
-      message = 'Upload method saved.';
+      message = t('upload_method_saved');
+    });
+  }
+
+  function saveIntervalsUpload() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        intervalsUpload = saved.intervalsUpload;
+        throw error;
+      }
+
+      message = t('intervals_upload_saved');
     });
   }
 
@@ -290,7 +379,7 @@
 
       mfa = result.status === 'mfa';
       code = '';
-      message = mfa ? 'Enter the verification code from Garmin.' : 'Authorized.';
+      message = mfa ? t('connections_garmin_verification_hint') : t('authorized');
     });
   }
 
@@ -308,7 +397,7 @@
         code = '';
       }
 
-      message = 'Disconnected.';
+      message = t('disconnected');
     });
   }
 
@@ -322,7 +411,7 @@
     void run(async () => {
       await api(ignored, '/api/me/uploads/retry', 'POST', { ambiguous });
       confirmUnknown = false;
-      message = 'Retry requested. Check the provider before retrying again.';
+      message = t('connections_uploads_retry_notice');
     }, 'uploads');
   }
 
@@ -357,16 +446,17 @@
         open = 'strava';
 
         if (!authorizationCode) {
-          throw new Error('Strava authorization canceled.');
+          throw new Error(t('strava_authorization_canceled'));
         }
         await api(ignored, '/api/me/connections/strava/authorize', 'POST', { code: authorizationCode, state });
-        message = 'Strava authorized.';
+        message = t('strava_authorized');
       }
     }).then(() => {
       // Verification is not stored, so a saved session cookie is tested again whenever the page opens.
       if (connections?.strava.cookie && saved.stravaMethod === 'free') {
         void testCookie();
       }
+      void loadDevice();
     });
   });
 </script>
@@ -398,7 +488,7 @@
           ? 'Leave blank to keep the saved secret.'
           : undefined}
     />
-    <button disabled={busy}>Save credentials</button>
+    <button disabled={busy}>{t('save_credentials')}</button>
   </form>
 {/snippet}
 
@@ -406,14 +496,14 @@
   <button
     class="quiet"
     disabled={busy || !(connections![name].saved || connections![name].authorized || connections![name].cookie)}
-    onclick={() => disconnect(name)}>Disconnect</button
+    onclick={() => disconnect(name)}>{t('disconnect')}</button
   >
 {/snippet}
 
 {#snippet storedList(name: 'strava' | 'garmin')}
   {@const items = stored(name, connections![name])}
   {#if items.length}
-    <h4>Saved on this server</h4>
+    <h4>{t('saved_on_this_server')}</h4>
     <ul class="stored">
       {#each items as item (item.id)}
         <li>
@@ -431,18 +521,18 @@
                 removing = null;
               }}
             >
-              <p>Remove the {item.label.toLowerCase()}? {item.effect}</p>
+              <p>{t('remove_the', { value1: item.label.toLowerCase(), value2: item.effect })}</p>
               <button
                 class="danger"
                 disabled={busy}
                 {@attach (node) => node.focus()}
-                onclick={() => removeCredential(item)}>Remove</button
+                onclick={() => removeCredential(item)}>{t('remove')}</button
               >
-              <button class="quiet" disabled={busy} onclick={() => (removing = null)}>Keep</button>
+              <button class="quiet" disabled={busy} onclick={() => (removing = null)}>{t('keep')}</button>
             </div>
           {:else}
             <button class="quiet" disabled={busy} onclick={() => (removing = item.id)}
-              >Remove<span class="visually-hidden"> {item.label.toLowerCase()}</span></button
+              >{t('remove')}<span class="visually-hidden"> {item.label.toLowerCase()}</span></button
             >
           {/if}
         </li>
@@ -452,8 +542,8 @@
 {/snippet}
 
 <section class="integrations" aria-labelledby="integrations-title">
-  <h2 id="integrations-title">Integrations</h2>
-  <p class="lead">Send finished rides to the apps you train with, and bring planned workouts into Zwift.</p>
+  <h2 id="integrations-title">{t('integrations')}</h2>
+  <p class="lead">{t('connections_description')}</p>
   {#if message && where === 'integration' && (!open || !connections)}<p
       class="notice"
       class:failed
@@ -495,7 +585,7 @@
       </span>
       <h3 id="integration-title" class="name">{integrations.find((item) => item.name === open)!.title}</h3>
       <span class="state">{current.text}</span>
-      <button type="button" class="close" aria-label="Close" onclick={() => dialog?.close()}
+      <button type="button" class="close" aria-label={t('close')} onclick={() => dialog?.close()}
         ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" /></svg></button
       >
     </header>
@@ -505,45 +595,44 @@
         </p>{/if}
 
       {#if open === 'strava'}
-        <p class="muted">Upload finished rides to Strava, through your own API application or a browser session.</p>
-        <label for="strava-method">Upload method</label>
+        <label for="strava-method">{t('upload_method')}</label>
         <select id="strava-method" bind:value={stravaMethod} disabled={busy} onchange={saveMethod}>
-          <option value="paid">Strava API application</option>
-          <option value="free">Browser session cookie</option>
+          <option value="paid">{t('strava_api_application')}</option>
+          <option value="free">{t('browser_session_cookie')}</option>
         </select>
         {#if stravaMethod === 'paid'}
           {@render credentials('strava')}
-          <p class="muted">Set your Strava API application's callback domain to this website's hostname.</p>
+          <p class="muted">{t('connections_strava_callback_hint')}</p>
           <div class="actions">
-            <button disabled={busy || !connections.strava.saved} onclick={() => authorize('strava')}>Authorize</button>
+            <button disabled={busy || !connections.strava.saved} onclick={() => authorize('strava')}
+              >{t('authorize')}</button
+            >
             {@render disconnectButton('strava')}
           </div>
         {:else}
           <details class="cookie-help">
-            <summary>How to get your Strava session cookie</summary>
-            <p class="muted">In Chrome or Edge:</p>
+            <summary>{t('connections_strava_cookie_help_title')}</summary>
+            <p class="muted">{t('cookie_browser_hint')}</p>
             <ol>
-              <li>Open <a href="https://www.strava.com" target="_blank" rel="noreferrer">Strava</a> and sign in.</li>
               <li>
-                Open Developer Tools with <kbd>⌘⌥I</kbd> on Mac or <kbd>Ctrl+Shift+I</kbd> on Windows/Linux.
-              </li>
-              <li>Select <strong>Application</strong>. If hidden, look under <strong>»</strong>.</li>
-              <li>
-                In the sidebar, expand <strong>Storage → Cookies</strong> and select
-                <strong>https://www.strava.com</strong>.
+                {t('open')}
+                <a href="https://www.strava.com" target="_blank" rel="noreferrer">{t('connections_strava_title')}</a>
+                {t('sign_in_hint_suffix')}
               </li>
               <li>
-                Find <code>_strava4_session</code> and copy its entire <strong>Value</strong>, without the cookie name
-                or quotes.
+                {t('open_developer_tools')}<kbd>{t('i')}</kbd>
+                {t('or')} <kbd>{t('ctrl_shift_i')}</kbd>{t('hosts_select_hint_suffix')}
+                <strong>{t('application')}</strong>.
               </li>
               <li>
-                Paste the value below and click <strong>Save session cookie</strong>. We'll test it automatically.
+                {t('under')} <strong>{t('connections_strava_cookie_location')}</strong>{t('find')}
+                <code>{t('strava4_session')}</code>.
+              </li>
+              <li>
+                {t('copy_its')} <strong>{t('value')}</strong>
+                {t('cookie_paste_hint')}
               </li>
             </ol>
-            <p class="muted">
-              Treat the cookie like a password. Don't share it or paste it into chat. If the session test later fails,
-              repeat these steps to replace it.
-            </p>
           </details>
           <form
             onsubmit={(event) => {
@@ -558,16 +647,16 @@
           >
             <TextField
               id="strava-cookie"
-              label="_strava4_session"
+              label={t('strava4_session')}
               bind:value={cookie}
               password
               required
               maxlength={10000}
-              hint={connections.strava.cookie
-                ? 'A session cookie is saved. Paste a new one to replace it.'
-                : 'Copy it from your browser while signed in to Strava. Treat it like a password.'}
+              hint={connections.strava.cookie ? 'Saved. Paste a new one to replace it.' : 'Treat it like a password.'}
             />
-            <button disabled={busy}>{cookieStatus === 'checking' ? 'Testing session…' : 'Save session cookie'}</button>
+            <button disabled={busy}
+              >{cookieStatus === 'checking' ? t('testing_session') : t('save_session_cookie')}</button
+            >
           </form>
           {#if connections.strava.cookie || cookieStatus !== 'unchecked'}
             <div
@@ -579,60 +668,90 @@
             >
               {#if cookieStatus === 'valid'}
                 <span class="cookie-check" aria-hidden="true">✓</span>
-                <span
-                  ><strong>Strava session verified</strong><br />Your cookie works. Finished rides can upload to Strava.</span
-                >
+                <span><strong>{t('strava_session_verified')}</strong></span>
               {:else if cookieStatus === 'checking'}
-                <span>Checking your session with Strava…</span>
+                <span>{t('connections_strava_session_checking')}</span>
               {:else if cookieStatus === 'invalid'}
-                <span
-                  ><strong>Session expired or invalid</strong><br />Copy a fresh cookie from Strava and save it again.</span
-                >
+                <span><strong>{t('session_expired_or_invalid')}</strong><br />{t('save_a_fresh_cookie')}</span>
               {:else if cookieStatus === 'error'}
                 <span
-                  ><strong>Couldn't verify your session</strong><br />Your cookie is saved. Try Test session again when
-                  Strava is reachable.</span
+                  ><strong>{t('couldn_t_reach_strava')}</strong><br />{t(
+                    'connections_strava_session_test_deferred',
+                  )}</span
                 >
               {:else}
-                <span>Cookie saved. Use Test session to confirm it works with Strava.</span>
+                <span>{t('connections_strava_cookie_saved_notice')}</span>
               {/if}
             </div>
           {/if}
           <div class="actions">
             <button disabled={busy || !connections.strava.cookie} onclick={() => void run(testCookie)}
-              >{cookieStatus === 'checking' ? 'Testing session…' : 'Test session'}</button
+              >{cookieStatus === 'checking' ? t('testing_session') : t('test_session')}</button
             >
             {@render disconnectButton('strava')}
           </div>
         {/if}
         {@render storedList('strava')}
       {:else if open === 'garmin'}
-        <p class="muted">Upload finished rides to Garmin Connect.</p>
         {@render credentials('garmin')}
-        {#if mfa}<TextField id="garmin-code" label="Verification code" bind:value={code} maxlength={32} />{/if}
+        {#if mfa}<TextField id="garmin-code" label={t('verification_code')} bind:value={code} maxlength={32} />{/if}
         <div class="actions">
           <button disabled={busy || !connections.garmin.saved} onclick={() => authorize('garmin')}
-            >{mfa ? 'Verify Garmin' : 'Authorize'}</button
+            >{mfa ? t('verify_garmin') : t('authorize')}</button
           >
           {@render disconnectButton('garmin')}
         </div>
         {@render storedList('garmin')}
+        <h3>{t('garmin_device_title')}</h3>
+        <label class="check"
+          ><input type="checkbox" bind:checked={garminDevice} disabled={busy} onchange={saveDeviceSetting} />
+          {t('garmin_device_enable')}</label
+        >
+        <p class="muted">{t('garmin_device_default')}</p>
+        {#if garminDevice}
+          <p class="muted">
+            {t('garmin_device_description', { device: deviceName(garminDevices?.device) })}
+          </p>
+          <label class="field" for="garmin-device"
+            >{t('garmin_device_model')}
+            <select
+              id="garmin-device"
+              value={productChosen}
+              disabled={busy}
+              onchange={(event) => (deviceProduct = event.currentTarget.value)}
+            >
+              <option value="">{t('garmin_device_original')}</option>
+              {#each garminDevices?.devices ?? [] as model (model.product)}
+                <option value={String(model.product)}>{model.name}</option>
+              {/each}
+            </select>
+          </label>
+          <TextField
+            id="garmin-serial"
+            label={t('garmin_device_serial')}
+            bind:value={deviceSerial}
+            maxlength={10}
+            hint={t('garmin_device_serial_hint')}
+          />
+          <div class="actions">
+            <button disabled={busy} onclick={saveDevice}>{t('garmin_device_save')}</button>
+          </div>
+        {/if}
       {:else if open === 'intervals'}
-        <p class="muted">
-          Upload finished rides and bring your planned cycling workouts into Zwift. Find the athlete ID and API key
-          under Developer Settings on Intervals.icu.
-        </p>
+        <p class="muted">{t('connections_intervals_credentials_hint')}</p>
         {@render credentials('intervals')}
+        <label class="check"
+          ><input type="checkbox" bind:checked={intervalsUpload} disabled={busy} onchange={saveIntervalsUpload} />
+          {t('intervals_upload_activities')}</label
+        >
         <div class="actions">
           <button disabled={busy || !connections.intervals.saved} onclick={() => sync('intervals')}
-            >Sync workouts</button
+            >{t('sync_workouts')}</button
           >
           {@render disconnectButton('intervals')}
         </div>
       {:else}
-        <p class="muted">
-          Import workouts you export from TrainingPeaks as .zwo files. The server reads them from this folder.
-        </p>
+        <p class="muted">{t('connections_trainingpeaks_folder_hint')}</p>
         <form
           onsubmit={(event) => {
             event.preventDefault();
@@ -642,11 +761,13 @@
             });
           }}
         >
-          <TextField id="bridge-folder" label="Export folder" bind:value={bridgeFolder} maxlength={500} />
-          <button disabled={busy}>Save folder</button>
+          <TextField id="bridge-folder" label={t('export_folder')} bind:value={bridgeFolder} maxlength={500} />
+          <button disabled={busy}>{t('save_folder')}</button>
         </form>
         <div class="actions">
-          <button disabled={busy || !saved.bridgeFolder} onclick={() => sync('trainingpeaks')}>Import workouts</button>
+          <button disabled={busy || !saved.bridgeFolder} onclick={() => sync('trainingpeaks')}
+            >{t('import_workouts')}</button
+          >
         </div>
       {/if}
     </div>
@@ -655,29 +776,30 @@
 
 {#if connections}
   <section class="detail uploads" aria-labelledby="uploads-title">
-    <h2 id="uploads-title">Activity uploads</h2>
+    <h2 id="uploads-title">{t('activity_uploads')}</h2>
     {#if message && where === 'uploads'}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>
         {message}
       </p>{/if}
     {#if jobs.length}
       <ul>
         {#each jobs as job (`${job.activity_id}-${job.provider}`)}<li>
-            Activity {job.activity_id}: {job.provider} — {job.state}
+            {t('activity', { value1: job.activity_id, value2: job.provider, value3: job.state })}
           </li>{/each}
       </ul>
     {:else}
-      <p class="muted">No activity uploads yet.</p>
+      <p class="muted">{t('activity_uploads_empty')}</p>
     {/if}
     <button disabled={busy || !jobs.some((job) => job.state === 'failed')} onclick={() => retry(false)}
-      >Retry failed uploads</button
+      >{t('retry_failed_uploads')}</button
     >
     {#if jobs.some((job) => job.state === 'ambiguous')}
-      <p class="muted">The provider may already have activities whose upload result is unknown.</p>
+      <p class="muted">{t('connections_uploads_unknown_result_warning')}</p>
       <label class="check"
-        ><input type="checkbox" bind:checked={confirmUnknown} /> I checked the provider and want to upload them again</label
+        ><input type="checkbox" bind:checked={confirmUnknown} />
+        {t('connections_uploads_retry_confirmation')}</label
       >
       <button disabled={busy || !confirmUnknown} onclick={() => retry(true)}
-        >Retry uploads with an unknown result</button
+        >{t('connections_uploads_retry_action')}</button
       >
     {/if}
   </section>

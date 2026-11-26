@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { decodeOwned } from '#src/schema';
 import { FitQueueFullError } from '#src/errors';
 import type { ActivityChart, PowerBests } from '#src/repositories/fit-decoder.repository';
@@ -109,8 +110,8 @@ export class FitRepository {
       }
     });
 
-    worker.on('error', (error) => this.fail(error instanceof Error ? error : new Error('FIT worker failed')));
-    worker.on('exit', () => this.fail(new Error('FIT worker stopped')));
+    worker.on('error', (error) => this.fail(error instanceof Error ? error : new Error(t('fit_worker_failed'))));
+    worker.on('exit', () => this.fail(new Error(t('fit_worker_stopped'))));
     this.worker = worker;
 
     return worker;

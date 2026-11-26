@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { course, forward, road } from '#src/world/state';
@@ -76,7 +77,7 @@ export class Recording {
     const size = this.sizes[index];
 
     if (offset === undefined || size === undefined) {
-      throw new RangeError(`No state at ${index}`);
+      throw new RangeError(t('recording_state_missing', { value1: index }));
     }
 
     return fromBinary(PlayerStateSchema, this.bytes.subarray(offset, offset + size));

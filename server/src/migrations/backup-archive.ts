@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { ConfigError } from '#src/config/index';
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -51,7 +52,7 @@ export function withBackupDirectory<T>(input: string, use: (directory: string) =
     const entries = readdirSync(stage, { recursive: true, withFileTypes: true });
 
     if (entries.some((entry) => !entry.isFile() && !entry.isDirectory())) {
-      throw new ConfigError('The backup archive contains an unsupported file type');
+      throw new ConfigError(t('backup_archive_file_type_unsupported'));
     }
 
     return use(stage);

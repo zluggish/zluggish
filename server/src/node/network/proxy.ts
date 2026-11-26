@@ -1,10 +1,11 @@
+import { t } from '#src/i18n/index';
 import { request } from 'node:https';
 import { Resolver } from 'node:dns';
 import { Readable } from 'node:stream';
 
 const resolver = new Resolver();
 
-resolver.setServers(['8.8.8.8', '8.8.4.4']);
+resolver.setServers(['1.1.1.1', '1.0.0.1']);
 
 /** Resolve the upstream independently of the client's local Zwift hostname redirect. */
 export async function fetchCdn(path: string, range?: string): Promise<Response> {
@@ -16,7 +17,7 @@ export async function fetchCdn(path: string, range?: string): Promise<Response> 
         lookup(hostname, options, callback) {
           resolver.resolve4(hostname, (error, addresses) => {
             if (error || !addresses[0]) {
-              callback(error ?? new Error('No upstream address'), '', 4);
+              callback(error ?? new Error(t('upstream_address_missing')), '', 4);
 
               return;
             }
@@ -71,7 +72,7 @@ export async function fetchCdn(path: string, range?: string): Promise<Response> 
       },
     );
 
-    req.setTimeout(30_000, () => req.destroy(new Error('CDN proxy timeout')));
+    req.setTimeout(30_000, () => req.destroy(new Error(t('cdn_proxy_timeout'))));
     req.once('error', fail);
     req.end();
   });

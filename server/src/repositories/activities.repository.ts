@@ -2,6 +2,7 @@ import { integer } from '#src/db/values';
 import type { IntegerInput } from '#src/db/values';
 import { query, SqliteExecutor } from '#src/db/query';
 import { atomic } from '#src/db/transaction';
+import { activityDirectoryName } from '#src/activity-storage';
 import { sql } from 'kysely';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -91,6 +92,39 @@ export class ActivitiesRepository {
     return this.executor.run(
       query.deleteFrom('activity').where('id', '=', integer(id)).where('player_id', '=', player),
     );
+  }
+
+  /** The owner and folder name of an activity. The name is assigned on first use and
+  never changes afterwards, even when the client edits the start date of a draft.
+  */
+  storageDirectory(id: IntegerInput) {
+    const row = this.executor.get(
+      query
+        .selectFrom('activity')
+        .select(['id', 'player_id', 'start_date', 'date', 'end_date', 'storage_dir'])
+        .where('id', '=', integer(id)),
+      true,
+    );
+
+    if (!row || row.player_id === null) {
+      return null;
+    }
+    const player = Number(row.player_id);
+
+    if (row.storage_dir !== null) {
+      return { player, directory: row.storage_dir };
+    }
+    const directory = activityDirectoryName(row.id, [row.start_date, row.date, row.end_date]);
+
+    this.executor.run(
+      query
+        .updateTable('activity')
+        .set({ storage_dir: directory })
+        .where('id', '=', integer(id))
+        .where('storage_dir', 'is', null),
+    );
+
+    return { player, directory };
   }
 
   listActivityFile(id: IntegerInput) {
@@ -206,7 +240,7 @@ export class ActivitiesRepository {
     return this.executor.all(
       query
         .selectFrom(table)
-        .select(['id', 'player_id'])
+        .select(['id', 'player_id', 'activity_id'])
         .where(({ eb, or, and }) =>
           or([eb('state', '=', 'failed'), and([eb('state', '=', 'reserved'), eb('created_at', '<', before)])]),
         ),

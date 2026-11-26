@@ -1,0 +1,532 @@
+[
+  {
+    "file": "server/src/http/routes/assets.ts",
+    "value": "public, max-age=31536000, immutable",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/http/web-app.ts",
+    "value": "Lax",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "APK Sig Block 42",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/repositories/session.repository.ts",
+    "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/repositories/strava.repository.ts",
+    "value": "Upload and Sync Your Activities",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/services/profile-json.service.ts",
+    "value": "Power Source",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/services/profile-json.service.ts",
+    "value": "Power Meter",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/services/workout.service.ts",
+    "value": "Component.Card.Activity",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/services/workout.service.ts",
+    "value": "LOC_TODAY_LOWER",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "web/src/app/Connections.svelte",
+    "value": "strava",
+    "reason": "Stable API integration identifier."
+  },
+  {
+    "file": "web/src/app/Connections.svelte",
+    "value": "garmin",
+    "reason": "Stable API integration identifier."
+  },
+  {
+    "file": "web/src/app/Connections.svelte",
+    "value": "intervals",
+    "reason": "Stable API integration identifier."
+  },
+  {
+    "file": "web/src/app/Connections.svelte",
+    "value": "trainingpeaks",
+    "reason": "Stable API integration identifier."
+  },
+  {
+    "file": "server/src/repositories/certificate.repository.ts",
+    "value": "Zluggish",
+    "reason": "Certificate identity parsed by client setup scripts."
+  },
+  {
+    "file": "server/src/repositories/certificate.repository.ts",
+    "value": "Zluggish server {value1}",
+    "reason": "Certificate identity parsed by client setup scripts."
+  },
+  {
+    "file": "server/src/repositories/certificate.repository.ts",
+    "value": "Zwift Companion signer",
+    "reason": "Certificate identity parsed by client setup scripts."
+  },
+  {
+    "file": "server/src/services/profile-json.service.ts",
+    "value": "Android",
+    "reason": "Fixed Zwift client metadata."
+  },
+  {
+    "file": "server/src/http/routes/records.ts",
+    "value": "AllTimeBestResultsForSegments",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/http/routes/records.ts",
+    "value": "QuarterlyRecordsForSegment",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/http/routes/records.ts",
+    "value": "AllResultsInQuarterForSegment",
+    "reason": "Protocol, generated script syntax, or external format identifier; must remain literal."
+  },
+  {
+    "file": "server/src/db/open.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/db/transaction.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/migrations/accounts.ts",
+    "value": "BEGIN IMMEDIATE; DELETE FROM rider_document WHERE name IN ('encryption_key.bin','relay-auth-version') AND player_id IN (SELECT player_id FROM user WHERE pass_hash IS NOT NULL AND pass_hash NOT LIKE '$argon2id$%'); UPDATE user SET pass_hash=NULL,auth_version=auth_version+1,revision=revision+1 WHERE pass_hash IS NOT NULL AND pass_hash NOT LIKE '$argon2id$%'; COMMIT;",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/migrations/accounts.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/repositories/events.repository.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/repositories/settings.repository.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/repositories/workout-publication.repository.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/services/auth.service.ts",
+    "value": "BEGIN IMMEDIATE",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/services/event-catalog.service.ts",
+    "value": "#zwiftoffline",
+    "reason": "SQL, XML, or external protocol identifier."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "<# : Zluggish client setup for Windows",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "@ECHO OFF",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "NET SESSION >nul 2>&1 || (",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  PowerShell -NoProfile -Command \"Start-Process -FilePath $env:ZLUGGISH_SETUP -Verb RunAs\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "PowerShell -NoProfile -ExecutionPolicy Bypass -Command \"Invoke-Expression ([IO.File]::ReadAllText($env:ZLUGGISH_SETUP))\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    $candidates += Get-ItemProperty $key -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Zwift*' -and $_.InstallLocation } | ForEach-Object { $_.InstallLocation }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  foreach ($folder in $candidates) {",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  $shell = New-Object -ComObject Shell.Application",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  $certificate.FriendlyName = 'Zluggish server certificate'",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    foreach ($old in @($store.Certificates)) {",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  $text = $text.TrimEnd() + \"`n`n# BEGIN Zluggish server certificate $Thumbprint`n$($CertificatePem.Trim())`n# END Zluggish server certificate`n\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  [IO.File]::WriteAllText($bundle, $text)",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    Set-Content -LiteralPath $hostsFile -Value $lines -Encoding ASCII",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  Get-Process ZwiftLauncher -ErrorAction SilentlyContinue | Stop-Process -Force",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": " -ForegroundColor Green",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  exec sudo -- sh \"$0\" \"$@\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "if command -v openssl >/dev/null 2>&1; then",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  actual=$(certificate | openssl x509 -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "# Drop earlier Zluggish blocks, private keys and the shared certificate; then add this certificate.",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    /^# BEGIN Zluggish/ { skip = 1; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    skip { if (/^# END Zluggish/) skip = 0; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    /^-----BEGIN [A-Z ]*PRIVATE KEY-----$/ { key = 1; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    key { if (/^-----END [A-Z ]*PRIVATE KEY-----$/) key = 0; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    old { if ($0 == \"-----END CERTIFICATE-----\") old = 0; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    $0 == \"-----BEGIN CERTIFICATE-----\" { held = $0; next }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    echo '# END Zluggish server certificate'",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "while IFS= read -r bundle; do",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "awk -v names=\"$ZWIFT_HOSTS\" 'BEGIN { n = split(names, list, \" \"); for (i = 1; i <= n; i++) drop[list[i]] = 1 }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  { for (i = 1; i <= NF; i++) if ($i in drop) next; print }' /etc/hosts > \"$hosts\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "Zluggish server ",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "TARGET_HOME=$(getent passwd \"${SUDO_USER:-root}\" | cut -d: -f6)",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  # A server certificate replaces the shared one that an earlier setup installed.",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  install_anchor /etc/pki/ca-trust/source/anchors update-ca-trust extract",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  install_anchor /etc/ca-certificates/trust-source/anchors update-ca-trust",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  install_anchor /etc/pki/trust/anchors update-ca-certificates",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  install_anchor /usr/local/share/ca-certificates update-ca-certificates",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  for root in \"$TARGET_HOME/.wine\" \"$TARGET_HOME/Games\" \"$TARGET_HOME/.local/share/lutris\" \\",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    if [ -d \"$root\" ]; then find \"$root\" -maxdepth 10 -path '*/drive_c/*/Zwift/data/cacert.pem' -type f 2>/dev/null || true; fi",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  echo \"  sh $0 \\\"$TARGET_HOME/.wine/drive_c/Program Files (x86)/Zwift\\\"\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "# Each *.zwift.com certificate in the keychain, in a file named after its SHA-1 hash.",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "{ security find-certificate -a -c '*.zwift.com' -Z -p \"$KEYCHAIN\" 2>/dev/null || true; } | awk -v dir=\"$work\" '",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  /^-----END CERTIFICATE-----$/ { if (file != \"\") close(file); file = \"\" }",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "for old in \"$work\"/*.old; do",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  subject=$(openssl x509 -noout -subject -in \"$old\" 2>/dev/null || true)",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  if [ \"$hash\" = \"$LEGACY_THUMBPRINT\" ]; then remove=1; fi",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    security delete-certificate -Z \"$hash\" \"$KEYCHAIN\" >/dev/null",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "if ! security add-trusted-cert -d -r trustRoot -p ssl -k \"$KEYCHAIN\" \"$work/$NAME.pem\"; then",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "    printf '%s\\n' \"$TARGET_HOME/Library/Application Support/Zwift/data/cacert.pem\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "  echo \"  sh $0 \\\"$TARGET_HOME/Library/Application Support/Zwift\\\"\"",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "killall -HUP mDNSResponder 2>/dev/null || true",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": " -f $($_.Exception.Message)) -ForegroundColor Red",
+    "reason": "PowerShell formatting and output color options."
+  },
+  {
+    "file": "server/src/services/message.service.ts",
+    "value": "Server",
+    "reason": "Stable sender sentinel; localized when rendered into a chat message."
+  },
+  {
+    "file": "server/src/services/social.service.ts",
+    "value": "Server",
+    "reason": "Stable sender sentinel; localized when rendered into a chat message."
+  },
+  {
+    "file": "server/src/http/app.ts",
+    "value": "zluggish",
+    "reason": "Stable service identity in API metadata."
+  },
+  {
+    "file": "server/src/http/web-app.ts",
+    "value": "zluggish",
+    "reason": "Stable service identity in API metadata."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": " android:label=\"Zwift for Zluggish\" android:icon=\"{value1}\" android:roundIcon=\"{value2}\">",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "move-result-object v0",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "const-string v1, \"{value1}\"",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "iget-object v5, v1, Lcom/zwift/zwiftgame/downloader/ZwiftDownloaderActivity$AsyncUnzipTask;->mContext:Landroid/content/Context;",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "move-result-object v5",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": "const-string v6, \"/\"",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/migrations/activity-folders.ts",
+    "value": "NOT NULL",
+    "reason": "SQL syntax; must remain literal."
+  },
+  {
+    "file": "server/src/repositories/apk.repository.ts",
+    "value": " android:label=\"Companion for Zluggish\" android:icon=\"{value1}\" android:roundIcon=\"{value2}\"{value3}",
+    "reason": "Android manifest or Dalvik bytecode syntax with fixed application branding."
+  },
+  {
+    "file": "server/src/services/companion.service.ts",
+    "value": "Zwift Companion",
+    "reason": "App name in server log messages, which are not translated."
+  },
+  {
+    "file": "server/src/services/zwift-android.service.ts",
+    "value": "Zwift for Android",
+    "reason": "App name in server log messages, which are not translated."
+  },
+  {
+    "file": "server/src/repositories/app-release.repository.ts",
+    "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "reason": "HTTP User-Agent header for release downloads."
+  },
+  {
+    "file": "server/src/repositories/app-release.repository.ts",
+    "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "reason": "HTTP Accept header for release downloads."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 1040",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 1050",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 1030 Plus",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 830",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 530",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 130 Plus",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 1030",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 130",
+    "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/world/fit-device.ts",
+    "value": "Edge 820",
+    "reason": "Garmin product model name."
+  }
+]

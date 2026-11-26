@@ -91,3 +91,14 @@ await test('TCP frames handle every fragmentation boundary and multiple coalesce
   assert.throws(() => decoder.finish(), /Truncated/);
   assert.throws(() => new FrameDecoder().push(Buffer.from([0, 0])), /Empty/);
 });
+
+await test('nonce and header use the full unsigned connection and sequence widths', () => {
+  const key = Buffer.alloc(16, 7);
+  const iv = { device: 1, channel: 2, connection: 65_535, sequence: 4_294_967_295 };
+  const payload = Buffer.from('unsigned protocol bounds');
+  const packet = encodePacket(payload, key, iv, { connection: iv.connection, sequence: iv.sequence });
+  const decoded = decodePacket(packet, key, { ...iv, connection: 0, sequence: 0 });
+  assert.deepEqual(decoded.iv, iv);
+  assert.deepEqual(decoded.payload, payload);
+  assert.throws(() => encodePacket(payload, key, { ...iv, sequence: 2 ** 32 }, {}));
+});

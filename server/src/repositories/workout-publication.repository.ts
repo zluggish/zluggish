@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { AssetFiles } from '#src/repositories/files.repository';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { dirname, relative, resolve } from 'node:path';
@@ -41,7 +42,7 @@ export class WorkoutPublication {
       for (const entry of journal.files) {
         const path = resolve(this.storage, entry.path);
         if (relative(this.storage, path).startsWith('..') || path === resolve(this.storage)) {
-          throw new Error('Invalid workout recovery path');
+          throw new Error(t('invalid_workout_recovery_path'));
         }
         if (entry.previous === null) {
           this.files.rmSync(path, { force: true });
@@ -66,7 +67,7 @@ export class WorkoutPublication {
       .map((path) => {
         const name = relative(this.storage, path);
         if (name.startsWith('..') || name === '') {
-          throw new Error('Invalid workout publication path');
+          throw new Error(t('invalid_workout_publication_path'));
         }
         return {
           path: name,

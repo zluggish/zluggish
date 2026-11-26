@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Schema } from 'effect';
 import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
@@ -17,6 +18,7 @@ import {
   STORAGE_VERSION,
   StorageFile,
 } from '#src/migrations/storage';
+import { migrateActivityFolders } from '#src/migrations/activity-folders';
 import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -24,13 +26,15 @@ import { DatabaseSync } from 'node:sqlite';
 const isVersionRow = Schema.is(Schema.Struct({ version: Schema.Finite }));
 
 /** Ordinary schema migrations after the storage merge. Each runs in one transaction at
-startup. A migration that changes existing data needs a backup first (storage backup).
+startup. A migration that changes existing data sets `backup`: an existing store is
+backed up before it runs.
 */
-const migrations: Array<{ version: number; up: (db: DatabaseSync) => void }> = [
+const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: string) => void; backup?: true }> = [
   { version: 7, up: (db) => db.exec(indexesSQL) },
   { version: 8, up: (db) => db.exec(administratorSchemaSQL) },
   { version: 9, up: (db) => db.exec(dropManagementAuditSQL) },
   { version: 10, up: (db) => db.exec(webSessionSQL) },
+  { version: 11, up: migrateActivityFolders, backup: true },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;
@@ -54,7 +58,7 @@ Incompatible schema/hash/folder evidence requires explicit account migration.
 */
 export function openDatabase(storage: string): DatabaseSync {
   if (existsSync(resolve(storage, StorageFile.RestoreMarker))) {
-    throw new ConfigError('A storage restore did not finish; run storage restore again while the server is stopped');
+    throw new ConfigError(t('storage_open_restore_incomplete'));
   }
 
   resolvePendingMigration(storage);
@@ -82,7 +86,7 @@ export function openDatabase(storage: string): DatabaseSync {
       );
 
       if (version !== undefined && version > SCHEMA_VERSION) {
-        throw new ConfigError('The database is newer than this release; use a newer release');
+        throw new ConfigError(t('storage_open_database_version_unsupported'));
       }
 
       if (
@@ -95,13 +99,13 @@ export function openDatabase(storage: string): DatabaseSync {
           .get() ||
         !inspection.prepare("SELECT 1 FROM sqlite_master WHERE name='account_state'").get()
       ) {
-        throw new ConfigError('Account database upgrade required; run accounts migrate while stopped');
+        throw new ConfigError(t('storage_open_accounts_migration_required'));
       }
     } finally {
       inspection.close();
     }
   } else if (existsSync(storage) && readdirSync(storage).some((name) => /^\d+$/.test(name))) {
-    throw new ConfigError('Legacy rider folders require accounts migrate; refusing to create new identities');
+    throw new ConfigError(t('storage_open_legacy_migration_required'));
   }
 
   if (legacyVersion === 4 || (!fresh && existingPath !== path)) {
@@ -172,8 +176,12 @@ export function openDatabase(storage: string): DatabaseSync {
       if (migration.version <= version(db)) {
         continue;
       }
+
+      if (migration.backup && !fresh) {
+        backupLegacyStorage(storage, `storage-v${migration.version}`);
+      }
       db.exec('BEGIN IMMEDIATE');
-      migration.up(db);
+      migration.up(db, storage);
       db.prepare('UPDATE version SET version=?').run(migration.version);
       db.exec('COMMIT');
     }

@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { AccountsService } from '#src/services/auth.service';
 import { ImportsService } from '#src/services/profile-import.service';
 import { FilesService } from '#src/services/files.service';
@@ -160,7 +161,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const current = runtime.effects.runSync(AccountsService).get(user.player_id);
 
       if (!current?.enabled || current.auth_version !== user.auth_version || current.revision !== user.revision) {
-        throw new HTTPException(409, { message: 'User changed. Reload and retry.' });
+        throw new HTTPException(409, { message: t('profiles_user_conflict') });
       }
       yield* profilesService.save(user.player_id, profile);
 
@@ -189,7 +190,7 @@ export function profileRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       const current = runtime.effects.runSync(AccountsService).get(user.player_id);
 
       if (!current?.enabled || current.auth_version !== user.auth_version || current.revision !== user.revision) {
-        throw new HTTPException(409, { message: 'User changed. Reload and retry.' });
+        throw new HTTPException(409, { message: t('profiles_user_conflict') });
       }
       yield* profilesService.save(user.player_id, profile);
 

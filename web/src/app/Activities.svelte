@@ -1,5 +1,11 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index';
+  import SlowLoading from '../components/SlowLoading.svelte';
   import ActivityChart from './ActivityChart.svelte';
+  import TodayWorkout from './TodayWorkout.svelte';
+  import { tick } from 'svelte';
+  import { slide } from 'svelte/transition';
+  import { ignored } from '../lib/api';
   import { z } from 'zod';
   import type { Api } from '../lib/api';
 
@@ -25,7 +31,6 @@
     avgSpeed: z.number(),
     maxSpeed: z.number(),
     fit: z.boolean(),
-    images: z.number(),
   });
 
   type Summary = z.infer<typeof summarySchema>;
@@ -80,19 +85,19 @@
   } = $props();
 
   const worlds = new Map([
-    [2, 'Richmond'],
-    [6, 'Watopia'],
-    [7, 'London'],
-    [8, 'New York'],
-    [9, 'Innsbruck'],
-    [10, 'Bologna'],
-    [11, 'Yorkshire'],
-    [12, 'Crit City'],
-    [13, 'Makuri Islands'],
-    [14, 'France'],
-    [15, 'Paris'],
-    [16, 'Gravel Mountain'],
-    [17, 'Scotland'],
+    [2, t('richmond')],
+    [6, t('watopia')],
+    [7, t('london')],
+    [8, t('new_york')],
+    [9, t('innsbruck')],
+    [10, t('bologna')],
+    [11, t('yorkshire')],
+    [12, t('crit_city')],
+    [13, t('makuri_islands')],
+    [14, t('france')],
+    [15, t('paris')],
+    [16, t('gravel_mountain')],
+    [17, t('scotland')],
   ]);
 
   let activities = $state<Array<Summary> | null>(null);
@@ -108,6 +113,15 @@
 
   let page = $state(0);
   let showList = $state(false);
+
+  /** Deleting asks first, below the panel's actions. */
+  let confirming = $state(false);
+  let deleting = $state(false);
+  let deleteFailure = $state('');
+  let leaving = $state<string | null>(null);
+  let announcement = $state('');
+  let log = $state<HTMLElement>();
+  let panel = $state<HTMLElement>();
 
   const ordered = $derived(
     [...(activities ?? [])].sort((a, b) => (started(b)?.getTime() ?? -Infinity) - (started(a)?.getTime() ?? -Infinity)),
@@ -139,7 +153,9 @@
       if (group?.key !== key) {
         group = {
           key,
-          label: date ? date.toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'Without a start date',
+          label: date
+            ? date.toLocaleDateString([], { month: 'long', year: 'numeric' })
+            : t('activities_detail_missing_start_date'),
           activities: [],
           distance: 0,
           time: 0,
@@ -156,7 +172,9 @@
   });
 
   const km = (m: number) =>
-    `${(m / 1000).toLocaleString([], { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+    t('km', {
+      value1: (m / 1000).toLocaleString([], { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    });
 
   const clock = (ms: number) => {
     const s = Math.round(ms / 1000);
@@ -167,7 +185,9 @@
   const hours = (ms: number) => {
     const minutes = Math.round(ms / 60_000);
 
-    return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+    return minutes < 60
+      ? t('min', { value1: minutes })
+      : t('h_min', { value1: Math.floor(minutes / 60), value2: minutes % 60 });
   };
 
   const speed = (a: Summary) =>
@@ -180,57 +200,60 @@
   };
 
   const pacing = (a: Summary, mps: number) =>
-    mps <= 0 ? '' : a.sport === 'running' ? pace(mps) : `${(mps * 3.6).toFixed(1)} km/h`;
+    mps <= 0 ? '' : a.sport === 'running' ? pace(mps) : t('km_h', { value1: (mps * 3.6).toFixed(1) });
 
-  const world = (a: Summary) => worlds.get(a.world) ?? (a.world ? `World ${a.world}` : '');
-  const title = (a: Summary) => a.name.trim() || 'Untitled activity';
+  const world = (a: Summary) => worlds.get(a.world) ?? (a.world ? t('world', { value1: a.world }) : '');
+  const title = (a: Summary) => a.name.trim() || t('untitled_activity');
 
   /** Average and maximum side by side. A measure the activity did not record is left out. */
   const measures = (a: Detail) =>
     (
       [
         [
-          'Power',
+          t('power'),
           a.sport === 'running' ? 0 : a.avgWatts,
           a.sport === 'running' ? 0 : a.maxWatts,
-          (v: number) => `${Math.round(v)} W`,
+          (v: number) => t('w', { value1: Math.round(v) }),
         ],
-        ['Heart rate', a.avgHeartRate, a.maxHeartRate, (v: number) => `${Math.round(v)} bpm`],
+        [t('heart_rate'), a.avgHeartRate, a.maxHeartRate, (v: number) => t('bpm', { value1: Math.round(v) })],
         [
-          a.sport === 'running' ? 'Cadence' : 'Cadence',
+          a.sport === 'running' ? t('cadence') : t('cadence'),
           a.avgCadence,
           a.maxCadence,
           (v: number) => `${Math.round(v)} ${a.sport === 'running' ? 'spm' : 'rpm'}`,
         ],
-        [a.sport === 'running' ? 'Pace' : 'Speed', speed(a), a.maxSpeed, (v: number) => pacing(a, v)],
+        [a.sport === 'running' ? t('pace') : t('speed'), speed(a), a.maxSpeed, (v: number) => pacing(a, v)],
       ] as const
     ).filter(([, avg, max]) => avg > 0 || max > 0);
 
   const extras = (a: Detail) =>
     (
       [
-        ['Normalized power', a.normalizedPower, `${Math.round(a.normalizedPower)} W`],
-        ['Training stress score', a.tss, `${Math.round(a.tss)}`],
-        ['Calories', a.calories, `${Math.round(a.calories)} kcal`],
+        [t('normalized_power'), a.normalizedPower, t('w', { value1: Math.round(a.normalizedPower) })],
+        [t('training_stress_score'), a.tss, `${Math.round(a.tss)}`],
+        [t('calories'), a.calories, t('kcal', { value1: Math.round(a.calories) })],
       ] as const
     ).filter(([, value]) => value > 0);
 
   const services: Record<Provider, string> = {
-    strava: 'Strava',
-    freeStrava: 'Strava',
-    garmin: 'Garmin Connect',
-    runalyze: 'Runalyze',
-    intervals: 'Intervals.icu',
-    zwift: 'Zwift',
+    strava: t('strava'),
+    freeStrava: t('strava'),
+    garmin: t('garmin_connect'),
+    runalyze: t('runalyze'),
+    intervals: t('intervals_icu'),
+    zwift: t('zwift'),
   };
 
   /** Only the Strava session cookie can attach images; every other service takes the FIT file alone. */
   const contents = (provider: Provider, images: number) =>
     images === 0
-      ? 'FIT file'
+      ? t('fit_file')
       : provider === 'freeStrava'
-        ? `FIT file and ${images} ${images === 1 ? 'image' : 'images'}`
-        : 'FIT file only, no images';
+        ? t('activities_upload_contents', {
+            value1: images,
+            value2: images === 1 ? t('activities_upload_image_singular') : t('activities_upload_image_plural'),
+          })
+        : t('activities_upload_fit_only');
 
   const inFlight = (u: Upload) => u.state === 'pending' || u.state === 'sending';
   const uploaded = (u: Upload) => u.state === 'sent' || u.state === 'ambiguous';
@@ -238,19 +261,19 @@
   function progress(u: Upload) {
     switch (u.state) {
       case 'pending':
-        return 'Waiting';
+        return t('waiting');
       case 'sending':
-        return 'Uploading…';
+        return t('uploading');
       case 'sent':
-        return 'Uploaded';
+        return t('uploaded');
       case 'ambiguous':
-        return 'Result unknown';
+        return t('result_unknown');
       case 'failed':
-        return u.error?.startsWith('strava_session') ? 'Session expired' : 'Failed';
+        return u.error?.startsWith('strava_session') ? t('session_expired') : t('failed');
       case 'cancelled':
-        return 'Cancelled';
+        return t('cancelled');
       default:
-        return 'Not uploaded';
+        return t('not_uploaded');
     }
   }
 
@@ -263,11 +286,11 @@
     };
 
     return [
-      names((u) => u.state === 'sent') && `Uploaded to ${names((u) => u.state === 'sent')}.`,
-      names(inFlight) && `Uploading to ${names(inFlight)}…`,
-      names((u) => u.state === 'failed') && `Upload to ${names((u) => u.state === 'failed')} failed.`,
+      names((u) => u.state === 'sent') && t('uploaded_to', { value1: names((u) => u.state === 'sent') }),
+      names(inFlight) && t('uploading_to', { value1: names(inFlight) }),
+      names((u) => u.state === 'failed') && t('upload_to_failed', { value1: names((u) => u.state === 'failed') }),
       names((u) => u.state === 'ambiguous') &&
-        `${names((u) => u.state === 'ambiguous')} may already have it; the last upload ended without an answer.`,
+        t('activities_upload_provider_duplicate_warning', { value1: names((u) => u.state === 'ambiguous') }),
     ]
       .filter(Boolean)
       .join(' ');
@@ -287,6 +310,7 @@
 
   function toggleChooser(list: Array<Upload>) {
     chooser = !chooser;
+    confirming = false;
     uploadFailure = '';
 
     // Services that do not have the activity yet start ticked; uploading again is a deliberate choice.
@@ -314,7 +338,10 @@
         }
       } catch (error) {
         failures.push(
-          `${services[provider]}: ${error instanceof Error ? error.message : 'the upload could not start.'}`,
+          t('provider_failure', {
+            value1: services[provider],
+            value2: error instanceof Error ? error.message : t('activities_upload_start_error'),
+          }),
         );
       }
     }
@@ -341,7 +368,7 @@
       hasMore = body.hasMore;
     } catch (error) {
       if (version === requestVersion) {
-        failure = error instanceof Error ? error.message : 'Activities could not be loaded.';
+        failure = error instanceof Error ? error.message : t('activities_list_load_error');
       }
     }
   }
@@ -366,13 +393,16 @@
         return;
       }
       detail = null;
-      failure = error instanceof Error ? error.message : 'The activity could not be loaded.';
+      failure = error instanceof Error ? error.message : t('activities_detail_load_error');
     }
   }
 
   $effect(() => {
     void loadList(page);
   });
+
+  /** The upload button shares its row with delete; without it, delete stands alone at the bottom. */
+  const uploadButton = (a: Detail) => a.fit && a.endDate && uploads?.id === a.id && uploads.list.length > 0;
 
   /** Derived, so the chart polls that replace `detail` do not close the chooser. */
   const uploadable = $derived(detail?.fit ? detail.id : null);
@@ -406,11 +436,77 @@
   $effect(() => {
     const id = selectedId;
     failure = '';
+    confirming = false;
+    deleteFailure = '';
 
     if (id) {
       void loadDetail(id);
     }
   });
+
+  async function ask() {
+    confirming = true;
+    chooser = false;
+    deleteFailure = '';
+    await tick();
+    panel?.querySelector<HTMLElement>('[data-keep]')?.focus();
+  }
+
+  async function keep() {
+    confirming = false;
+    deleteFailure = '';
+    await tick();
+    panel?.querySelector<HTMLElement>('[data-delete]')?.focus();
+  }
+
+  function escape(event: KeyboardEvent) {
+    if (event.key === 'Escape' && !deleting) {
+      void keep();
+    }
+  }
+
+  async function remove(a: Detail) {
+    deleting = true;
+    deleteFailure = '';
+
+    try {
+      await api(ignored, `/api/me/activities/${a.id}`, 'DELETE');
+    } catch (error) {
+      deleting = false;
+      deleteFailure = error instanceof Error && error.message ? error.message : t('activity_delete_error');
+
+      return;
+    }
+
+    leaving = a.id;
+    deleting = false;
+    confirming = false;
+    detail = null;
+    uploads = null;
+    activities = (activities ?? []).filter((item) => item.id !== a.id);
+    announcement = t('activity_deleted', { value1: title(a) });
+
+    // Beside the list the newest activity opens in its place; on a phone the list comes back.
+    const narrow = matchMedia('(max-width: 61.99rem)').matches;
+    showList = narrow;
+    go('/activities');
+    await tick();
+    (narrow ? log : panel)?.focus();
+
+    // The next page moves up by one; an emptied last page steps back.
+    if (activities.length === 0 && page > 0) {
+      page--;
+    } else {
+      void loadList(page);
+    }
+  }
+
+  /** Only the deleted row folds away; rows that leave because the page changed go at once. */
+  function fold(node: Element, { id }: { id: string }) {
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    return id === leaving && !still ? slide(node, { duration: 220 }) : { duration: 0 };
+  }
 
   function open(event: MouseEvent, href: string) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -422,32 +518,78 @@
   }
 </script>
 
+{#snippet deleteButton()}
+  <button
+    type="button"
+    class="delete"
+    data-delete
+    aria-label={t('delete_activity')}
+    aria-expanded={confirming}
+    aria-controls="delete-activity"
+    disabled={deleting}
+    onclick={() => (confirming ? void keep() : void ask())}
+    ><svg viewBox="0 0 20 20" aria-hidden="true"
+      ><path d="M3.5 5.5h13M8 5.5V3.5h4v2M5 5.5l.8 11h8.4l.8-11M8.5 8.5v5.5M11.5 8.5v5.5" /></svg
+    >{t('delete')}</button
+  >
+{/snippet}
+
+{#snippet deleteQuestion(a: Detail)}
+  {#if confirming}
+    <div
+      id="delete-activity"
+      class="question"
+      role="group"
+      aria-labelledby="delete-question"
+      aria-describedby="delete-detail"
+    >
+      <p id="delete-question"><strong>{t('activity_delete_question')}</strong></p>
+      <p id="delete-detail" class="muted">{t('activity_delete_detail')}</p>
+      {#if deleteFailure}<p class="error" role="alert">{deleteFailure}</p>{/if}
+      <div class="choices">
+        <button type="button" data-keep disabled={deleting} onclick={() => void keep()} onkeydown={escape}
+          >{t('keep')}</button
+        >
+        <button type="button" class="danger" disabled={deleting} onclick={() => void remove(a)} onkeydown={escape}
+          >{deleting ? t('deleting') : t('delete')}</button
+        >
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet uploader(a: Detail)}
   <div class="inset upload">
-    <h3>Upload</h3>
+    <h3>{t('upload')}</h3>
     {#if !a.endDate}
-      <p class="muted">Finish the activity in the game to upload it.</p>
+      <p class="muted">{t('activities_upload_unfinished_hint')}</p>
     {:else if uploads?.id !== a.id}
-      <p class="muted">Checking your connected services…</p>
+      <p class="muted">{t('activities_upload_loading_services')}</p>
     {:else if uploads.list.length === 0}
       <p class="muted">
-        Connect Strava, Garmin or Intervals.icu in <a href="/integrations" onclick={(e) => open(e, '/integrations')}
-          >Integrations</a
-        > to send activities there.
+        {t('activities_upload_connect_service_prefix')}
+        <a href="/integrations" onclick={(e) => open(e, '/integrations')}>{t('integrations')}</a>
+        {t('activities_upload_connect_service_suffix')}
       </p>
     {:else}
       {@const list = uploads.list}
       <p class="muted" aria-live="polite">
         {summary(list) ||
-          `Send this activity${a.imageIds.length ? ' and its images' : ''} to the services you have connected.`}
+          t('activities_upload_description', {
+            value1: a.imageIds.length ? t('activities_upload_images_suffix') : '',
+          })}
       </p>
-      <button
-        type="button"
-        class="toggle"
-        aria-expanded={chooser}
-        aria-controls="upload-chooser"
-        onclick={() => toggleChooser(list)}>{chooser ? 'Close' : 'Upload to integrations'}</button
-      >
+      <div class="actions">
+        <button
+          type="button"
+          class="toggle"
+          aria-expanded={chooser}
+          aria-controls="upload-chooser"
+          onclick={() => toggleChooser(list)}>{chooser ? t('close') : t('upload_to_integrations')}</button
+        >
+        {@render deleteButton()}
+      </div>
+      {@render deleteQuestion(a)}
       {#if chooser}
         <form
           id="upload-chooser"
@@ -458,7 +600,7 @@
           }}
         >
           <fieldset>
-            <legend class="visually-hidden">Services to upload to</legend>
+            <legend class="visually-hidden">{t('activities_upload_services_label')}</legend>
             <ul class="plain services">
               {#each list as u (u.provider)}
                 <li class="service" class:sending={inFlight(u)} data-state={u.state ?? 'none'}>
@@ -477,33 +619,33 @@
           </fieldset>
           {#each list.filter((u) => chosen.includes(u.provider) && uploaded(u)) as u (u.provider)}
             <p class="caution">
-              {services[u.provider]}
-              {u.state === 'sent' ? 'already has this activity' : 'may already have this activity'}. Uploading again can
-              create a duplicate there.
+              {t('activities_upload_duplicate_warning', {
+                value1: services[u.provider],
+                value2:
+                  u.state === 'sent' ? t('activities_upload_duplicate') : t('activities_upload_possible_duplicate'),
+              })}
             </p>
           {/each}
           {#if list.some((u) => u.state === 'failed' && u.error?.startsWith('strava_session'))}
             <p class="caution">
-              Strava did not accept the saved session. Replace the cookie in <a
-                href="/integrations"
-                onclick={(e) => open(e, '/integrations')}>Integrations</a
-              >, then try again.
+              {t('activities_upload_session_rejected_prefix')}
+              <a href="/integrations" onclick={(e) => open(e, '/integrations')}>{t('integrations')}</a>{t(
+                'activities_upload_retry_suffix',
+              )}
             </p>
           {/if}
           {#if uploadFailure}<p class="error" role="alert">{uploadFailure}</p>{/if}
           {#if chosen.length}
             <button class="primary" disabled={sending}
               >{sending
-                ? 'Starting upload…'
+                ? t('starting_upload')
                 : chosen.length === 1
-                  ? `Upload to ${services[chosen[0]!]}`
-                  : `Upload to ${chosen.length} services`}</button
+                  ? t('upload_to', { value1: services[chosen[0]!] })
+                  : t('upload_to_services', { value1: chosen.length })}</button
             >
           {/if}
           {#if a.imageIds.length && !list.some((u) => u.provider === 'freeStrava')}
-            <p class="muted note">
-              Images go only to Strava when it is connected with a session cookie. Other services get the FIT file.
-            </p>
+            <p class="muted note">{t('activities_upload_images_hint')}</p>
           {/if}
         </form>
       {/if}
@@ -512,16 +654,19 @@
 {/snippet}
 
 {#if failure}<p class="notice failed" role="alert">{failure}</p>{/if}
+<p class="visually-hidden" role="status">{announcement}</p>
+
+<TodayWorkout {api} />
 
 {#if activities === null}
-  {#if !failure}<p class="delayed" role="status">Loading activities…</p>{/if}
+  {#if !failure}<SlowLoading />{/if}
 {:else if activities.length === 0 && page === 0}
   <section class="panel narrow">
-    <p>No activities yet. Activities you finish in the game appear here, with their FIT files and images.</p>
+    <p>{t('activities_list_empty')}</p>
   </section>
 {:else}
   <div class="activities" class:open={selectedId !== null}>
-    <div class="log">
+    <div class="log" bind:this={log} tabindex="-1">
       {#each months as month (month.key)}
         <section class="month" aria-labelledby="month-{month.key}">
           <div class="month-head">
@@ -531,13 +676,13 @@
               {month.activities.length === 1 ? 'activity' : 'activities'}, {km(month.distance)}, {hours(
                 month.time,
               )}{#if page > 0 || hasMore}
-                (on this page){/if}
+                {t('page_scope_hint')}{/if}
             </p>
           </div>
           <ul class="plain">
             {#each month.activities as a (a.id)}
               {@const date = started(a)}
-              <li>
+              <li out:fold={{ id: a.id }}>
                 <a
                   class="activity"
                   href="/activities/{a.id}"
@@ -546,7 +691,7 @@
                 >
                   <span class="day" aria-hidden={date ? 'true' : undefined}
                     >{#if date}<small>{date.toLocaleDateString([], { weekday: 'short' })}</small
-                      >{date.getDate()}{:else}<small>No date</small>{/if}</span
+                      >{date.getDate()}{:else}<small>{t('no_date')}</small>{/if}</span
                   >
                   <span class="what">
                     <strong>{title(a)}</strong>
@@ -555,11 +700,10 @@
                           >{date.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })},
                         </span>{/if}{world(a)}{#if a.sport === 'running'}{world(a)
                           ? ', run'
-                          : 'Run'}{/if}{#if !a.endDate}<span class="unfinished"
-                          >{world(a) || a.sport === 'running' ? ', ' : ''}not finished</span
-                        >{/if}{#if a.images}<span class="camera"
-                          ><span class="visually-hidden">, </span>{a.images}
-                          {a.images === 1 ? 'image' : 'images'}</span
+                          : t('run')}{/if}{#if !a.endDate}<span class="unfinished"
+                          >{t('not_finished', {
+                            value1: world(a) || a.sport === 'running' ? ', ' : '',
+                          })}</span
                         >{/if}</small
                     >
                   </span>
@@ -574,10 +718,10 @@
         </section>
       {/each}
       {#if page > 0 || hasMore}
-        <nav class="pagination" aria-label="Activity pages">
-          <button type="button" disabled={page === 0} onclick={() => page--}>Previous</button>
-          <span>Page {page + 1}</span>
-          <button type="button" disabled={!hasMore} onclick={() => page++}>Next</button>
+        <nav class="pagination" aria-label={t('activity_pages')}>
+          <button type="button" disabled={page === 0} onclick={() => page--}>{t('previous')}</button>
+          <span>{t('page', { value1: page + 1 })}</span>
+          <button type="button" disabled={!hasMore} onclick={() => page++}>{t('next')}</button>
         </nav>
       {/if}
     </div>
@@ -587,21 +731,19 @@
         class="panel"
         class:stale={loading && detail}
         id="activity-detail"
+        bind:this={panel}
         tabindex="-1"
         aria-labelledby="activity-name"
         aria-busy={loading}
       >
         {#if selectedId}
-          <a class="back" href="/activities" onclick={(e) => open(e, '/activities')}>All activities</a>
+          <a class="back" href="/activities" onclick={(e) => open(e, '/activities')}>{t('all_activities')}</a>
         {/if}
         {#if loading}
-          <div class="loading delayed" role="status">
-            <span class="bar" aria-hidden="true"></span>
-            <p class="muted">Loading activity…</p>
-          </div>
+          <div class="loading"><SlowLoading /></div>
         {/if}
         {#if !selectedId}
-          <p class="muted">Choose an activity to see its route, stats, FIT file and images.</p>
+          <p class="muted">{t('activities_detail_empty')}</p>
         {:else if detail}
           {@const date = started(detail)}
           <h2 id="activity-name">{title(detail)}</h2>
@@ -620,32 +762,30 @@
             {#key detail.id}<ActivityChart chart={detail.chart} running={detail.sport === 'running'} />{/key}
           {:else if detail.chartPending}
             <p class="pending" role="status">
-              {chartWaitExpired
-                ? 'The route and elevation profile are taking longer than expected. Reopen this activity to try again.'
-                : 'Preparing the route and elevation profile from the FIT file…'}
+              {chartWaitExpired ? t('activities_detail_timeout') : t('activities_detail_loading_route')}
             </p>
           {/if}
 
           <dl class="headline">
             <div>
-              <dt>Distance</dt>
+              <dt>{t('distance')}</dt>
               <dd>{km(detail.distanceInMeters)}</dd>
             </div>
             <div>
-              <dt>Moving time</dt>
+              <dt>{t('moving_time')}</dt>
               <dd>{clock(detail.movingTimeInMs)}</dd>
             </div>
             <div>
-              <dt>Elevation gain</dt>
-              <dd>{Math.round(detail.totalElevation)} m</dd>
+              <dt>{t('elevation_gain')}</dt>
+              <dd>{t('m', { value1: Math.round(detail.totalElevation) })}</dd>
             </div>
           </dl>
 
           {#if measures(detail).length}
             <table class="measures">
-              <caption class="visually-hidden">Averages and maximums</caption>
+              <caption class="visually-hidden">{t('averages_and_maximums')}</caption>
               <thead>
-                <tr><td></td><th scope="col">Average</th><th scope="col">Max</th></tr>
+                <tr><td></td><th scope="col">{t('average')}</th><th scope="col">{t('max')}</th></tr>
               </thead>
               <tbody>
                 {#each measures(detail) as [label, avg, max, format] (label)}
@@ -669,18 +809,17 @@
           {/if}
 
           <div class="inset">
-            <h3>FIT file</h3>
+            <h3>{t('fit_file')}</h3>
             {#if detail.fit}
-              <p class="muted">The recording from the game, for Strava, Garmin Connect or any training app.</p>
-              <a class="button primary" href="/api/me/activities/{detail.id}/fit" download>Download FIT file</a>
+              <a class="button primary" href="/api/me/activities/{detail.id}/fit" download>{t('download_fit_file')}</a>
             {:else}
-              <p class="muted">The game saved no FIT file for this activity.</p>
+              <p class="muted">{t('activities_detail_missing_fit')}</p>
             {/if}
           </div>
 
           {#if detail.imageIds.length}
             <div class="inset">
-              <h3>Images</h3>
+              <h3>{t('images')}</h3>
               <ul class="plain images">
                 {#each detail.imageIds as image, index (image)}
                   <li>
@@ -692,7 +831,7 @@
                       />
                     </a>
                     <a class="download" href="/api/me/activities/{detail.id}/images/{image}?download" download
-                      >Download<span class="visually-hidden"> image {index + 1}</span></a
+                      >{t('download')}<span class="visually-hidden"> {t('image', { value1: index + 1 })}</span></a
                     >
                   </li>
                 {/each}
@@ -701,6 +840,10 @@
           {/if}
 
           {#if detail.fit}{@render uploader(detail)}{/if}
+          {#if !uploadButton(detail)}
+            <div class="actions">{@render deleteButton()}</div>
+            {@render deleteQuestion(detail)}
+          {/if}
         {/if}
       </section>
     </div>
@@ -729,14 +872,6 @@
       opacity: 0.45;
       transition: opacity 200ms 400ms;
     }
-    .detail .stale .loading p {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      white-space: nowrap;
-    }
   }
   /* On a phone, an open activity takes the screen; the list is one link away. */
   @media (max-width: 61.99rem) {
@@ -749,25 +884,11 @@
     }
   }
 
-  /* Fast loads show nothing; a slow one says so after a moment. */
-  .delayed {
-    animation: reveal 150ms ease-out 400ms both;
-  }
-  @keyframes reveal {
-    from {
-      opacity: 0;
-      visibility: hidden;
-    }
-  }
-
   .detail .panel {
     position: relative;
   }
   .detail .panel > * {
     transition: opacity 100ms;
-  }
-  .loading p {
-    margin: 0;
   }
   .bar {
     position: absolute;
@@ -796,12 +917,12 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .delayed {
-      animation-duration: 1ms;
-    }
     .bar::after {
       width: 100%;
       opacity: 0.6;
+      animation: none;
+    }
+    .question {
       animation: none;
     }
   }
@@ -920,22 +1041,6 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-  .camera {
-    margin-left: 0.6rem;
-  }
-  .camera::before {
-    content: '';
-    display: inline-block;
-    width: 0.85rem;
-    height: 0.7rem;
-    margin-right: 0.3rem;
-    background: currentColor;
-    vertical-align: -0.05rem;
-    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M8 0 6 3H2a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4l-2-3zm4 6a5 5 0 1 1 0 10 5 5 0 0 1 0-10z'/%3E%3C/svg%3E")
-      center / contain no-repeat;
-    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M8 0 6 3H2a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4l-2-3zm4 6a5 5 0 1 1 0 10 5 5 0 0 1 0-10z'/%3E%3C/svg%3E")
-      center / contain no-repeat;
   }
   .how {
     text-align: right;
@@ -1096,8 +1201,88 @@
     font-size: 0.8125rem;
   }
 
-  .upload .toggle {
+  /* Upload is the everyday action; delete is rare, so it sits quietly at the far end of the same row. */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .upload .actions {
     margin-top: 0;
+  }
+  .actions button {
+    margin: 0;
+  }
+  .actions .delete {
+    margin-left: auto;
+  }
+  .delete {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-inline: 0.6rem;
+    border-color: transparent;
+    color: var(--muted);
+  }
+  .delete svg {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .delete:hover,
+  .delete[aria-expanded='true'] {
+    color: var(--alarm);
+    background: rgb(255 90 70 / 0.12);
+  }
+
+  /* The question opens under the button that asked it, tinted so it cannot pass for the upload chooser. */
+  .question {
+    margin: 0.85rem 0 0;
+    padding: 0.85rem 0.95rem;
+    border: 2px solid rgb(255 179 166 / 0.6);
+    border-radius: 10px;
+    background: rgb(120 40 34 / 0.38);
+    animation: arm 180ms ease-out;
+  }
+  @keyframes arm {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  .question p {
+    margin: 0;
+  }
+  .question .muted {
+    margin-top: 0.2rem;
+    font-size: 0.875rem;
+  }
+  .question .error {
+    margin-top: 0.6rem;
+    font-size: 0.875rem;
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .choices button {
+    margin: 0;
+  }
+  button.danger {
+    border-color: rgb(255 179 166 / 0.75);
+    color: var(--alarm);
+  }
+  button.danger:hover {
+    background: rgb(255 90 70 / 0.14);
   }
   .upload .toggle[aria-expanded='true'] {
     border-color: var(--line);

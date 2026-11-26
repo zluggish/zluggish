@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: Log levels, formats and events of the Zluggish server.
+description: Log levels and events of the Zluggish server.
 ---
 
 # Logging
@@ -12,7 +12,6 @@ Set the logging options in `zluggish.config.ts`:
 ```ts
 logging: {
   level: 'INFO', // VERBOSE, INFO, WARN, ERROR, CRITICAL, or NOTSET
-  format: 'pretty', // or 'json' for one structured record per line
   rideProgressIntervalSeconds: 60, // 0 disables progress; otherwise at least 10
 },
 ```
@@ -30,7 +29,7 @@ At the default `INFO` level, the server logs:
 
 Routine HTTP requests show only at the `VERBOSE` level.
 
-Each line has a UTC timestamp, the level, an event name, a message and context. In JSON records, the context is in `fields`.
+Each line has a UTC timestamp, the level, an event name, a message and optional context such as `component=server status=401`. Error stacks and causes appear on separate lines in the console.
 
 `INFO` and `VERBOSE` go to stdout. Warnings and errors go to stderr. Use your process manager to keep and rotate the logs.
 

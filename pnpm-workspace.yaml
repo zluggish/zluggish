@@ -1,4 +1,5 @@
 packages:
+  - i18n
   - server
   - web
   - sites/docs.zluggish.com

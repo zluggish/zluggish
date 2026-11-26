@@ -1,8 +1,17 @@
+import { t } from '#src/i18n/index';
 import { backupDirectory } from '#src/migrations/backup-paths';
 import type { ResolvedConfig } from '#src/config/index';
 import { immediate } from '#src/db/transaction';
 import { RiderDocumentName } from '#src/enum';
 import type { Repositories } from '#src/repositories';
+import {
+  ActivityStorage,
+  activitiesFolder,
+  activityDirectoryPattern,
+  activityFolder,
+  imagePath,
+  videoPath,
+} from '#src/activity-storage';
 import { JobsService } from '#src/services/jobs.service';
 import { RuntimeContext } from '#src/context';
 import { Context, Effect, Layer } from 'effect';
@@ -14,7 +23,13 @@ const day = 24 * hour;
 /** A media reservation older than its upload token is abandoned. */
 const reservationMs = hour;
 
-export type RetentionCandidate = { path: string; bytes: number; reason: string };
+export type RetentionCandidate = {
+  path: string;
+  bytes: number;
+  reason: string;
+  identity?: string;
+  owner?: { kind: keyof ReturnType<Repositories['activitiesRepository']['owners']>; id: number };
+};
 
 export type RetentionPlan = {
   jobs: number;
@@ -45,11 +60,17 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
     const files: Array<RetentionCandidate> = [];
     const owners = repositories.activitiesRepository.owners();
 
-    const add = async (path: string, reason: string) => {
+    const add = async (path: string, reason: string, owner: NonNullable<RetentionCandidate['owner']>) => {
       const info = await repositories.filesRepository.statAsync(path);
 
       if (info) {
-        files.push({ path, bytes: info.bytes, reason });
+        files.push({
+          path,
+          bytes: info.directory ? await size(path) : info.bytes,
+          reason,
+          identity: info.identity,
+          owner,
+        });
       }
     };
 
@@ -63,48 +84,58 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
     ];
 
     for (const row of media) {
-      const folder = resolve(storage, String(row.player_id));
+      const stored = repositories.activitiesRepository.storageDirectory(row.activity_id);
+
+      if (!stored) {
+        continue;
+      }
+      const folder = activityFolder(resolve(storage, String(stored.player)), stored.directory);
 
       if (row.table === 'activity_image') {
-        await add(resolve(folder, 'images', `${row.id}.jpg`), 'abandoned upload');
+        await add(imagePath(folder, row.id), t('abandoned_upload'), { kind: 'images', id: row.id });
       } else {
-        for (const extension of ['mp4', 'mov']) {
-          await add(resolve(folder, 'medias', `${row.id}.${extension}`), 'abandoned upload');
+        for (const contentType of ['video/mp4', 'video/quicktime']) {
+          await add(videoPath(folder, row.id, contentType), t('abandoned_upload'), { kind: 'media', id: row.id });
         }
       }
     }
 
     const abandoned = new Set(media.map((row) => `${row.table}:${row.id}`));
 
-    for (const entry of await repositories.filesRepository.entriesAsync(resolve(storage, 'activities'))) {
-      if (entry.isFile() && /^\d+$/.test(entry.name) && !owners.charts.has(Number(entry.name))) {
-        await add(resolve(storage, 'activities', entry.name), 'orphaned chart');
-      }
-    }
-
     for (const rider of await repositories.filesRepository.entriesAsync(storage)) {
       if (!rider.isDirectory() || !/^\d+$/.test(rider.name)) {
         continue;
       }
       const folder = resolve(storage, rider.name);
+      const activities = activitiesFolder(folder);
 
-      for (const entry of await repositories.filesRepository.entriesAsync(resolve(folder, 'fit'))) {
-        const activity = /^(\d+) - /.exec(entry.name)?.[1];
+      // Folders the migration could not match (activities/orphaned) are kept for the operator.
+      for (const entry of await repositories.filesRepository.entriesAsync(activities)) {
+        const activity = activityDirectoryPattern.exec(entry.name)?.[1];
 
-        if (activity !== undefined && !owners.activities.has(Number(activity))) {
-          await add(resolve(folder, 'fit', entry.name), 'orphaned FIT export');
+        if (!entry.isDirectory() || activity === undefined) {
+          continue;
         }
-      }
+        const path = resolve(activities, entry.name);
 
-      for (const [directory, table, owned] of [
-        ['images', 'activity_image', owners.images],
-        ['medias', 'activity_media', owners.media],
-      ] as const) {
-        for (const entry of await repositories.filesRepository.entriesAsync(resolve(folder, directory))) {
-          const id = /^(\d+)\.\w+$/.exec(entry.name)?.[1];
+        if (!owners.activities.has(Number(activity))) {
+          await add(path, t('orphaned_activity_folder'), { kind: 'activities', id: Number(activity) });
+          continue;
+        }
 
-          if (id !== undefined && !owned.has(Number(id)) && !abandoned.has(`${table}:${id}`)) {
-            await add(resolve(folder, directory, entry.name), 'orphaned media');
+        for (const [directory, table, owned] of [
+          [ActivityStorage.Images, 'activity_image', owners.images],
+          [ActivityStorage.Videos, 'activity_media', owners.media],
+        ] as const) {
+          for (const file of await repositories.filesRepository.entriesAsync(resolve(path, directory))) {
+            const id = /^(\d+)\.\w+$/.exec(file.name)?.[1];
+
+            if (id !== undefined && !owned.has(Number(id)) && !abandoned.has(`${table}:${id}`)) {
+              await add(resolve(path, directory, file.name), t('orphaned_media'), {
+                kind: table === 'activity_image' ? 'images' : 'media',
+                id: Number(id),
+              });
+            }
           }
         }
       }
@@ -120,7 +151,7 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
       const info = await repositories.filesRepository.statAsync(path);
 
       if (info && info.modified < now - retention.temporaryFileHours * hour) {
-        files.push({ path, bytes: info.bytes, reason: 'temporary file' });
+        files.push({ path, bytes: info.bytes, reason: t('temporary_file') });
       }
     }
 
@@ -143,7 +174,7 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
 
       for (const name of backups.slice(retention.migrationBackups)) {
         const path = resolve(directory, name);
-        files.push({ path, bytes: await size(path), reason: 'old migration backup' });
+        files.push({ path, bytes: await size(path), reason: t('old_migration_backup') });
       }
     }
 
@@ -174,25 +205,64 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
     }
 
     for (const old of recordings.toSorted((a, b) => b.modified - a.modified).slice(retention.ghostsPerRoute)) {
-      files.push({ path: old.path, bytes: old.bytes, reason: 'old ghost recording' });
+      files.push({ path: old.path, bytes: old.bytes, reason: t('old_ghost_recording') });
     }
   }
 
   async function apply(plan: RetentionPlan, now = Date.now()) {
+    let files = 0;
+    let bytes = 0;
     immediate(repositories.db, () => {
       repositories.jobsRepository.prune(now - retention.finishedJobsDays * day);
       repositories.uploadsRepository.prune(now - retention.deliveryRecordsDays * day);
 
-      for (const row of plan.media) {
-        repositories.activitiesRepository.deleteMedia(row.table, row.id);
+      // A preview is only a hint. A reservation may have become ready since then.
+      for (const table of ['activity_image', 'activity_media'] as const) {
+        const abandoned = new Set(
+          repositories.activitiesRepository.abandonedMedia(table, now - reservationMs).map((row) => row.id),
+        );
+        for (const row of plan.media) {
+          if (row.table === table && abandoned.has(row.id)) {
+            repositories.activitiesRepository.deleteMedia(table, row.id);
+          }
+        }
+      }
+    });
+
+    // Commit the reservation fence before touching files: a filesystem failure must
+    // never roll it back and let an in-flight upload mark a removed file ready.
+    immediate(repositories.db, () => {
+      const owners = repositories.activitiesRepository.owners();
+      for (const file of plan.files) {
+        const owner = file.owner;
+        if (
+          !owner ||
+          !file.identity ||
+          !repositories.filesRepository.removeUnchanged(
+            file.path,
+            file.identity,
+            () => !owners[owner.kind].has(owner.id),
+          )
+        ) {
+          continue;
+        }
+
+        files++;
+        bytes += file.bytes;
       }
     });
 
     for (const file of plan.files) {
+      if (file.owner) {
+        continue;
+      }
+
       await repositories.filesRepository.removeTreeAsync(file.path);
+      files++;
+      bytes += file.bytes;
     }
 
-    return { files: plan.files.length, bytes: plan.files.reduce((total, file) => total + file.bytes, 0) };
+    return { files, bytes };
   }
 
   async function size(path: string): Promise<number> {
@@ -230,16 +300,19 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
 
     const top = new Map<string, keyof StorageUsage>([
       ['backups', 'backups'],
-      ['activities', 'charts'],
       ['settings.db', 'legacy'],
     ]);
 
     const rider = new Map<string, keyof StorageUsage>([
-      ['images', 'media'],
-      ['medias', 'media'],
-      ['fit', 'fitExports'],
       ['ghosts', 'ghosts'],
       ['garth', 'legacy'],
+    ]);
+
+    const activity = new Map<string, keyof StorageUsage>([
+      [ActivityStorage.Fit, 'fitExports'],
+      [ActivityStorage.Chart, 'charts'],
+      [ActivityStorage.Images, 'media'],
+      [ActivityStorage.Videos, 'media'],
     ]);
 
     for (const entry of await repositories.filesRepository.entriesAsync(storage)) {
@@ -252,6 +325,21 @@ function cleanup({ repositories, retention, storage }: RetentionScope) {
       }
 
       for (const item of await repositories.filesRepository.entriesAsync(path)) {
+        if (item.name === ActivityStorage.Directory && item.isDirectory()) {
+          for (const folder of await repositories.filesRepository.entriesAsync(activitiesFolder(path))) {
+            const folderPath = resolve(activitiesFolder(path), folder.name);
+
+            if (folder.name === ActivityStorage.Orphaned || !folder.isDirectory()) {
+              usage[folder.name === ActivityStorage.Orphaned ? 'fitExports' : 'other'] += await size(folderPath);
+              continue;
+            }
+
+            for (const file of await repositories.filesRepository.entriesAsync(folderPath)) {
+              usage[activity.get(file.name) ?? 'other'] += await size(resolve(folderPath, file.name));
+            }
+          }
+          continue;
+        }
         usage[rider.get(item.name) ?? (legacy.has(item.name) ? 'legacy' : 'other')] += await size(
           resolve(path, item.name),
         );

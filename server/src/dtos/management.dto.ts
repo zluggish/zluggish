@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { inputChanges } from '#src/dtos/meetup.dto';
 import { overrideSchema } from '#src/dtos/settings.dto';
 import { IsoDate, normalized, satisfies, Strict } from '#src/schema';
@@ -12,7 +13,7 @@ export const loginName = normalized(
   Schema.String.check(
     Schema.isMinLength(1),
     Schema.isMaxLength(254),
-    satisfies<string>((value) => !/[\s\0]/.test(value), 'Enter a login name without spaces.'),
+    satisfies<string>((value) => !/[\s\0]/.test(value), t('management_dto_login_name_invalid')),
   ),
 );
 

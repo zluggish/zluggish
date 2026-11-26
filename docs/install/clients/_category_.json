@@ -3,6 +3,6 @@
   "position": 4,
   "link": {
     "type": "generated-index",
-    "description": "Redirect the Zwift client to your Zluggish server and make it accept the server certificate."
+    "description": "Patch the Zwift client to redirect to Zluggish."
   }
 }

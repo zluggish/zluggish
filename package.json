@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm --dir web build && pnpm --dir server exec tsc -p tsconfig.json",
     "test": "pnpm --dir server test",
-    "check": "pnpm --dir web check && pnpm --dir server check"
+    "check": "pnpm i18n:check && pnpm --dir web check && pnpm --dir server check",
+    "i18n:check": "node scripts/check-i18n.mjs"
   }
 }

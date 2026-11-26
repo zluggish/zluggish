@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../lib/i18n/index';
   let { chart, running }: { chart: Chart; running: boolean } = $props();
 
   const width = 600;
@@ -120,7 +121,9 @@
   }
 
   const km = (cm: number) =>
-    `${(cm / 100_000).toLocaleString([], { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+    t('km', {
+      value1: (cm / 100_000).toLocaleString([], { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    });
 
   const clock = (s: number) =>
     `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -134,17 +137,17 @@
     const rows: Array<[string, string]> = [];
 
     if (chart.distanceInCm.some((d) => d > 0)) {
-      rows.push(['Distance', km(chart.distanceInCm[i] ?? 0)]);
+      rows.push([t('distance'), km(chart.distanceInCm[i] ?? 0)]);
     }
-    rows.push(['Time', clock(chart.timeInSec[i] ?? 0)]);
-    rows.push(['Elevation', `${Math.round(metres[i] ?? 0)} m`]);
+    rows.push([t('time'), clock(chart.timeInSec[i] ?? 0)]);
+    rows.push([t('elevation'), t('m', { value1: Math.round(metres[i] ?? 0) })]);
 
     if (!running && chart.powerInWatts.some((v) => v > 0)) {
-      rows.push(['Power', `${chart.powerInWatts[i] ?? 0} W`]);
+      rows.push([t('power'), t('w', { value1: chart.powerInWatts[i] ?? 0 })]);
     }
 
     if (chart.heartRate.some((v) => v > 0)) {
-      rows.push(['Heart rate', `${chart.heartRate[i] ?? 0} bpm`]);
+      rows.push([t('heart_rate'), t('bpm', { value1: chart.heartRate[i] ?? 0 })]);
     }
 
     return rows;
@@ -153,11 +156,17 @@
 
 <figure class="activity">
   {#if route}
-    <svg class="route" class:tall={route.tall} viewBox={route.box} role="img" aria-label="Route of the activity">
+    <svg
+      class="route"
+      class:tall={route.tall}
+      viewBox={route.box}
+      role="img"
+      aria-label={t('activity_chart_route_label')}
+    >
       <path class="trace" d={route.d} pathLength="1" />
-      <circle class="start" cx={route.points[0]!.x} cy={route.points[0]!.y} r="14"><title>Start</title></circle>
+      <circle class="start" cx={route.points[0]!.x} cy={route.points[0]!.y} r="14"><title>{t('start')}</title></circle>
       <circle class="finish" cx={route.points.at(-1)!.x} cy={route.points.at(-1)!.y} r="14"
-        ><title>Finish</title></circle
+        ><title>{t('finish')}</title></circle
       >
       {#if marker}<circle class="here" cx={marker.x} cy={marker.y} r="20" />{/if}
     </svg>
@@ -172,12 +181,12 @@
         </div>{/each}
     {:else}
       <div>
-        <dt>Lowest</dt>
-        <dd>{Math.round(low)} m</dd>
+        <dt>{t('lowest')}</dt>
+        <dd>{t('m', { value1: Math.round(low) })}</dd>
       </div>
       <div>
-        <dt>Highest</dt>
-        <dd>{Math.round(high)} m</dd>
+        <dt>{t('highest')}</dt>
+        <dd>{t('m', { value1: Math.round(high) })}</dd>
       </div>
     {/if}
   </dl>
@@ -186,7 +195,7 @@
     class="profile"
     role="slider"
     tabindex="0"
-    aria-label="Position in the activity"
+    aria-label={t('activity_chart_position_label')}
     aria-valuemin={0}
     aria-valuemax={count - 1}
     aria-valuenow={active ?? 0}
@@ -211,7 +220,11 @@
       ></span>{/if}
   </div>
   <figcaption class="axis">
-    <span>Elevation along the {chart.distanceInCm.some((d) => d > 0) ? 'distance' : 'time'}</span>
+    <span
+      >{t('activity_chart_elevation_description', {
+        value1: chart.distanceInCm.some((d) => d > 0) ? 'distance' : 'time',
+      })}</span
+    >
     <span>{chart.distanceInCm.some((d) => d > 0) ? km(end) : clock(end)}</span>
   </figcaption>
 </figure>

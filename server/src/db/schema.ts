@@ -78,6 +78,7 @@ export interface Database {
     normalized_power: Generated<number | null>;
     power_zones: Generated<string | null>;
     power_units: Generated<number | null>;
+    storage_dir: Generated<string | null>;
   };
   segment_result: {
     id: Generated<Integer>;

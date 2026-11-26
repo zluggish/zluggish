@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
 
 export interface InitializationVector {
@@ -15,10 +16,10 @@ export interface PacketHeader {
 
 function nonce(iv: InitializationVector) {
   const data = Buffer.alloc(12);
-  data.writeInt16BE(iv.device, 2);
-  data.writeInt16BE(iv.channel, 4);
-  data.writeInt16BE(iv.connection, 6);
-  data.writeInt32BE(iv.sequence, 8);
+  data.writeUInt16BE(iv.device, 2);
+  data.writeUInt16BE(iv.channel, 4);
+  data.writeUInt16BE(iv.connection, 6);
+  data.writeUInt32BE(iv.sequence, 8);
 
   return data;
 }
@@ -30,21 +31,21 @@ export function encodePacket(payload: Uint8Array, key: Uint8Array, iv: Initializ
   if (fields.relay !== undefined) {
     flags |= 4;
     const data = Buffer.alloc(4);
-    data.writeInt32BE(fields.relay);
+    data.writeUInt32BE(fields.relay);
     parts.push(data);
   }
 
   if (fields.connection !== undefined) {
     flags |= 2;
     const data = Buffer.alloc(2);
-    data.writeInt16BE(fields.connection);
+    data.writeUInt16BE(fields.connection);
     parts.push(data);
   }
 
   if (fields.sequence !== undefined) {
     flags |= 1;
     const data = Buffer.alloc(4);
-    data.writeInt32BE(fields.sequence);
+    data.writeUInt32BE(fields.sequence);
     parts.push(data);
   }
 
@@ -59,14 +60,14 @@ export function decodePacket(data: Uint8Array, key: Uint8Array, iv: Initializati
   const flags = buffer[0];
 
   if (flags === undefined || flags & ~7) {
-    throw new Error('Invalid packet flags');
+    throw new Error(t('invalid_packet_flags'));
   }
   let offset = 1;
   const fields: PacketHeader = {};
 
   const take = (size: number) => {
     if (offset + size > buffer.length) {
-      throw new Error('Truncated packet header');
+      throw new Error(t('truncated_packet_header'));
     }
     const start = offset;
     offset += size;
@@ -93,7 +94,7 @@ export function decodePacket(data: Uint8Array, key: Uint8Array, iv: Initializati
   };
 
   if (buffer.length - offset < 4) {
-    throw new Error('Missing packet authentication tag');
+    throw new Error(t('missing_packet_authentication_tag'));
   }
 
   return {
@@ -134,7 +135,7 @@ export class FrameDecoder {
       const length = this.pending.readUInt16BE(0);
 
       if (length === 0) {
-        throw new Error('Empty TCP frame');
+        throw new Error(t('empty_tcp_frame'));
       }
       const size = Math.min(length + 2 - this.pending.length, incoming.length);
       this.pending = Buffer.concat([this.pending, incoming.subarray(0, size)]);
@@ -153,7 +154,7 @@ export class FrameDecoder {
 
   finish() {
     if (this.pending.length > 0) {
-      throw new Error('Truncated TCP frame');
+      throw new Error(t('truncated_tcp_frame'));
     }
   }
 }

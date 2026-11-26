@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { archiveSuffix, compressBackupSync } from '#src/migrations/backup-archive';
 import { ConfigError } from '#src/config/index';
 import { completionSchemaSQL, storageSchemaSQL } from '#src/db/ddl';
@@ -136,7 +137,7 @@ function checkpointSource(path: string) {
     )(db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get());
 
     if (result.busy !== 0 || result.log !== result.checkpointed) {
-      throw new ConfigError(`${basename(path)} could not be checkpointed; stop other processes and retry`);
+      throw new ConfigError(t('storage_checkpoint_failed', { value1: basename(path) }));
     }
   } finally {
     db.close();
@@ -145,7 +146,7 @@ function checkpointSource(path: string) {
   const wal = `${path}-wal`;
 
   if (existsSync(wal) && statSync(wal).size > 0) {
-    throw new ConfigError(`${basename(path)} has unapplied WAL changes; open it with SQLite and checkpoint`);
+    throw new ConfigError(t('storage_wal_changes_pending', { value1: basename(path) }));
   }
 }
 
@@ -230,7 +231,7 @@ function credentialsKey(storage: string) {
   const key = readFileSync(file);
 
   if (key.length !== 32) {
-    throw new ConfigError('Invalid credentials key; restore credentials-key.bin');
+    throw new ConfigError(t('storage_credentials_key_invalid'));
   }
 
   return key;
@@ -311,7 +312,7 @@ function importSettings(storage: string, db: DatabaseSync) {
     );
 
     if (version.user_version > 1) {
-      throw new ConfigError('Unsupported settings database version');
+      throw new ConfigError(t('unsupported_settings_database_version'));
     }
 
     const tables = new Set(
@@ -516,7 +517,7 @@ function canonicalizeFit(storage: string, db: DatabaseSync, report: Report, chec
     const journalFit = journal && journal.fit.length > 0 ? journal.fit : null;
 
     if (column && journalFit && !Buffer.from(column).equals(Buffer.from(journalFit))) {
-      throw new ConfigError(`Activity ${activity.id} has two different FIT payloads; restore it before migrating`);
+      throw new ConfigError(t('storage_fit_payload_conflict', { value1: activity.id }));
     }
     const file = activity.player_id === null ? null : exportFile(storage, activity.player_id, activity.id);
     const exported = file ? readFileSync(file) : null;
@@ -589,7 +590,10 @@ function finishCompletions(db: DatabaseSync, report: Report) {
 
       if (!applied && !derived) {
         throw new ConfigError(
-          `Activity ${completion.activity_id} has a streak journal that disagrees with rider ${completion.player_id} files`,
+          t('storage_streak_journal_mismatch', {
+            value1: completion.activity_id,
+            value2: completion.player_id,
+          }),
         );
       }
 
@@ -634,11 +638,11 @@ function validate(source: string, destination: DatabaseSync, report: Report, che
   const integrity = destination.prepare('PRAGMA integrity_check').get();
 
   if (integrity?.integrity_check !== 'ok') {
-    throw new ConfigError('Migrated database failed its integrity check');
+    throw new ConfigError(t('storage_integrity_check_failed'));
   }
 
   if (destination.prepare('PRAGMA foreign_key_check').all().length > 0) {
-    throw new ConfigError('Migrated database has broken references');
+    throw new ConfigError(t('storage_foreign_key_check_failed'));
   }
   const original = new DatabaseSync(source, { readOnly: true });
 
@@ -657,7 +661,7 @@ function validate(source: string, destination: DatabaseSync, report: Report, che
       const originalCount = optional && !exists ? 0 : count(original, sql);
 
       if (originalCount !== count(destination, sql)) {
-        throw new ConfigError(`Migrated ${table} rows differ from the source`);
+        throw new ConfigError(t('storage_source_rows_mismatch', { value1: table }));
       }
     }
 
@@ -668,19 +672,19 @@ function validate(source: string, destination: DatabaseSync, report: Report, che
         .map((row) => JSON.stringify(row));
 
     if (JSON.stringify(ids(original)) !== JSON.stringify(ids(destination))) {
-      throw new ConfigError('Migrated identities differ from the source');
+      throw new ConfigError(t('storage_identity_mismatch'));
     }
   } finally {
     original.close();
   }
 
   if (count(destination, 'SELECT count(*) AS n FROM rider_document') !== report.documents) {
-    throw new ConfigError('Migrated rider documents are incomplete');
+    throw new ConfigError(t('storage_rider_documents_incomplete'));
   }
 
   for (const [table, rows] of Object.entries(report.settings)) {
     if (count(destination, `SELECT count(*) AS n FROM ${table}`) !== rows) {
-      throw new ConfigError(`Migrated ${table} rows differ from settings.db`);
+      throw new ConfigError(t('storage_settings_rows_mismatch', { value1: table }));
     }
   }
 
@@ -688,20 +692,20 @@ function validate(source: string, destination: DatabaseSync, report: Report, che
     const id = Schema.decodeUnknownSync(Schema.Finite)(row.id);
 
     if (checksums.get(id) !== crypto.sha256(Schema.decodeUnknownSync(Schema.instanceOf(Uint8Array))(row.fit))) {
-      throw new ConfigError(`Migrated FIT payload of activity ${id} differs from its source`);
+      throw new ConfigError(t('storage_fit_payload_mismatch', { value1: id }));
     }
     checksums.delete(id);
   }
 
   if (checksums.size > 0) {
-    throw new ConfigError('A migrated FIT payload is missing');
+    throw new ConfigError(t('storage_fit_payload_missing'));
   }
 
   for (const row of destination.prepare('SELECT payload FROM activity_completion').all()) {
     if (
       fromBinary(ActivitySchema, Schema.decodeUnknownSync(Schema.instanceOf(Uint8Array))(row.payload)).fit.length > 0
     ) {
-      throw new ConfigError('A migrated completion still holds a FIT payload');
+      throw new ConfigError(t('storage_completion_payload_retained'));
     }
   }
 }
@@ -742,8 +746,8 @@ export function resolvePendingMigration(storage: string) {
   }
 
   throw new ConfigError(
-    `Interrupted storage migration: ${StorageFile.Database} matches neither the source nor the migrated copy. ` +
-      `Restore ${StorageFile.Database} from ${manifest.backup} and start again.`,
+    t('storage_migration_recovery_conflict', { value1: StorageFile.Database }) +
+      t('storage_restore_hint', { value1: StorageFile.Database, value2: manifest.backup }),
   );
 }
 
@@ -860,7 +864,7 @@ export function migrateStorage(storage: string, reached: (step: MigrationStep) =
   reached('imported');
 
   if (existsSync(`${temporary}-wal`) || existsSync(`${temporary}-journal`)) {
-    throw new ConfigError('The migrated database still needs a journal file');
+    throw new ConfigError(t('storage_journal_retained'));
   }
   syncFile(temporary);
   reached('flushed');

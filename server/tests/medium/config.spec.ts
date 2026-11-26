@@ -1,5 +1,6 @@
 import { defineConfig, validateConfig } from '#src/config/index';
-import { loadConfig, packageRoot, prepareContainerConfig } from '#src/config/load';
+import { loadConfig, prepareContainerConfig } from '#src/config/load';
+import { CertificateRepository } from '#src/repositories/certificate.repository';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -314,9 +315,13 @@ await test('storage overrides and file paths are validated before path resolutio
 await test('custom TLS files are resolved and validated without creating storage', async (t) => {
   const root = fixture(t);
   const path = resolve(root, 'zluggish.config.ts');
-  const assets = resolve(packageRoot(), '../assets/ssl');
-  writeFileSync(resolve(root, 'cert.pem'), readFileSync(resolve(assets, 'cert-zwift-com.pem')));
-  writeFileSync(resolve(root, 'key.pem'), readFileSync(resolve(assets, 'key-zwift-com.pem')));
+  const { cert, key } = await new CertificateRepository().create({
+    serverId: '0123456789ab',
+    years: 5,
+    now: new Date(),
+  });
+  writeFileSync(resolve(root, 'cert.pem'), cert);
+  writeFileSync(resolve(root, 'key.pem'), key);
   writeFileSync(
     path,
     `export default { storageDir: './state', tls: { certFile: './cert.pem', keyFile: './key.pem' } }`,

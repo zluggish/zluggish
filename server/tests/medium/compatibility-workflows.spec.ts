@@ -201,6 +201,10 @@ await test('automatic home and Android login sync coalesce, preserve UUIDs and e
     if (String(input).endsWith('/download.zwo')) {
       return Promise.resolve(new Response(xml));
     }
+    if (!String(input).includes('/events?')) {
+      // The athlete settings (FTP, zones) a sync reads besides the events.
+      return Promise.resolve(Response.json({}));
+    }
     eventRequests++;
 
     return Promise.resolve(Response.json([{ id: 42, start_date_local: `${day}T08:00:00`, category: 'WORKOUT' }]));

@@ -5,7 +5,7 @@ description: Fix problems when Zwift is newer than Zluggish, or when an update f
 
 # Zwift client updates
 
-Zwift updates can break compatibility with Zluggish. Before you update Zwift, see [Update the Zwift client](../maintenance/update.md#update-the-zwift-client).
+Zwift updates can break compatibility with Zluggish. Before you update Zwift, see [Update the Zwift client](../install/update.md#update-the-zwift-client).
 
 ## Zluggish is older than the Zwift client
 
@@ -35,3 +35,9 @@ If this error occurs and Zluggish is up to date:
 
 1. In the Zwift directory, rename `Zwift_ver_cur.<version>.xml` to `Zwift_ver_cur.xml`.
 2. Edit `Zwift_ver_cur_filename.txt` so that it contains the new file name.
+
+## Sign in again after an update
+
+Updates from versions with older game credentials can require a new sign-in in the launcher. Game access tokens expire after six hours. Refresh credentials expire after 90 days.
+
+If a client resets its connection or sequence counters under an existing relay key, start a fresh game login. This gives the client a new key. After restoring an older backup, start a fresh login before riding.

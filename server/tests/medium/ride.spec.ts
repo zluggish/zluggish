@@ -1,3 +1,5 @@
+import { makeAppRuntime } from '#src/layers';
+import { RideCompletionService } from '#src/services/ride-completion.service';
 import { JobsService } from '#src/services/jobs.service';
 import { DocumentsService } from '#src/services/documents.service';
 import { validateConfig } from '#src/config/index';
@@ -14,8 +16,9 @@ import {
   WorldAttributeSchema,
 } from '#src/protocol/generated/udp-node-msgs_pb';
 import { AccountsService } from '#src/services/auth.service';
-import { worldTime } from '#src/world/state';
+import { Relay, World, worldTime } from '#src/world/state';
 import { runtimeFixture } from '#tests/support/runtime';
+import { activityFolderOf } from '#tests/medium/support';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { BinaryWriter } from '@bufbuild/protobuf/wire';
 import assert from 'node:assert/strict';
@@ -29,7 +32,7 @@ import { Schema } from 'effect';
 
 await test(
   'an authenticated TCP reconnect replaces the old socket and exclusively receives queued updates',
-  { timeout: 10_000 },
+  { timeout: 20_000 },
   async (t) => {
     const f = runtimeFixture(t);
     const user = await f.accounts.create('Reconnect Rider', 'test-password');
@@ -37,7 +40,7 @@ await test(
     const key = Buffer.alloc(16, 8);
     f.world.login(player, key);
 
-    const listeners = startRideListeners({
+    const runtime = {
       ...f,
       config: {
         ...f.config,
@@ -48,14 +51,15 @@ await test(
           udp: { ...f.config.network.udp, port: 0 },
         },
       },
-    });
+    };
+    let listeners = startRideListeners(runtime);
 
     t.after(() => listeners.close());
 
     if (!listeners.tcp.listening) {
       await once(listeners.tcp, 'listening');
     }
-    const { port } = Schema.decodeUnknownSync(Schema.Struct({ port: Schema.Finite }))(listeners.tcp.address());
+    let { port } = Schema.decodeUnknownSync(Schema.Struct({ port: Schema.Finite }))(listeners.tcp.address());
 
     const connect = async (connection: number) => {
       const socket = createConnection({ host: '127.0.0.1', port });
@@ -106,13 +110,58 @@ await test(
       const handshake = await next();
       assert.ok(handshake.udpConfig);
 
-      return { socket, next };
+      const subscribe = () => {
+        const body = toBinary(
+          ClientToServerSchema,
+          create(ClientToServerSchema, {
+            serverRealm: 1n,
+            playerId: player,
+            state: create(PlayerStateSchema),
+            lastUpdate: 0n,
+            lastPlayerUpdate: 0n,
+            subsSegments: [123n],
+          }),
+        );
+        const packet = encodePacket(
+          Buffer.concat([Buffer.from([1, 0]), body]),
+          key,
+          { device: 1, channel: 3, connection, sequence: 1 },
+          { connection, sequence: 1 },
+        );
+        const size = Buffer.alloc(2);
+        size.writeUInt16BE(packet.length);
+        socket.write(Buffer.concat([size, packet]));
+      };
+      return { socket, next, subscribe, captured: Buffer.concat([length, hello]) };
     };
 
     const old = await connect(7);
+    old.subscribe();
+    let acknowledgment = await old.next();
+    while (acknowledgment.ackSubsSegm.length === 0) {
+      acknowledgment = await old.next();
+    }
+    assert.deepEqual(acknowledgment.ackSubsSegm, [123n]);
+    const rejectReplay = async (captured: Buffer) => {
+      const socket = createConnection({ host: '127.0.0.1', port });
+      t.after(() => socket.destroy());
+      await once(socket, 'connect');
+      const closed = once(socket, 'close');
+      let replies = 0;
+      socket.on('data', () => replies++);
+      socket.write(captured);
+      await closed;
+      assert.equal(replies, 0);
+    };
+    await rejectReplay(old.captured);
+    assert.equal(old.socket.destroyed, false);
     const closed = once(old.socket, 'close');
     const replacement = await connect(8);
     await closed;
+    // Internal producers bypass HTTP validation; a single update must still
+    // never overflow the length prefix or consume the receiver's next sequence.
+    f.world.enqueue(create(WorldAttributeSchema, { payload: Buffer.from('before oversized') }), [player]);
+    f.world.enqueue(create(WorldAttributeSchema, { payload: Buffer.alloc(65_536) }), [player]);
     f.world.enqueue(
       create(WorldAttributeSchema, {
         serverRealm: 1n,
@@ -121,6 +170,8 @@ await test(
       }),
       [player],
     );
+    const beforeOversized = await replacement.next();
+    assert.equal(Buffer.from(beforeOversized.updates[0]!.payload).toString(), 'before oversized');
     const update = await replacement.next();
     assert.equal(update.updates.length, 1);
     assert.equal(Buffer.from(update.updates[0]!.payload).toString(), 'replacement only');
@@ -128,8 +179,120 @@ await test(
     // Closing the superseded socket must not remove ownership of the replacement.
     const heartbeat = await replacement.next();
     assert.equal(heartbeat.playerId, player);
+
+    // Exercise the exact encrypted frame boundary, including its five bytes
+    // of header/tag overhead. The next oversized phone message is dropped.
+    const phone = create(ServerToClientSchema, { zcKey: Buffer.alloc(65_520) });
+    phone.zcKey = Buffer.alloc(phone.zcKey.length + 65_530 - toBinary(ServerToClientSchema, phone).length);
+    assert.equal(toBinary(ServerToClientSchema, phone).length, 65_530);
+    f.world.phones.set(player, phone);
+    const boundaryPhone = await replacement.next();
+    assert.equal(boundaryPhone.zcKey.length, phone.zcKey.length);
+    await replacement.next(); // Tick heartbeat after the phone.
+    phone.zcKey = Buffer.alloc(phone.zcKey.length + 1);
+    f.world.phones.set(player, phone);
+    const afterOversizedPhone = await replacement.next();
+    assert.equal(afterOversizedPhone.zcKey.length, 0);
+
+    // Exceptions raised on a timer tick must close only this stream.
+    const relay = f.world.relays.get(player)!;
+    const nextTcp = relay.nextTcp;
+    relay.nextTcp = () => {
+      throw new Error('Injected send failure');
+    };
+    const failed = once(replacement.socket, 'close');
+    replacement.socket.resume();
+    await failed;
+    relay.nextTcp = nextTcp;
+    const recovered = await connect(9);
+    const recoveredHeartbeat = await recovered.next();
+    assert.equal(recoveredHeartbeat.playerId, player);
+
+    await listeners.close();
+    f.world.relays.clear();
+    listeners = startRideListeners(runtime);
+    if (!listeners.tcp.listening) {
+      await once(listeners.tcp, 'listening');
+    }
+    port = Schema.decodeUnknownSync(Schema.Struct({ port: Schema.Finite }))(listeners.tcp.address()).port;
+    await rejectReplay(old.captured);
+    await rejectReplay(replacement.captured);
+    const restarted = await connect(10);
+    const restartedHeartbeat = await restarted.next();
+    assert.equal(restartedHeartbeat.playerId, player);
   },
 );
+
+await test('world attribute ingress bounds raw and rewritten updates while preserving ordinary updates', async (t) => {
+  const f = runtimeFixture(t);
+  const user = await f.accounts.create('Attribute Rider', 'test-password');
+  const player = BigInt(user.player_id);
+  f.world.login(player, Buffer.alloc(16, 1));
+  f.world.online.set(player, create(PlayerStateSchema));
+  const post = (payload: Uint8Array) =>
+    f.app.request('/relay/worlds/attributes', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}` },
+      body: toBinary(WorldAttributeSchema, create(WorldAttributeSchema, { payload })),
+    });
+
+  const oversized = await post(Buffer.alloc(65_536));
+  assert.equal(oversized.status, 413);
+  assert.equal(f.world.updates.has(player), false);
+  // Fits the raw limit, but the server's timestamp/expiry fields push it over.
+  const rewrittenOversized = await post(Buffer.alloc(60 * 1024 - 4));
+  assert.equal(rewrittenOversized.status, 413);
+  assert.equal(f.world.updates.has(player), false);
+  const ordinary = await post(Buffer.from('ordinary update'));
+  assert.equal(ordinary.status, 201);
+  assert.equal(Buffer.from(f.world.updates.get(player)![0]!.payload).toString(), 'ordinary update');
+});
+
+await test('nonce history survives database reopen, key changes and service restart; legacy recovery fails closed', async (t) => {
+  const f = runtimeFixture(t);
+  const user = await f.accounts.create('Durable Relay', 'test-password');
+  const id = user.player_id;
+  f.accounts.db.exec('PRAGMA synchronous=NORMAL');
+  const key = Buffer.alloc(16, 15);
+  const relay = new Relay(key);
+  f.effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, relay, true)));
+  relay.acceptTcp(7, true);
+  relay.nextTcp();
+  relay.acceptUdp(9, 9, 19);
+  relay.nextUdp();
+  assert.equal(f.accounts.db.prepare('PRAGMA synchronous').get()?.synchronous, 1);
+  const reopened = AccountsService.open(f.accounts.storage);
+  const effects = makeAppRuntime({ ...f, accounts: reopened, world: new World() });
+  try {
+    const restored = new Relay(key);
+    effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, restored)));
+    assert.throws(() => restored.acceptTcp(7, true), /Reused/);
+    restored.acceptTcp(8, true);
+    assert.equal(restored.nextTcp(), 0);
+    assert.throws(() => restored.acceptUdp(9, 9, 19), /Replayed/);
+    restored.acceptUdp(9, 9, 20);
+    assert.equal(restored.nextUdp(), 1);
+    const newKey = new Relay(Buffer.alloc(16, 16));
+    effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, newKey, true)));
+    newKey.acceptTcp(7, true);
+    const reusedKey = new Relay(key);
+    effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, reusedKey, true)));
+    assert.throws(() => reusedKey.acceptTcp(7, true), /Reused/);
+    const legacy = Buffer.alloc(16, 17);
+    reopened.repositories.riderDocuments.put(id, 'encryption_key.bin', legacy);
+    assert.throws(
+      () => effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, new Relay(legacy)))),
+      /nonce history unavailable/,
+    );
+    assert.throws(
+      () => effects.runSync(RideCompletionService.use((service) => service.protectRelay(id, new Relay(legacy), true))),
+      /nonce history unavailable/,
+    );
+  } finally {
+    await effects.dispose();
+    reopened.close();
+  }
+});
 
 // Port 0 is confined to this test adapter; operator configuration rejects it.
 await test(
@@ -311,6 +474,11 @@ await test(
       assert.equal(f.world.online.size, 0);
       assert.equal(f.world.histories.size, 0);
       assert.equal(f.world.lifecycle.rides.size, 0);
+      // Queue a captured packet before the next valid request. It must produce
+      // no response or counter change; the next response still has sequence 1.
+      if (sequence === 19) {
+        udp.send(packet, udpPort, '127.0.0.1');
+      }
     }
 
     const state = create(PlayerStateSchema, {
@@ -352,6 +520,35 @@ await test(
     }).payload;
 
     assert.equal(fromBinary(ServerToClientSchema, body).playerId, BigInt(user.player_id));
+    // Exercise implicit input sequences and return to an earlier UDP connection.
+    // Each connection retains its own output sequence instead of restarting it.
+    for (const [connection, sequence, expected, implicit] of [
+      [9, 22, 3, true],
+      [10, 0, 0, false],
+      [9, 23, 4, false],
+    ] as const) {
+      const next = once(udp, 'message');
+      udp.send(
+        encodePacket(
+          Buffer.concat([Buffer.from([1]), payload]),
+          key,
+          { device: 1, channel: 1, connection, sequence },
+          implicit ? {} : { connection, sequence },
+        ),
+        udpPort,
+        '127.0.0.1',
+      );
+      const [bytes] = await next;
+      const decoded = decodePacket(Schema.decodeUnknownSync(Schema.instanceOf(Buffer))(bytes), key, {
+        device: 1,
+        channel: 2,
+        connection,
+        sequence: expected,
+      });
+      assert.equal(decoded.fields.sequence, expected);
+      assert.equal(fromBinary(ServerToClientSchema, decoded.payload).playerId, BigInt(user.player_id));
+    }
+
     assert.equal(f.world.active(user.player_id), true);
     const token = f.sessions.tokens(user, f.tokens).access_token;
 
@@ -408,10 +605,7 @@ await test('activity create, save and restart preserve ownership, FIT bytes and 
     false,
   );
   await f.effects.runPromise(JobsService.use((service) => service.drain()));
-  assert.deepEqual(
-    readFileSync(resolve(f.profiles.folder(user.player_id), 'fit', `${id} - synthetic.fit`)),
-    Buffer.from(activity.fit),
-  );
+  assert.deepEqual(readFileSync(resolve(activityFolderOf(f, id), 'activity.fit')), Buffer.from(activity.fit));
 
   const streaks = fromBinary(
     StreaksSchema,

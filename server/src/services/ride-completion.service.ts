@@ -1,4 +1,6 @@
-import { Context, Effect, Layer } from 'effect';
+import { t } from '#src/i18n/index';
+import { Context, Effect, Layer, Schema } from 'effect';
+import type { Relay, RelayHistory } from '#src/world/state';
 import { RuntimeContext } from '#src/context';
 import { immediate } from '#src/db/transaction';
 import { ApplicationError } from '#src/errors';
@@ -33,12 +35,83 @@ const make = Effect.gen(function* () {
 
   const receipts = new Map<number, Receipt>();
 
+  const protectedRelays = new WeakSet<Relay>();
+  const historySchema = Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      tcp: Schema.Array(Schema.Int),
+      udp: Schema.Array(Schema.Tuple([Schema.Int, Schema.Int, Schema.Int])),
+    }),
+  );
+
+  function protectRelay(player: number, relay: Relay, fresh: boolean = false) {
+    if (protectedRelays.has(relay)) {
+      return;
+    }
+    const documents = repositories.riderDocuments;
+    const write = (ledger: Record<string, RelayHistory>) => {
+      const db = context.accounts.db;
+      if (db.isTransaction) {
+        throw new Error(t('ride_completion_nonce_reservation_uncommitted'));
+      }
+      const mode = db.prepare('PRAGMA synchronous').get()?.synchronous;
+      if (mode !== 0 && mode !== 1 && mode !== 2 && mode !== 3) {
+        throw new Error(t('unknown_database_durability_mode'));
+      }
+      // Runtime HTTP writes normally use an asynchronous WAL flush. Relay sends
+      // are synchronous: the reservation must survive power loss before send().
+      try {
+        if (mode < 2) {
+          db.exec('PRAGMA synchronous=FULL');
+        }
+        documents.put(player, 'relay-nonce-history', JSON.stringify(ledger));
+      } finally {
+        if (mode < 2) {
+          db.exec(mode === 0 ? 'PRAGMA synchronous=OFF' : 'PRAGMA synchronous=NORMAL');
+        }
+      }
+    };
+    const read = (): Record<string, RelayHistory> => {
+      const stored = Schema.decodeUnknownSync(historySchema)(
+        JSON.parse(documents.text(player, 'relay-nonce-history') ?? '{}'),
+      );
+      return Object.fromEntries(
+        Object.entries(stored).map(([digest, history]) => [
+          digest,
+          {
+            tcp: [...history.tcp],
+            udp: history.udp.map(([connection, read, write]): [number, number, number] => [connection, read, write]),
+          },
+        ]),
+      );
+    };
+    const ledger = read();
+    const digest = repositories.cryptoRepository.sha256(relay.key);
+    const history = ledger[digest];
+    const oldKey = documents.get(player, 'encryption_key.bin');
+    if (!history && (!fresh || (oldKey && Buffer.from(oldKey).equals(relay.key)))) {
+      throw new ApplicationError({
+        status: 409,
+        message: t('ride_completion_nonce_history_unavailable'),
+      });
+    }
+    relay.protect(history ?? { tcp: [], udp: [] }, (updated) => {
+      const current = read();
+      current[digest] = updated;
+      write(current);
+    });
+    // Reserve the key before accepting any traffic, including before a crash.
+    ledger[digest] = history ?? { tcp: [], udp: [] };
+    write(ledger);
+    protectedRelays.add(relay);
+  }
+
   function persistRelay(player: number, key: Uint8Array, version: number) {
     immediate(context.accounts.db, () => {
       const rider = context.accounts.get(player);
 
       if (!rider?.enabled || rider.auth_version !== version) {
-        throw new ApplicationError({ status: 401, message: 'Relay revoked.' });
+        throw new ApplicationError({ status: 401, message: t('ride_completion_relay_revoked') });
       }
       repositories.riderDocuments.put(player, 'encryption_key.bin', key);
       repositories.riderDocuments.put(player, 'relay-auth-version', String(version));
@@ -89,6 +162,11 @@ const make = Effect.gen(function* () {
     }
   }
 
+  /** Whether the game may still save this activity, so deleting it now would lose the ride. */
+  function riding(player: number, activity: bigint) {
+    return active.get(player)?.activity === activity || permissions.get(player)?.activity === activity;
+  }
+
   function permissionNow(player: number) {
     const permission = permissions.get(player);
 
@@ -131,7 +209,7 @@ const make = Effect.gen(function* () {
 
     if (receipt && receipt.until > Date.now() && receipt.token === digest && receipt.activity === activity) {
       if (receipt.body !== body) {
-        throw new ApplicationError({ status: 409, message: 'Final save data changed.' });
+        throw new ApplicationError({ status: 409, message: t('final_save_data_changed') });
       }
 
       return { receipt: receipt.result };
@@ -140,7 +218,10 @@ const make = Effect.gen(function* () {
     const permission = permissionNow(player);
 
     if (!permission || permission.token !== digest || permission.activity !== activity) {
-      throw new ApplicationError({ status: 401, message: 'Ride completion permission expired.' });
+      throw new ApplicationError({
+        status: 401,
+        message: t('ride_completion_permission_expired'),
+      });
     }
 
     return { receipt: null };
@@ -168,6 +249,13 @@ const make = Effect.gen(function* () {
   context.accounts.onRevoke = (id) => cancel(id);
 
   return {
+    protectRelay: Effect.fn('RideCompletionService.protectRelay')(function* (
+      player: number,
+      relay: Relay,
+      fresh: boolean = false,
+    ) {
+      protectRelay(player, relay, fresh);
+    }),
     persistRelay: Effect.fn('RideCompletionService.persistRelay')(function* (
       player: number,
       key: Uint8Array,
@@ -190,6 +278,10 @@ const make = Effect.gen(function* () {
 
     cancel: Effect.fn('RideCompletionService.cancel')(function* (player: number, close: boolean = true) {
       return cancel(player, close);
+    }),
+
+    riding: Effect.fn('RideCompletionService.riding')(function* (player: number, activity: bigint) {
+      return riding(player, activity);
     }),
 
     permission: Effect.fn('RideCompletionService.permission')(function* (player: number) {

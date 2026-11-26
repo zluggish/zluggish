@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { AccountsService } from '#src/services/auth.service';
 import { WebSessionsService } from '#src/services/web-session.service';
 import { ManagementService } from '#src/services/management.service';
@@ -65,11 +66,11 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
     const { id, user, session } = context(c);
 
     if (!runtime.effects.runSync(sessions.current(id, identity))) {
-      throw new ApplicationError({ status: 401, message: 'Session changed. Sign in again.' });
+      throw new ApplicationError({ status: 401, message: t('web_profile_session_changed') });
     }
 
     if (runtime.world.active(user.player_id)) {
-      throw new ApplicationError({ status: 409, message: 'Finish the active ride before importing.' });
+      throw new ApplicationError({ status: 409, message: t('web_profile_active_ride_blocked') });
     }
     let stage: string;
 
@@ -78,7 +79,7 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
     } catch {
       throw new ApplicationError({
         status: 400,
-        message: 'Could not import these files. Select valid user data and retry.',
+        message: t('web_profile_import_failed'),
       });
     }
 
@@ -112,7 +113,7 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const data = yield* documentsService.get(user.player_id, filename);
 
       if (!data) {
-        throw new ApplicationError({ status: 404, message: 'File not found.' });
+        throw new ApplicationError({ status: 404, message: t('file_not_found') });
       }
 
       return c.body(new Uint8Array(data), 200, {
@@ -139,7 +140,9 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
         yield* integrationsService.deletePowerCurve(user.player_id);
       }
 
-      return c.json({ message: input.create ? 'Power curves rebuild queued.' : 'Power curves deleted.' });
+      return c.json({
+        message: input.create ? t('power_curves_rebuild_queued') : t('power_curves_deleted'),
+      });
     }),
   );
 
@@ -181,18 +184,24 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const current = review(c);
 
       if (!current || current.stage !== input.stage) {
-        throw new ApplicationError({ status: 409, message: 'The import changed. Reload and review it again.' });
+        throw new ApplicationError({
+          status: 409,
+          message: t('web_profile_import_conflict'),
+        });
       }
 
       if (input.cancel) {
         runtime.effects.runSync(imports.cancel(user, current.stage));
       } else {
         if (current.confirmSource && !input.confirmSource) {
-          throw new ApplicationError({ status: 400, message: 'Confirm the import source first.' });
+          throw new ApplicationError({ status: 400, message: t('web_profile_import_confirmation_required') });
         }
 
         if (runtime.world.active(user.player_id)) {
-          throw new ApplicationError({ status: 409, message: 'Finish the active ride before importing.' });
+          throw new ApplicationError({
+            status: 409,
+            message: t('web_profile_active_ride_blocked'),
+          });
         }
         runtime.effects.runSync(imports.publish(user, current.stage, input.keepName));
       }
@@ -202,7 +211,7 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const updated = accounts.get(user.player_id);
 
       if (!updated) {
-        throw new ApplicationError({ status: 404, message: 'User not found.' });
+        throw new ApplicationError({ status: 404, message: t('user_not_found_error') });
       }
 
       return c.json({ user: yield* managementService.publicUser(updated), review: null });
@@ -246,11 +255,14 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const username = input.username.trim();
 
       if (Boolean(username) !== Boolean(input.password)) {
-        throw new ApplicationError({ status: 400, message: 'Enter both username and password.' });
+        throw new ApplicationError({ status: 400, message: t('web_profile_credentials_required') });
       }
 
       if (!username && !(yield* connectionsService.has(user.player_id, 'zwift')) && (input.upload || input.click)) {
-        throw new ApplicationError({ status: 400, message: 'Save credentials before enabling uploads or Click.' });
+        throw new ApplicationError({
+          status: 400,
+          message: t('web_profile_credentials_required_for_uploads'),
+        });
       }
 
       if (username) {
@@ -288,16 +300,19 @@ export function webProfileRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const credentials = yield* connectionsService.read(user.player_id, 'zwift');
 
       if (!credentials || (!input.profile && !input.achievements)) {
-        throw new ApplicationError({ status: 400, message: 'Save credentials and choose at least one download.' });
+        throw new ApplicationError({
+          status: 400,
+          message: t('web_profile_download_configuration_required'),
+        });
       }
 
       if (runtime.world.active(user.player_id)) {
-        throw new ApplicationError({ status: 409, message: 'Finish the active ride before importing.' });
+        throw new ApplicationError({ status: 409, message: t('web_profile_active_ride_blocked') });
       }
 
       const files: ImportFiles = yield* integrationsService
         .downloadOfficialData(credentials[0], credentials[1], input.profile, input.achievements)
-        .pipe(asProviderFailure(runtime, 400, 'Download failed. Existing user data was retained.'));
+        .pipe(asProviderFailure(runtime, 400, t('web_profile_download_failed')));
 
       return stageFiles(c, identity, files);
     }),

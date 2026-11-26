@@ -1,3 +1,4 @@
+import { t } from './i18n/shared';
 import { z } from 'zod';
 import type { JsonObject } from './connection';
 
@@ -33,7 +34,7 @@ export function responseFields(body: JsonObject) {
 
 export class UnexpectedResponseError extends Error {
   constructor() {
-    super('The server sent an unexpected response. Reload the page and try again.');
+    super(t('api_unexpected_response'));
   }
 }
 

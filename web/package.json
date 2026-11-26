@@ -17,6 +17,7 @@
     "check": "svelte-check --tsconfig tsconfig.json"
   },
   "dependencies": {
+    "@zluggish/i18n": "workspace:*",
     "svelte": "5.57.3",
     "zod": "^4.6.7"
   },

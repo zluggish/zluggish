@@ -10,11 +10,19 @@ function resolveRiderSettings(defaults: RiderSettings, overrides: Overrides) {
   return validateRiderSettings({
     ghosts: { enabled: overrides['ghosts.enabled'] ?? defaults.ghosts.enabled },
     uploads: {
+      intervals: {
+        enabled: overrides['uploads.intervals.enabled'] ?? defaults.uploads.intervals.enabled,
+      },
       zwift: {
         enabled: overrides['uploads.zwift.enabled'] ?? defaults.uploads.zwift.enabled,
       },
       strava: {
         method: overrides['uploads.strava.method'] ?? defaults.uploads.strava.method,
+      },
+      garmin: {
+        device: {
+          enabled: overrides['uploads.garmin.device.enabled'] ?? defaults.uploads.garmin.device.enabled,
+        },
       },
     },
     devices: {

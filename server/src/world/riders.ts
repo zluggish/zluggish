@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { create, mergeFromJson } from '@bufbuild/protobuf';
 import type { JsonValue } from '@bufbuild/protobuf';
 import { readFileSync } from 'node:fs';
@@ -7,6 +8,8 @@ import { Strict } from '#src/schema';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import { Random } from '#src/world/geometry';
+import { buildRange, isPlaceholderBuild, sizedBodyType, specialtyOf } from '#src/world/pro-build';
+import type { ProTraits } from '#src/world/pro-build';
 
 type RiderSpec = Record<string, typeof Schema.Json.Type>;
 
@@ -33,6 +36,12 @@ export const ghostAppearanceSchema = Strict({
 export class RiderPool {
   private nameIndex = 0;
 
+  /** Place of each rider of the riders file among those of the same sex, best first. */
+  private readonly ranks = new Map<RiderSpec, number>();
+
+  /** Rank and specialty of every profile made here, by player ID. */
+  private readonly traits = new Map<bigint, ProTraits>();
+
   readonly dictionary: RiderSpec;
 
   readonly names: ReadonlyArray<RiderSpec>;
@@ -50,6 +59,14 @@ export class RiderPool {
       this.names = Schema.decodeUnknownSync(
         Schema.Struct({ riders: Schema.Array(Schema.Record(Schema.String, Schema.Json)) }),
       )(JSON.parse(readFileSync(ridersFile, 'utf8'))).riders;
+      const counts = { male: 0, female: 0 };
+
+      for (const spec of this.names) {
+        const sex = spec.is_male === false || spec.isMale === false ? 'female' : 'male';
+        const place = counts[sex]++;
+        // An explicit rank, such as a place in a pro ranking, wins over the place in the file.
+        this.ranks.set(spec, typeof spec.rank === 'number' && Number.isFinite(spec.rank) ? spec.rank : place);
+      }
     } else {
       const names = Schema.decodeUnknownSync(
         Schema.Struct({
@@ -70,6 +87,11 @@ export class RiderPool {
         };
       });
     }
+  }
+
+  /** Rank and specialty of a profile made here; unranked all-rounders for anything else. */
+  traitsOf(id: bigint): ProTraits {
+    return this.traits.get(id) ?? { rank: Infinity, specialty: 'rouleur' };
   }
 
   customizeGhost(profile: PlayerProfile, appearance: (typeof ghostAppearanceSchema)['Type']) {
@@ -106,7 +128,7 @@ export class RiderPool {
 
     const profile = create(PlayerProfileSchema, {
       id,
-      firstName: 'Rider',
+      firstName: t('rider'),
       lastName: String(id),
       isMale: rng.value() > 0.5,
       weightInGrams: Math.round(rng.between(62, 86) * 1000),
@@ -161,7 +183,24 @@ export class RiderPool {
 
     apply(source);
     apply(overrides);
-    profile.bodyType = choose(profile.isMale ? 'body_types_male' : 'body_types_female');
+
+    const specialty = specialtyOf(source.specialty, profile.weightInGrams / 1000, profile.heightInMillimeters);
+    const rank = this.ranks.get(source) ?? Infinity;
+    this.traits.set(id, { rank, specialty });
+
+    // Riders file entries without real data get a build that suits their specialty.
+    if (this.ranks.has(source) && isPlaceholderBuild(profile.weightInGrams, profile.heightInMillimeters)) {
+      const build = buildRange(specialty, profile.isMale);
+      profile.weightInGrams = Math.round(rng.between(...build.weight) * 1000);
+      profile.heightInMillimeters = Math.round(rng.between(...build.height) / 10) * 10;
+    }
+
+    const bodies = Schema.decodeUnknownSync(Schema.Array(Schema.Finite))(
+      this.dictionary[profile.isMale ? 'body_types_male' : 'body_types_female'],
+    );
+    // Keep the face and skin of the riders file; the size follows the build, never chance.
+    const body = bodies.includes(profile.bodyType) && this.ranks.has(source) ? profile.bodyType : rng.pick(bodies);
+    profile.bodyType = sizedBodyType(body, profile.weightInGrams / 1000, profile.heightInMillimeters, profile.isMale);
 
     if (profile.isMale) {
       profile.facialHairType = choose('facial_hair_types');

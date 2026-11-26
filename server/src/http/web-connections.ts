@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { IntervalsAthleteId } from '#src/dtos/intervals.dto';
 import { AccountsService } from '#src/services/auth.service';
 import { WebSessionsService } from '#src/services/web-session.service';
@@ -17,6 +18,7 @@ import { UploadProvider } from '#src/enum';
 import { ApplicationError, UnreadableCredentialsError } from '#src/errors';
 import type { HttpRuntime } from '#src/http/runtime';
 import type { WebEnv } from '#src/http/web-app';
+import { GARMIN_DEVICES, defaultSerial, deviceText, parseDeviceIdentity } from '#src/world/fit-device';
 
 const provider = Schema.Literals(['strava', 'garmin', 'intervals']);
 
@@ -97,6 +99,62 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       });
     }),
   );
+
+  // Garmin device routes – registered before the generic :provider routes so garmin/device is not captured.
+  appRoutes.get('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      const text = yield* documentsService.text(player, 'garmin_device.txt');
+
+      return c.json({ device: parseDeviceIdentity(text ?? ''), devices: GARMIN_DEVICES });
+    }),
+  );
+
+  appRoutes.put('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      const deviceBody = Strict({
+        product: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535)),
+        serial: Schema.optional(
+          Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(4_294_967_295)),
+        ),
+      });
+
+      const input = Schema.decodeUnknownSync(deviceBody)(yield* Effect.promise(() => c.req.json()));
+
+      const current = parseDeviceIdentity((yield* documentsService.text(player, 'garmin_device.txt')) ?? '');
+      const serial = input.serial ?? current?.serial ?? defaultSerial(player);
+
+      yield* documentsService.put(player, 'garmin_device.txt', deviceText(input.product, serial));
+
+      return c.json({ ok: true });
+    }),
+  );
+
+  appRoutes.delete('/api/me/connections/garmin/device', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const documentsService = yield* DocumentsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      yield* documentsService.remove(player, 'garmin_device.txt');
+
+      return c.json({ ok: true });
+    }),
+  );
+
   appRoutes.put('/api/me/connections/:provider', (c) =>
     Effect.gen(function* () {
       const webSessionsService = yield* WebSessionsService;
@@ -113,7 +171,7 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const secret = input.secret || (yield* connectionsService.inspect(player, name)).credentials?.[1];
 
       if (!secret) {
-        throw new ApplicationError({ status: 400, message: 'Enter a secret.' });
+        throw new ApplicationError({ status: 400, message: t('web_connections_secret_required') });
       }
       yield* connectionsService.save(player, name, [input.username, secret]);
 
@@ -205,7 +263,7 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
           user,
           input.code,
         )
-        .pipe(asProviderFailure(runtime, 400, 'Garmin authorization failed or expired. Try again.'));
+        .pipe(asProviderFailure(runtime, 400, t('web_connections_garmin_authorization_failed')));
 
       return c.json({ status });
     }),
@@ -233,13 +291,13 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
         const session = yield* webSessionsService.session(id);
 
         if (!session.stravaState || input.state !== session.stravaState) {
-          throw new ApplicationError({ status: 403, message: 'Authorization expired.' });
+          throw new ApplicationError({ status: 403, message: t('authorization_expired') });
         }
         delete session.stravaState;
 
         yield* integrationsService
           .authorizeStravaSession(() => Effect.runSync(webSessionsService.current(id, identity)), user, input.code)
-          .pipe(asProviderFailure(runtime, 400, 'Strava authorization failed. Try again.'));
+          .pipe(asProviderFailure(runtime, 400, t('web_connections_strava_authorization_failed')));
 
         return c.json({ ok: true });
       }
@@ -247,7 +305,7 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const client = yield* connectionsService.read(user.player_id, 'strava');
 
       if (!client) {
-        throw new ApplicationError({ status: 400, message: 'Save Strava API credentials first.' });
+        throw new ApplicationError({ status: 400, message: t('web_connections_strava_credentials_required') });
       }
       const redirect = new URL('/integrations', runtime.config.network.web.publicUrl ?? c.req.url).href;
       const state = yield* webSessionsService.token();
@@ -268,16 +326,29 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       const cookie = (yield* documentsService.text(player, 'strava4_session.txt'))?.split(/\r?\n/, 1)[0];
 
       if (!cookie) {
-        throw new ApplicationError({ status: 400, message: 'Save a session cookie first.' });
+        throw new ApplicationError({ status: 400, message: t('web_connections_session_cookie_required') });
       }
 
       const valid = yield* integrationsService
         .checkSession(cookie, (fresh) =>
           runtime.effects.runSync(documentsService.put(player, 'strava4_session.txt', fresh)),
         )
-        .pipe(asProviderFailure(runtime, 503, 'Could not reach Strava. Check your internet connection.'));
+        .pipe(asProviderFailure(runtime, 503, t('web_connections_strava_connection_failed')));
 
       return c.json({ valid });
+    }),
+  );
+  appRoutes.get('/api/me/workouts/today', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const workoutsService = yield* WorkoutsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      c.header('Cache-Control', 'private, no-store');
+
+      return c.json(yield* workoutsService.today(player));
     }),
   );
   appRoutes.post('/api/me/workouts/sync', (c) =>
@@ -307,10 +378,10 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
 
       const message = yield* workoutsService
         .sync(user.player_id)
-        .pipe(asProviderFailure(runtime, 503, 'Workout sync failed. Existing workouts were retained.'));
+        .pipe(asProviderFailure(runtime, 503, t('web_connections_workout_sync_failed')));
 
       if (!(yield* webSessionsService.current(id, identity))) {
-        throw new ApplicationError({ status: 401, message: 'Session changed.' });
+        throw new ApplicationError({ status: 401, message: t('session_changed') });
       }
 
       return c.json({ message });

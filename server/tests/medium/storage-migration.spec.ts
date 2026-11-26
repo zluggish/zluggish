@@ -152,7 +152,7 @@ await test('the storage merge imports every legacy store once and keeps the lega
   const db = open();
   const documents = new RiderDocuments(db, storage);
 
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 10);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 11);
   assert.equal(db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
   assert.deepEqual(new SettingsStore(db).read(1), { 'ghosts.enabled': true });
   assert.deepEqual(new SettingsStore(db).world('blob:1'), { riders: 4 });
@@ -410,7 +410,7 @@ for (const step of Object.values(MigrationStep)) {
     );
 
     const db = open();
-    assert.equal(db.prepare('SELECT version FROM version').get()?.version, 10);
+    assert.equal(db.prepare('SELECT version FROM version').get()?.version, 11);
     assert.equal(db.prepare('SELECT count(*) AS n FROM rider_document').get()?.n, 6);
     assert.equal(db.prepare("SELECT count(*) AS n FROM job WHERE type='delivery'").get()?.n, 1);
     assert.equal(existsSync(resolve(storage, StorageFile.Temporary)), false);
@@ -493,9 +493,19 @@ await test('a legacy cleanup removes the imported files and keeps media, exports
 
   assert.equal(existsSync(resolve(storage, 'settings.db')), false);
 
-  for (const name of ['1/fit/10 - ride.fit', '1/medias/1.mp4', '99/profile.bin', StorageFile.CredentialsKey]) {
+  for (const name of ['99/profile.bin', StorageFile.CredentialsKey]) {
     assert.ok(existsSync(resolve(storage, name)), name);
   }
+
+  // Version 11 moved the exports into activity folders; the video has no row and is kept aside.
+  assert.deepEqual(readdirSync(resolve(storage, '1/activities')).toSorted(), [
+    '1970-01-01T000000Z_10',
+    '2026-01-01T000000Z_11',
+    'orphaned',
+  ]);
+  assert.ok(existsSync(resolve(storage, '1/activities/1970-01-01T000000Z_10/activity.fit')));
+  assert.ok(existsSync(resolve(storage, '1/activities/2026-01-01T000000Z_11/activity.fit')));
+  assert.ok(existsSync(resolve(storage, '1/activities/orphaned/videos/1.mp4')));
 
   const db = open();
   assert.equal(new RiderDocuments(db, storage).text(1, 'runalyze_token.txt'), 'runalyze');

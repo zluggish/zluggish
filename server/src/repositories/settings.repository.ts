@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { decodeOverrides, decodePreference } from '#src/dtos/settings.dto';
 import type { Overrides, Preference } from '#src/dtos/settings.dto';
 
@@ -49,7 +50,7 @@ export class SettingsStore {
     const path = resolve(storage, 'settings.db');
 
     if (readOnly && !existsSync(path)) {
-      throw new ConfigError('No persisted preferences; initialize storage first');
+      throw new ConfigError(t('settings_storage_uninitialized'));
     }
 
     if (!readOnly) {
@@ -64,7 +65,7 @@ export class SettingsStore {
 
     if (version > 1 || (readOnly && version !== 1)) {
       db.close();
-      throw new ConfigError('Unsupported settings database version');
+      throw new ConfigError(t('unsupported_settings_database_version'));
     }
 
     if (!readOnly) {
@@ -155,7 +156,10 @@ export class SettingsStore {
 
   save(playerId: number, overrides: Overrides, expected = this.versioned ? this.revision(playerId) : undefined) {
     if (expected !== undefined && this.revision(playerId) !== expected) {
-      throw new ApplicationError({ status: 409, message: 'Settings changed. Review the new data.' });
+      throw new ApplicationError({
+        status: 409,
+        message: t('settings_settings_conflict'),
+      });
     }
     const candidate = decodePreference({ playerId, overrides });
     const value = JSON.stringify(candidate.overrides);
@@ -189,7 +193,7 @@ export class SettingsStore {
           );
 
           if (row && JSON.stringify(this.read(preference.playerId)) !== JSON.stringify(preference.overrides)) {
-            throw new ConfigError(`Conflicting persisted preferences for rider ${preference.playerId}`);
+            throw new ConfigError(t('settings_preferences_conflict', { value1: preference.playerId }));
           }
 
           this.save(preference.playerId, preference.overrides);
@@ -232,7 +236,10 @@ export class SettingsStore {
 
   saveWorld(id: string, value: Record<string, Json>, expected = this.versioned ? this.worldRevision(id) : undefined) {
     if (expected !== undefined && this.worldRevision(id) !== expected) {
-      throw new ApplicationError({ status: 409, message: 'Settings changed. Review the new data.' });
+      throw new ApplicationError({
+        status: 409,
+        message: t('settings_settings_conflict'),
+      });
     }
     const checked = decodeRecord(value);
     const serialized = JSON.stringify(checked);
@@ -273,13 +280,13 @@ export class RiderRepository {
     const path = resolve(storage, 'zluggish.db');
 
     if (!existsSync(path)) {
-      throw new ConfigError('Unknown rider; initialize accounts before changing preferences');
+      throw new ConfigError(t('settings_rider_account_missing'));
     }
     const db = new DatabaseSync(path, { readOnly: true });
 
     try {
       if (!new SqliteExecutor(db).get(query.selectFrom('user').select('player_id').where('player_id', '=', playerId))) {
-        throw new ConfigError('Unknown rider');
+        throw new ConfigError(t('unknown_rider'));
       }
     } finally {
       db.close();

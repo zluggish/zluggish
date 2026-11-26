@@ -2,6 +2,7 @@ import { WebSessionsService } from '#src/services/web-session.service';
 import { ManagementService } from '#src/services/management.service';
 import { ActivitiesService } from '#src/services/activities.service';
 import { JobsService } from '#src/services/jobs.service';
+import { RideCompletionService } from '#src/services/ride-completion.service';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -294,7 +295,14 @@ await test('the game app bundle contains no web app code', () => {
   for (const file of bundles) {
     const text = readFileSync(file, 'utf8');
 
-    for (const marker of ['/api/manage', '/api/session', '/api/me', 'Confirm your password to manage']) {
+    for (const marker of [
+      '/api/manage',
+      '/api/session',
+      '/api/me',
+      'Confirm your password to manage',
+      'activities_list_load_error',
+      'login_without_password',
+    ]) {
       assert.equal(text.includes(marker), false, `${file} contains ${marker}`);
     }
   }
@@ -488,6 +496,76 @@ await test('riders list, inspect and download only their own activities in the w
   assert.equal(await responseStatus(web.request(`http://local:8080/api/me/activities`)), 401);
 });
 
+await test('riders delete their own activities in the web app, but not a ride the game is still saving', async (t) => {
+  const f = await mediumFixture(t);
+  const web = createWebApp(f);
+
+  const ride = async (name: string) => {
+    const posted = await f.request(`/api/profiles/${f.rider.player_id}/activities`, {
+      method: 'POST',
+      ...binary(ActivitySchema, {
+        playerId: BigInt(f.rider.player_id),
+        courseId: 6n,
+        name,
+        startDate: new Date().toISOString(),
+        distanceInMeters: 100,
+      }),
+    });
+
+    return String(Schema.decodeUnknownSync(Schema.Struct({ id: Schema.Finite }))(await posted.json()).id);
+  };
+
+  const kept = await ride('Kept');
+  const deleted = await ride('Deleted');
+  const riding = await ride('Riding');
+
+  const as = (rider: typeof f.rider) => {
+    const { id: session, session: state } = f.effects.runSync(
+      WebSessionsService.use((sessions) => sessions.create(f.accounts.identityOf(rider))),
+    );
+
+    return (path: string, method = 'GET') =>
+      web.request(`http://local:8080${path}`, {
+        method,
+        headers: {
+          Cookie: `zluggish_web_session=${session}`,
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': state.csrf,
+          Origin: 'https://local:8080',
+        },
+      });
+  };
+
+  const owner = as(f.rider);
+  const other = as(f.other);
+
+  assert.equal(await responseStatus(other(`/api/me/activities/${deleted}`, 'DELETE')), 404);
+  assert.equal(await responseStatus(owner('/api/me/activities/1%27', 'DELETE')), 400);
+
+  const response = await owner(`/api/me/activities/${deleted}`, 'DELETE');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true });
+  assert.equal(await responseStatus(owner(`/api/me/activities/${deleted}`)), 404);
+  assert.equal(await responseStatus(owner(`/api/me/activities/${deleted}`, 'DELETE')), 404);
+
+  f.effects.runSync(
+    RideCompletionService.use((service) =>
+      service.grant(f.rider.player_id, {
+        activity: BigInt(riding),
+        token: '',
+        generation: 0,
+        key: Buffer.alloc(0),
+        deadline: Date.now() + 60_000,
+        lastSeen: Date.now(),
+      }),
+    ),
+  );
+  assert.equal(await responseStatus(owner(`/api/me/activities/${riding}`, 'DELETE')), 409);
+
+  const list: { activities: Array<{ id: string }> } = await json(owner('/api/me/activities'));
+  assert.deepEqual(list.activities.map((a) => a.id).sort(), [kept, riding].sort());
+});
+
 await test('web app lists the climb portals a rider has ridden with the best time and latest ride', async (t) => {
   const f = await mediumFixture(t);
   const web = createWebApp(f);
@@ -525,6 +603,16 @@ await test('web app lists the climb portals a rider has ridden with the best tim
       bestMs: 540_000,
       strava: { watopia: 41_290_767, france: 41_290_943 },
       lastRide: '2026-11-18T15:34:35.000Z',
+      category: '2',
+      avgGradePct: 6.4,
+      maxGradePct: null,
+      elevationLowM: null,
+      elevationHighM: null,
+      profileSource: 'estimated',
+      profile: [
+        [0, 0],
+        [5900, 376],
+      ],
     },
   ]);
 });

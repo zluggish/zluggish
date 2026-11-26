@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/game';
   import { untrack } from 'svelte';
   import { request } from '../../lib/connection';
   import Layout from '../../components/Layout.svelte';
@@ -78,22 +79,22 @@
   {#snippet aside()}
     {#if current.webApp && (current.kind === 'dashboard' || current.kind === 'login')}
       <a class="web-app" href={current.webApp} target="_blank" rel="noopener noreferrer">
-        Manage your account
+        {t('manage_your_account')}
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 4 12" /></svg>
-        <span class="visually-hidden">(opens the web app in your browser)</span>
+        <span class="visually-hidden">{t('web_app_hint')}</span>
       </a>
     {/if}
   {/snippet}
   {#if current.warning}<p class="security" role="alert">
-      <strong>Unsafe connection.</strong>
+      <strong>{t('unsafe_connection')}</strong>
       {current.warning}
     </p>{/if}
   {#key failures}{#if current.message}<p class="notice" role={current.failed ? 'alert' : 'status'}>
         {current.message}
       </p>{/if}{/key}
   {#if locked}<p class="error" role="alert">
-      Your session or user changed. <a href="/login/">Sign in</a> or
-      <button type="button" onclick={() => location.reload()}>Reload this page</button>.
+      {t('rider_session_changed')} <a href="/login/">{t('sign_in')}</a>
+      {t('or')} <button type="button" onclick={() => location.reload()}>{t('reload_this_page')}</button>.
     </p>{/if}
   {#each current.forms as model (model.id)}
     <div hidden={current.kind === 'dashboard' && model.id === 'switch'}>
@@ -114,7 +115,7 @@
       >
         {#snippet actions()}
           {#if current.kind === 'dashboard' && model.id === 'launch'}
-            <button type="submit" form="game-form-switch" disabled={locked}>Switch rider</button>
+            <button type="submit" form="game-form-switch" disabled={locked}>{t('switch_rider')}</button>
           {/if}
         {/snippet}
       </Form>

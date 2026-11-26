@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { ConfigError } from '#src/config/index';
 import { basename, resolve } from 'node:path';
 
@@ -18,18 +19,13 @@ export function excludedStorageEntry(name: string) {
       'storage-migration.json',
       backupManifest,
       'backups',
+      'companion',
+      'zwift-android',
     ].includes(name) ||
     name.startsWith('zluggish.db.migrating') ||
     name.startsWith('zluggish.db.restoring') ||
     legacyDatabases.some((database) => ['-shm', '-wal', '-journal'].some((suffix) => name === database + suffix))
   );
-}
-
-/** Files below the top level that backups leave out: the patched Companion app can be patched again, and it
-would add about 180 MB to every backup. Its signing key beside it is kept. Paths use forward slashes.
-*/
-export function excludedBackupPath(path: string) {
-  return path.replaceAll('\\', '/') === 'companion/zwift-companion.apk';
 }
 
 export function nightlyBackupName(date: Date) {
@@ -53,7 +49,7 @@ export function nightlyBackupTimestamp(name: string) {
 /** Backup names are also used as directory names. */
 export function backupPath(directory: string, name: string) {
   if (name !== basename(name) || name === '' || name === '.' || name === '..') {
-    throw new ConfigError('Invalid backup name');
+    throw new ConfigError(t('invalid_backup_name'));
   }
 
   return resolve(directory, name);

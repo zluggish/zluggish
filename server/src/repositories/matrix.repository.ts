@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { RepositoryContext as Runtime } from '#src/context';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { AssetFiles } from '#src/repositories/files.repository';
@@ -27,7 +28,7 @@ class MatrixError extends Error {
     readonly status: number,
     readonly errcode: string,
   ) {
-    super(`Matrix request failed: ${status} ${errcode}`);
+    super(t('matrix_request_failed', { value1: status, value2: errcode }));
   }
 }
 
@@ -117,7 +118,7 @@ export class MatrixRepository {
       const response = await fetch(`${homeserver}/_matrix/client/v3${path}`, {
         method,
         headers: {
-          ...(token && { Authorization: `Bearer ${token}` }),
+          ...(token && { Authorization: t('matrix_bearer', { value1: token }) }),
           ...(body !== undefined && { 'Content-Type': 'application/json' }),
         },
         body: body === undefined ? null : JSON.stringify(body),
@@ -190,7 +191,7 @@ export class MatrixRepository {
           type: 'm.login.password',
           identifier: { type: 'm.id.user', user: settings.user },
           password: credentials.password,
-          initial_device_display_name: 'Zluggish',
+          initial_device_display_name: t('zluggish_title'),
           ...(saved && { device_id: saved.deviceId }),
         },
       );
@@ -271,7 +272,7 @@ export class MatrixRepository {
       // Many homeservers disable presence; a refused update changes nothing for riders.
       void request(Schema.Unknown, 'PUT', `/presence/${encodeURIComponent(userId)}/status`, {
         presence: 'online',
-        status_msg: count ? `${count} rider${count === 1 ? '' : 's'} online` : 'No riders online',
+        status_msg: count ? t('rider_online', { value1: count, value2: count === 1 ? '' : 's' }) : t('riders_offline'),
       }).catch(() => {});
     };
 
@@ -321,12 +322,12 @@ export class MatrixRepository {
     return {
       send: async (content) => {
         if (!connected) {
-          throw new Error('Matrix is not connected');
+          throw new Error(t('matrix_disconnected'));
         }
 
         // The bridge has no end-to-end encryption, so it never posts plain text into an encrypted room.
         if (encrypted) {
-          throw new Error('Matrix room is encrypted');
+          throw new Error(t('matrix_room_encrypted'));
         }
 
         await request(

@@ -1,13 +1,7 @@
-import { packageRoot } from '#src/config/load';
-import {
-  legacyCertificate,
-  linuxSetupScript,
-  macosSetupScript,
-  setupFileName,
-  windowsSetupScript,
-} from '#src/http/client-setup';
+import { linuxSetupScript, macosSetupScript, setupFileName, windowsSetupScript } from '#src/http/client-setup';
 import { CertificateRepository } from '#src/repositories/certificate.repository';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { legacyCertificateThumbprint } from '#src/services/tls.service';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -26,26 +20,14 @@ const certificate = {
 };
 
 const script = { pem: material.cert, certificate, address: '192.168.1.20', version: '1.2.3', now: new Date() };
-const legacyPem = readFileSync(resolve(packageRoot(), '../assets/ssl/cert-zwift-com.pem'), 'utf8').replaceAll('\r', '');
-const legacyOnly = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----\n/.exec(legacyPem)![0];
-const legacyFacts = crypto.certificateFacts(legacyOnly);
+const legacyBody = 'MIIEQTCCAymgAwIBAgIUVPfyk0BzcKB2eYhXZ+W9WZRY5HEwDQYJKoZIhvcNAQEL';
+// Only the first line is needed to simulate an old entry in Zwift's PEM bundle.
+const legacyPem = `${material.key}-----BEGIN CERTIFICATE-----
+${legacyBody}
+OLD
+-----END CERTIFICATE-----
+`;
 const thumbprint = (pem: string) => crypto.certificateFacts(pem).thumbprint;
-
-const legacyScript = {
-  ...script,
-  pem: legacyOnly,
-  certificate: {
-    ...legacyFacts,
-    notBefore: legacyFacts.notBefore.toISOString(),
-    notAfter: legacyFacts.notAfter.toISOString(),
-  },
-};
-
-await test('the legacy constants describe the bundled shared certificate', () => {
-  const legacy = crypto.certificateFacts(legacyPem);
-  assert.equal(legacy.thumbprint, legacyCertificate.thumbprint);
-  assert.ok(legacyPem.includes(`-----BEGIN CERTIFICATE-----\n${legacyCertificate.body}\n`));
-});
 
 await test('the Windows script is plain ASCII with CRLF line ends and names the certificate it installs', () => {
   const text = windowsSetupScript(script);
@@ -59,21 +41,6 @@ await test('the Windows script is plain ASCII with CRLF line ends and names the 
   assert.ok(text.includes(material.cert.trim().replaceAll('\n', '\r\n')));
   assert.equal(setupFileName(certificate, 'bat'), `zluggish-zwift-${facts.thumbprint.slice(0, 8).toLowerCase()}.bat`);
   assert.ok(!windowsSetupScript({ ...script, address: '' }).includes('3. Points the Zwift host names'));
-});
-
-await test('scripts for the shared certificate warn before and after they run', () => {
-  for (const text of [
-    windowsSetupScript(legacyScript),
-    linuxSetupScript(legacyScript),
-    macosSetupScript(legacyScript),
-  ]) {
-    assert.equal(text.split('WARNING: This server still uses the shared Zwift certificate').length, 4);
-    assert.ok(text.includes(legacyCertificate.thumbprint));
-  }
-
-  assert.equal(setupFileName(legacyScript.certificate, 'sh'), 'zluggish-zwift-shared.sh');
-  assert.ok(linuxSetupScript(legacyScript).includes("NAME='zluggish-zwift-shared'"));
-  assert.ok(!windowsSetupScript(script).includes('WARNING'));
 });
 
 await test(
@@ -106,17 +73,7 @@ await test(
     // The old setup appended the shared certificate with its private key.
     writeFileSync(bundle, `${other}\n${legacyPem.replaceAll('\n', '\r\n')}`);
 
-    const run = (path = file) =>
-      execFileSync('/bin/sh', [path, zwift], { env: { PATH: bin, HOME: root }, encoding: 'utf8' });
-
-    // A server still on the shared certificate: its setup keeps that certificate, without the key, marked.
-    const legacyFile = resolve(root, 'legacy.sh');
-    writeFileSync(legacyFile, linuxSetupScript({ ...legacyScript, address: '' }));
-    assert.match(run(legacyFile), /WARNING/);
-    const shared = readFileSync(bundle, 'utf8');
-    assert.ok(!shared.includes('PRIVATE KEY'));
-    assert.equal(shared.split(legacyCertificate.body).length, 2);
-    assert.ok(shared.includes(`# BEGIN Zluggish server certificate ${legacyCertificate.thumbprint}`));
+    const run = () => execFileSync('/bin/sh', [file, zwift], { env: { PATH: bin, HOME: root }, encoding: 'utf8' });
 
     assert.match(run(), /Updated .*cacert\.pem/);
     const once = readFileSync(bundle, 'utf8');
@@ -126,7 +83,7 @@ await test(
     assert.equal(twice, once);
     assert.ok(twice.startsWith(other));
     assert.ok(!twice.includes('PRIVATE KEY'));
-    assert.ok(!twice.includes(legacyCertificate.body));
+    assert.ok(!twice.includes(legacyBody));
     assert.equal(twice.split(material.cert.trim()).length, 2);
     assert.ok(twice.includes(`# BEGIN Zluggish server certificate ${facts.thumbprint}`));
     assert.ok(existsSync(`${bundle}.zluggish-backup`));
@@ -147,9 +104,13 @@ await test(
     const repository = new CertificateRepository();
     const earlier = await repository.create({ serverId: '0123456789ab', years: 5, now: new Date() });
     const another = await repository.create({ serverId: 'ba9876543210', years: 5, now: new Date() });
-    const keychain = [legacyOnly, earlier.cert, another.cert, material.cert];
+    const keychain = [earlier.cert, another.cert, material.cert];
     const stream = resolve(root, 'keychain.txt');
-    writeFileSync(stream, keychain.map((pem) => `SHA-256 hash: 00\nSHA-1 hash: ${thumbprint(pem)}\n${pem}`).join(''));
+    writeFileSync(
+      stream,
+      `SHA-256 hash: 00\nSHA-1 hash: ${legacyCertificateThumbprint}\n${legacyPem}` +
+        keychain.map((pem) => `SHA-256 hash: 00\nSHA-1 hash: ${thumbprint(pem)}\n${pem}`).join(''),
+    );
 
     const bin = resolve(root, 'bin');
     mkdirSync(bin);
@@ -194,7 +155,7 @@ await test(
         .filter((call) => call.startsWith('delete-certificate'))
         .map((call) => call.match(/^delete-certificate -Z (\S+)/)?.[1] ?? '')
         .sort((a, b) => a.localeCompare(b)),
-      [legacyCertificate.thumbprint, thumbprint(earlier.cert)].sort((a, b) => a.localeCompare(b)),
+      [legacyCertificateThumbprint, thumbprint(earlier.cert)].sort((a, b) => a.localeCompare(b)),
     );
     assert.ok(
       calls.some((call) =>
@@ -209,7 +170,7 @@ await test(
     assert.equal(readFileSync(bundle, 'utf8'), once);
     assert.ok(once.startsWith(other));
     assert.ok(!once.includes('PRIVATE KEY'));
-    assert.ok(!once.includes(legacyCertificate.body));
+    assert.ok(!once.includes(legacyBody));
     assert.ok(once.includes(`# BEGIN Zluggish server certificate ${facts.thumbprint}`));
   },
 );

@@ -1,7 +1,10 @@
+import { t } from '#src/i18n/index';
 import { isIntervalsAthleteId } from '#src/dtos/intervals.dto';
 import { uuid, metadataSchema, storedEntrySchema } from '#src/dtos/workout.dto';
 import type { StoredEntry } from '#src/dtos/workout.dto';
 import { RuntimeContext } from '#src/context';
+import { summarizeWorkout } from '#src/world/workout-summary';
+import type { WorkoutSummary } from '#src/world/workout-summary';
 import { UnreadableCredentialsError } from '#src/errors';
 import { SettingsService } from '#src/services/settings.service';
 import { XMLBuilder, XMLParser, XMLValidator } from 'fast-xml-parser';
@@ -40,7 +43,7 @@ function parseXML(content: string) {
     Buffer.byteLength(content) > 16 * 1024 * 1024 ||
     XMLValidator.validate(content) !== true
   ) {
-    throw new Error('Invalid workout XML');
+    throw new Error(t('invalid_workout_xml'));
   }
 
   return Schema.decodeUnknownSync(documentSchema)(parser.parse(content));
@@ -111,7 +114,7 @@ function workoutDetails(content: string) {
         }
         add(repeat * number(step['@_OnDuration']), number(step['@_OnPower'], -1));
         add(repeat * number(step['@_OffDuration']), number(step['@_OffPower'], -1));
-      } else if (['Warmup', 'Cooldown', 'Ramp'].includes(tag)) {
+      } else if ([t('warmup'), t('cooldown'), t('ramp')].includes(tag)) {
         add(number(step['@_Duration']), number(step['@_PowerLow'], -1), number(step['@_PowerHigh'], -1));
       } else {
         add(number(step['@_Duration']), number(step['@_Power'], -1));
@@ -200,6 +203,32 @@ const make = Effect.gen(function* () {
 
   function metadataFileOf(id: number) {
     return resolve(runtime.profiles.folder(id), 'intervals_icu_workout.json');
+  }
+
+  /** Rider settings the sync stored next to the workouts; null when the file or the key is missing. */
+  function settingsOf(id: number): { ftp: number | null; power_zones: Array<number> | null } | null {
+    const file = metadataFileOf(id);
+
+    if (!repositories.filesRepository.existsSync(file)) {
+      return null;
+    }
+
+    try {
+      const raw: unknown = JSON.parse(repositories.filesRepository.readFileSync(file, 'utf8'));
+      const stored: { settings?: { ftp?: unknown; power_zones?: unknown } } =
+        raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+      const settingsFtp = typeof stored.settings?.ftp === 'number' ? stored.settings.ftp : null;
+      const ftp = settingsFtp !== null && Number.isFinite(settingsFtp) && settingsFtp > 0 ? settingsFtp : null;
+      const zones = Array.isArray(stored.settings?.power_zones)
+        ? stored.settings.power_zones.filter(
+            (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0,
+          )
+        : [];
+
+      return { ftp, power_zones: zones.length >= 6 ? zones.slice(0, 6) : null };
+    } catch {
+      return null;
+    }
   }
 
   /** Unmodified stored entries, including fields the schema does not read. */
@@ -349,6 +378,109 @@ const make = Effect.gen(function* () {
     return Schema.is(uuid)(id) ? resolve(runtime.config.storageDir, 'tp-workouts/intervalsicu', `${id}.zwo`) : null;
   }
 
+  /** Today's synced Intervals.icu workouts of the rider, summarised for the web page. */
+  function todayOf(id: number, now = new Date()) {
+    type Planned = {
+      description?: string | null;
+      icu_training_load?: unknown;
+      synced_at?: unknown;
+    };
+    const day = localDay(now);
+    const storedSettings = settingsOf(id);
+    const zoneLimits = storedSettings?.power_zones
+      ? storedSettings.power_zones.map((zone) => zone / 100)
+      : [0.55, 0.75, 0.9, 1.05, 1.2, 1.5];
+    const seen = new Set<string>();
+    const workouts: Array<{
+      id: string;
+      name: string;
+      description: string;
+      plannedAt: string | null;
+      load: number | null;
+      summary: WorkoutSummary;
+    }> = [];
+
+    let syncedAt: string | null = null;
+    const otherDays = new Set<string>();
+
+    for (const entry of storedOf(id).entries) {
+      const metadata = entry as StoredEntry & Planned;
+      const synced = metadata.synced_at;
+
+      if (typeof synced === 'string' && synced !== '' && (syncedAt === null || synced > syncedAt)) {
+        syncedAt = synced;
+      }
+
+      const identity = Schema.decodeUnknownOption(uuid)(metadata.workout_id);
+
+      if (Option.isNone(identity) || seen.has(identity.value)) {
+        continue;
+      }
+
+      const planned =
+        metadata.start_date_local?.slice(0, 10) ?? (metadata.start_date ? localDay(new Date(metadata.start_date)) : '');
+
+      if (planned !== day) {
+        if (planned) {
+          otherDays.add(planned);
+        }
+
+        continue;
+      }
+      const file = fileOf(identity.value);
+
+      if (
+        !file ||
+        !repositories.filesRepository.existsSync(file) ||
+        [file, resolve(file, '..'), resolve(file, '../..')].some((path) =>
+          repositories.filesRepository.lstatSync(path).isSymbolicLink(),
+        )
+      ) {
+        continue;
+      }
+      const summary = summarizeWorkout(repositories.filesRepository.readFileSync(file, 'utf8'), zoneLimits);
+
+      if (!summary) {
+        continue;
+      }
+      seen.add(identity.value);
+
+      const load = Number(metadata.icu_training_load);
+
+      workouts.push({
+        id: identity.value,
+        name: metadata.name || summary.name,
+        description: metadata.description ?? '',
+        plannedAt: metadata.start_date_local ?? metadata.start_date ?? null,
+        load: Number.isFinite(load) ? load : null,
+        summary,
+      });
+    }
+
+    let ftp = 0;
+
+    try {
+      ftp = runtime.profiles.get(id).ftp;
+    } catch {
+      runtime.world.lifecycle.log.warn('workout.profile_unavailable', 'The rider FTP could not be read', {
+        playerId: id,
+      });
+    }
+
+    const intervalsFtp = storedSettings?.ftp ?? null;
+
+    return {
+      day,
+      connected: repositories.connectionsRepository.has(id, 'intervals'),
+      ftp: intervalsFtp ?? ftp,
+      ftpSource: intervalsFtp === null ? (ftp > 0 ? 'profile' : 'none') : 'intervals',
+      zoneLimits,
+      syncedAt,
+      workouts,
+      otherDays: [...otherDays].sort(),
+    };
+  }
+
   async function syncNow(id: number, signal: AbortSignal) {
     signal.throwIfAborted();
     const provider = providerOf(id);
@@ -358,7 +490,7 @@ const make = Effect.gen(function* () {
     }
 
     if (provider !== 'intervals-icu') {
-      return 'Configure a workout provider first.';
+      return t('workout_provider_required');
     }
 
     let credentials: readonly [string, string] | null;
@@ -375,20 +507,20 @@ const make = Effect.gen(function* () {
         error,
       });
 
-      return 'The saved Intervals.icu credentials cannot be read. Enter them again in Integrations.';
+      return t('workout_intervals_credentials_unreadable');
     }
 
     if (!credentials) {
-      return 'Intervals.icu credentials are missing.';
+      return t('workout_intervals_credentials_missing');
     }
     const [athlete, key] = credentials;
 
     if (!isIntervalsAthleteId(athlete)) {
-      throw new Error('Invalid athlete ID');
+      throw new Error(t('invalid_athlete_id'));
     }
 
     const headers = {
-      Authorization: `Basic ${Buffer.from(`API_KEY:${key}`).toString('base64')}`,
+      Authorization: t('basic', { value1: Buffer.from(`API_KEY:${key}`).toString('base64') }),
     };
 
     const base = `https://intervals.icu/api/v1/athlete/${athlete}`;
@@ -400,7 +532,7 @@ const make = Effect.gen(function* () {
     );
 
     if (!response.ok) {
-      throw new Error('Intervals.icu sync failed');
+      throw new Error(t('intervals_icu_sync_failed'));
     }
 
     const events = Schema.decodeUnknownSync(
@@ -424,6 +556,40 @@ const make = Effect.gen(function* () {
     );
 
     const downloads = [];
+    let settings: { ftp: number | null; power_zones: Array<number> | null } | null = null;
+
+    // The rider's FTP and power zones: a failure here must never fail the sync itself.
+    try {
+      const athleteResponse = await fetch(base, { headers, signal });
+
+      if (athleteResponse.ok) {
+        const athleteJson: unknown = await athleteResponse.json();
+        const isRecord = Schema.is(documentSchema);
+        const listed = isRecord(athleteJson) ? athleteJson['sportSettings'] : undefined;
+        const candidates: ReadonlyArray<unknown> = Array.isArray(listed) ? listed : [];
+        const sportSettings = candidates.filter((candidate) => isRecord(candidate));
+        const ride = sportSettings.find((entry) => {
+          const types = entry['types'];
+
+          return Array.isArray(types) && types.some((type) => type === 'VirtualRide' || type === 'Ride');
+        });
+        const positive = (value: unknown) =>
+          typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+        const rideZones = ride?.['power_zones'];
+        const zones = Array.isArray(rideZones)
+          ? rideZones.filter(
+              (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0,
+            )
+          : [];
+
+        settings = {
+          ftp: positive(ride?.['indoor_ftp']) ?? positive(ride?.['ftp']),
+          power_zones: zones.length >= 6 ? zones.slice(0, 6) : null,
+        };
+      }
+    } catch {
+      settings = null;
+    }
 
     for (const event of selected) {
       const response = await fetch(`${base}/events/${event.id}/download.zwo`, {
@@ -432,12 +598,12 @@ const make = Effect.gen(function* () {
       });
 
       if (!response.ok) {
-        throw new Error('Intervals.icu download failed');
+        throw new Error(t('intervals_icu_download_failed'));
       }
       const text = await response.text();
 
       if (!workoutDetails(text)) {
-        throw new Error('Invalid cycling workout');
+        throw new Error(t('invalid_cycling_workout'));
       }
       downloads.push({ event, text });
     }
@@ -467,7 +633,7 @@ const make = Effect.gen(function* () {
       const root = ordered.find((node) => 'workout_file' in node);
 
       if (!root) {
-        throw new Error('Missing workout root');
+        throw new Error(t('missing_workout_root'));
       }
       const children = Schema.decodeUnknownSync(Schema.Array(documentSchema))(root.workout_file);
       root.workout_file = [...children.filter((node) => !('uniqueId' in node)), { uniqueId: [{ '#text': identity }] }];
@@ -476,7 +642,7 @@ const make = Effect.gen(function* () {
       const file = fileOf(identity);
 
       if (!file) {
-        throw new Error('Invalid workout identity');
+        throw new Error(t('invalid_workout_identity'));
       }
       pendingFiles.set(file, Schema.decodeUnknownSync(Schema.String)(content));
 
@@ -490,19 +656,15 @@ const make = Effect.gen(function* () {
       };
     });
 
-    pendingFiles.set(
-      metadataFileOf(id),
-      JSON.stringify({
-        ...(entries[0] ?? { provider: 'intervals-icu' }),
-        workouts: entries,
-      }),
-    );
+    const metadata = { ...(entries[0] ?? { provider: 'intervals-icu' }), workouts: entries };
+
+    pendingFiles.set(metadataFileOf(id), JSON.stringify(settings ? { ...metadata, settings } : metadata));
     pendingFiles.set(resolve(runtime.profiles.folder(id), 'active_workout_provider.txt'), 'intervals-icu');
     signal.throwIfAborted();
     // Publication is synchronous: no request can observe new metadata before all files exist.
     repositories.workoutPublication.publish(pendingFiles);
 
-    return `Synced ${entries.length} Intervals.icu workouts.`;
+    return t('synced_intervals_icu_workouts', { value1: entries.length });
   }
 
   function importBridge(id: number, signal = AbortSignal.timeout(30_000)) {
@@ -511,7 +673,7 @@ const make = Effect.gen(function* () {
     const folder = settings.workouts.trainingpeaks.bridgeFolder;
 
     if (!folder || !repositories.filesRepository.existsSync(folder)) {
-      return 'TrainingPeaks bridge folder is missing.';
+      return t('workout_trainingpeaks_folder_missing');
     }
     const imports: Array<{ filename: string; content: Buffer }> = [];
 
@@ -535,7 +697,7 @@ const make = Effect.gen(function* () {
       }.zwo`;
 
       if (imports.some((item) => item.filename === filename)) {
-        throw new Error(`Workout filenames collide: ${filename}`);
+        throw new Error(t('workout_filenames_collide', { value1: filename }));
       }
       imports.push({ filename, content });
     }
@@ -561,7 +723,7 @@ const make = Effect.gen(function* () {
       }
     });
 
-    return `Imported ${imports.length} TrainingPeaks workouts.`;
+    return t('imported_trainingpeaks_workouts', { value1: imports.length });
   }
 
   const requests = new Map<string, Promise<void>>();
@@ -629,6 +791,10 @@ const make = Effect.gen(function* () {
     }),
     list: Effect.fn('WorkoutsService.list')(function* (id: number, now: Date = new Date()) {
       return scheduled(id, now);
+    }),
+    /** Today's synced Intervals.icu workouts, summarised; never fails for a rider without files. */
+    today: Effect.fn('WorkoutsService.today')(function* (id: number, now: Date = new Date()) {
+      return todayOf(id, now);
     }),
     file: Effect.fn('WorkoutsService.file')(function* (id: string) {
       return fileOf(id);

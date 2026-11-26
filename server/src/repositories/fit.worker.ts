@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { FitDecoder } from '#src/repositories/fit-decoder.repository';
 import { parentPort } from 'node:worker_threads';
 import { Schema } from 'effect';
@@ -18,6 +19,6 @@ parentPort?.on('message', (message) => {
     const result = task === 'chart' ? decoder.chart(bytes) : decoder.powerBests(bytes);
     parentPort?.postMessage({ id, result, duration: performance.now() - start });
   } catch {
-    parentPort?.postMessage({ id, error: 'Invalid FIT activity', duration: performance.now() - start });
+    parentPort?.postMessage({ id, error: t('invalid_fit_activity'), duration: performance.now() - start });
   }
 });

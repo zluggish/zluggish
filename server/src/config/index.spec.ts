@@ -6,6 +6,7 @@ await test('runtime validation rejects unknown, non-finite, invalid ranges and d
   for (const input of [
     { server: { multiplayer: true } },
     { network: { api: { port: 0 } } },
+    { network: { api: { useCert: false } } },
     { bots: { multiplier: 101 } },
     { soloBlob: { rowGap: 0 } },
     { soloBlob: { riders: 31 } },

@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { randomUUID } from '../lib/uuid';
+  import { t } from '../lib/i18n/index';
   import { onMount } from 'svelte';
-  import { requestJson, ConnectionError } from '../lib/connection';
+  import { requestJson, ConnectionError, connection } from '../lib/connection';
+  import { get } from 'svelte/store';
   import ProfileData from './ProfileData.svelte';
   import Connections from './Connections.svelte';
   import Activities from './Activities.svelte';
@@ -16,6 +19,8 @@
   import InstallPhone from './InstallPhone.svelte';
   import Companion from './Companion.svelte';
   import CompanionManage from './CompanionManage.svelte';
+  import ZwiftAndroidManage from './ZwiftAndroidManage.svelte';
+  import AndroidAppsManage from './AndroidAppsManage.svelte';
   import ServerCertificate from './ServerCertificate.svelte';
   import { tlsStatus } from './tls';
   import { decode, ignored, responseFields } from '../lib/api';
@@ -44,13 +49,13 @@
   type Pending = { title: string; detail: string; label: string; destructive: boolean; confirm: () => Promise<void> };
 
   const botCommands = [
-    ['group', 'Group bots around the rider'],
-    ['groupall', 'Group all bots around the rider'],
-    ['autogroup', 'Keep bots grouped around the rider'],
-    ['autogroupall', 'Keep all bots grouped around the rider'],
-    ['stopautogroup', 'Stop automatic grouping'],
-    ['disperse', 'Spread the bots out'],
-    ['peloton', 'Set the RoboPacer peloton size'],
+    ['group', t('bots_group')],
+    ['groupall', t('bots_group_all')],
+    ['autogroup', t('bots_keep_grouped')],
+    ['autogroupall', t('bots_keep_all_grouped')],
+    ['stopautogroup', t('stop_automatic_grouping')],
+    ['disperse', t('bots_spread_action')],
+    ['peloton', t('bots_peloton_size_action')],
   ] as const;
 
   const pageSize = 25;
@@ -63,6 +68,7 @@
   let users = $state<Array<User>>([]);
   let complete = $state(true);
   let loading = $state(true);
+  let slowLoading = $state(false);
   let busy = $state(false);
   let message = $state('');
   let failed = $state(false);
@@ -70,7 +76,7 @@
   let fieldErrors = $state<Record<string, Array<string>>>({});
   let conflict = $state<User | null>(null);
   let pending = $state<Pending | null>(null);
-  let operation = crypto.randomUUID();
+  let operation = randomUUID();
 
   let mode = $state<'new' | 'existing'>('new');
   let key = $state('');
@@ -103,6 +109,8 @@
   let regenerateButton = $state<HTMLButtonElement>();
   let ghosts = $state(false);
   let stravaMethod = $state('paid');
+  let garminDevice = $state(false);
+  let intervalsUpload = $state(true);
   let bridgeFolder = $state('');
 
   let search = $state('');
@@ -119,7 +127,7 @@
   let certificateMode = $state<TlsStatus['mode'] | null>(null);
   let backingUp = $state(false);
   let backupMessage = $state('');
-  let backupOperation = crypto.randomUUID();
+  let backupOperation = randomUUID();
   let serverConfig = $state<{ rows: Array<[string, string]> } | null>(null);
   let zwiftUpdates = $state<ZwiftUpdates | null>(null);
   let worldSettings = $state<Array<WorldSetting>>([]);
@@ -143,13 +151,39 @@
     path === '/apps' ||
       (installing &&
         !installingPhone &&
-        !/^\/install\/(windows|macos|linux)$/.test(path) &&
+        !/^\/install\/(windows|macos|linux|manual)$/.test(path) &&
         !(path === '/install' && isComputer(here))) ||
       (companion && !/^\/companion\/(android|ios)$/.test(path) && !(path === '/companion' && isPhone(here))),
   );
 
   const back = $derived(
-    manage && path.startsWith('/manage/users/') ? { href: '/manage', label: 'All users' } : undefined,
+    manage && path.startsWith('/manage/users/') ? { href: '/manage', label: t('all_users') } : undefined,
+  );
+
+  /** Setup pages name the app and system in a visible heading, under a link back to Apps. */
+  const setups = new Map([
+    ['/install/windows', t('setup_zwift_windows')],
+    ['/install/macos', t('setup_zwift_macos')],
+    ['/install/linux', t('setup_zwift_linux')],
+    ['/install/manual', t('setup_zwift_manual')],
+    ['/install/android', t('setup_zwift_android')],
+    ['/install/android-rooted', t('setup_zwift_rooted_android')],
+    ['/install/ios', t('setup_zwift_ios')],
+    ['/companion/android', t('setup_companion_android')],
+    ['/companion/ios', t('setup_companion_ios')],
+  ]);
+  // Bare `/install` and `/companion` set up this browser's own system.
+  const setup = $derived(
+    apps ? undefined : setups.get(path === '/install' || path === '/companion' ? `${path}/${here}` : path),
+  );
+  /** The patched Android apps are managed one at a time, under a page that shows whether each is ready. */
+  const androidApps = ['/manage/android', '/manage/zwift-android', '/manage/companion'];
+  const crumb = $derived(
+    setup
+      ? { href: '/apps', label: t('apps_breadcrumb') }
+      : path === '/manage/zwift-android' || path === '/manage/companion'
+        ? { href: '/manage/android', label: t('android_apps') }
+        : undefined,
   );
 
   const administrator = $derived(user?.role === 'administrator');
@@ -163,11 +197,11 @@
     ),
   );
 
-  // Asked once per administrator sign-in; the Server page reports later changes.
+  // Asked once per sign-in; the Server page reports later changes.
   let certificateRequested = false;
 
   $effect(() => {
-    if (!administrator) {
+    if (!user) {
       certificateRequested = false;
       certificateMode = null;
 
@@ -193,55 +227,43 @@
   const pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
 
   const title = $derived(
-    !user
-      ? complete
-        ? 'Sign in'
-        : 'First administrator'
-      : path === '/manage/server'
-        ? 'Server'
-        : path === '/manage/companion'
-          ? 'Companion app'
-          : path === '/manage/users/new'
-            ? 'Create user'
-            : selected
-              ? label(selected)
-              : manage
-                ? 'Users'
-                : path === '/activities' || path.startsWith('/activities/')
-                  ? 'Activities'
-                  : path === '/profile-data/local'
-                    ? 'Import local files'
-                    : path === '/profile-data'
-                      ? 'Import / Export'
-                      : path === '/zwift'
-                        ? 'Zwift connection'
-                        : path === '/integrations'
-                          ? 'Integrations'
-                          : path === '/settings'
-                            ? 'Settings'
-                            : path === '/climbs'
-                              ? 'Climbs'
-                              : apps
-                                ? 'Apps'
-                                : path === '/install/windows'
-                                  ? 'Windows setup'
-                                  : path === '/install/macos'
-                                    ? 'macOS setup'
-                                    : path === '/install/linux'
-                                      ? 'Linux setup'
-                                      : path === '/install/android'
-                                        ? 'Android setup'
-                                        : path === '/install/android-rooted'
-                                          ? 'Rooted Android setup'
-                                          : path === '/install/ios'
-                                            ? 'iPhone and iPad'
-                                            : installing
-                                              ? 'Install'
-                                              : path === '/companion/android'
-                                                ? 'Android setup'
-                                                : companion
-                                                  ? 'Companion'
-                                                  : 'Profile',
+    loading
+      ? t('loading')
+      : !user
+        ? complete
+          ? t('sign_in')
+          : t('first_administrator')
+        : path === '/manage/server'
+          ? t('server')
+          : path === '/manage/android'
+            ? t('android_apps')
+            : path === '/manage/companion'
+              ? t('companion_for_android')
+              : path === '/manage/zwift-android'
+                ? t('zwift_for_android')
+                : path === '/manage/users/new'
+                  ? t('create_user')
+                  : selected
+                    ? label(selected)
+                    : manage
+                      ? t('users')
+                      : path === '/' || path === '/activities' || path.startsWith('/activities/')
+                        ? t('activities')
+                        : path === '/profile-data/local'
+                          ? t('import_local_files')
+                          : path === '/profile-data'
+                            ? 'Import / Export'
+                            : path === '/zwift'
+                              ? t('zwift_connection')
+                              : path === '/integrations'
+                                ? t('integrations')
+                                : path === '/settings'
+                                  ? t('settings')
+                                  : path === '/climbs'
+                                    ? t('climbs')
+                                    : apps
+                                      ? t('apps')
+                                      : (setup ?? t('profile')),
   );
 
   const initials = (r: User) => `${r.first_name.charAt(0)}${r.last_name.charAt(0)}`.toUpperCase();
@@ -279,7 +301,7 @@
     if (!response.ok) {
       // The server answered, so a retry is a new operation. A lost response keeps the ID for a safe retry.
       if (method !== 'GET') {
-        operation = crypto.randomUUID();
+        operation = randomUUID();
       }
       fieldErrors = fields.fieldErrors ?? {};
       const scope = selected && `/api/manage/users/${selected.player_id}`;
@@ -294,33 +316,51 @@
         avatar = undefined;
         go('/sign-in');
         await api(ignored, '/api/setup');
-        throw new Error('Your session ended. Sign in again.');
+        throw new Error(t('session_expired_notice'));
       }
 
-      throw new Error(fields.message || 'Request failed.');
+      throw new Error(fields.message || t('request_failed'));
     }
 
     if (method !== 'GET') {
-      operation = crypto.randomUUID();
+      operation = randomUUID();
     }
 
     return decode(schema, body);
   }
 
+  let destination: string | null = null;
+
   function go(next: string) {
-    if (next !== path) {
+    // An operation may redirect, but a newer navigation owns the browser URL.
+    if (destination === null && next !== location.pathname) {
       history.pushState({}, '', next);
     }
     path = next;
   }
 
   async function navigate(next: string) {
-    go(next);
-    message = '';
-    await run(enter);
+    if (next !== location.pathname) {
+      history.pushState({}, '', next);
+    }
+    destination = next;
+    await loadDestination();
   }
 
-  async function run(work: () => Promise<void>, scope = '') {
+  async function loadDestination() {
+    if (busy || destination === null) {
+      return;
+    }
+
+    const next = destination;
+    await run(async () => {
+      path = next;
+      destination = null;
+      await enter();
+    });
+  }
+
+  async function run(work: () => Promise<void>, scope = '', suppressConnectionError = false) {
     if (busy) {
       return;
     }
@@ -334,9 +374,17 @@
       await work();
     } catch (error) {
       failed = true;
-      message = error instanceof Error ? error.message : 'Request failed.';
+      message =
+        suppressConnectionError && error instanceof ConnectionError
+          ? ''
+          : error instanceof Error
+            ? error.message
+            : t('request_failed');
     } finally {
       busy = false;
+      // Keep route-dependent mutations and loads serial. Only the latest requested
+      // destination is loaded after the active operation (including failures).
+      await loadDestination();
     }
   }
 
@@ -398,26 +446,23 @@
 
   async function createBackup() {
     backingUp = true;
-    backupMessage = 'Requesting backup…';
+    backupMessage = t('requesting_backup');
 
     try {
       let result = await api(backupResponse, '/api/manage/server/backups', 'POST', { operation: backupOperation });
 
       while (result.state === 'queued' || result.state === 'running') {
-        backupMessage = result.state === 'queued' ? 'Backup queued…' : 'Creating backup…';
+        backupMessage = result.state === 'queued' ? t('backup_queued') : t('creating_backup');
         await new Promise((resolve) => {
           setTimeout(resolve, 1000);
         });
         result = await api(backupResponse, `/api/manage/server/backups/${backupOperation}`);
       }
 
-      backupOperation = crypto.randomUUID();
-      backupMessage =
-        result.state === 'done'
-          ? `Backup saved in storage/backups/${result.name}.`
-          : 'Backup failed. Check the server log.';
+      backupOperation = randomUUID();
+      backupMessage = result.state === 'done' ? t('backup_success', { value1: result.name }) : t('backup_failure');
     } catch (error) {
-      backupMessage = error instanceof Error ? error.message : 'Backup request failed.';
+      backupMessage = error instanceof Error ? error.message : t('backup_request_failed');
     } finally {
       backingUp = false;
     }
@@ -427,6 +472,10 @@
     return {
       ghosts: Boolean(body.overrides['ghosts.enabled'] ?? body.defaults.ghosts.enabled),
       stravaMethod: String(body.overrides['uploads.strava.method'] ?? body.defaults.uploads.strava.method),
+      garminDevice: Boolean(
+        body.overrides['uploads.garmin.device.enabled'] ?? body.defaults.uploads.garmin.device.enabled,
+      ),
+      intervalsUpload: Boolean(body.overrides['uploads.intervals.enabled'] ?? body.defaults.uploads.intervals.enabled),
       bridgeFolder: String(
         body.overrides['workouts.trainingpeaks.bridgeFolder'] ?? body.defaults.workouts.trainingpeaks.bridgeFolder,
       ),
@@ -434,7 +483,7 @@
   }
 
   function applySettings(body: UserSettings) {
-    ({ ghosts, stravaMethod, bridgeFolder } = preferences(body));
+    ({ ghosts, stravaMethod, garminDevice, intervalsUpload, bridgeFolder } = preferences(body));
   }
 
   async function saveSettings() {
@@ -454,7 +503,7 @@
         throw error;
       }
 
-      done(ghosts ? 'Ghosts turned on.' : 'Ghosts turned off.');
+      done(ghosts ? t('ghosts_turned_on') : t('ghosts_turned_off'));
     }, 'settings');
   }
 
@@ -480,7 +529,7 @@
     try {
       bitmap = await createImageBitmap(file);
     } catch {
-      throw new Error('Choose a JPG or PNG image.');
+      throw new Error(t('avatar_format_error'));
     }
 
     const side = Math.min(bitmap.width, bitmap.height);
@@ -489,7 +538,7 @@
     const context = canvas.getContext('2d');
 
     if (!context) {
-      throw new Error('Could not process the image.');
+      throw new Error(t('avatar_process_error'));
     }
     context.drawImage(
       bitmap,
@@ -505,7 +554,7 @@
     bitmap.close();
 
     return new Promise<Blob>((done, fail) => {
-      canvas.toBlob((blob) => (blob ? done(blob) : fail(new Error('Could not read the image.'))), 'image/jpeg', 0.9);
+      canvas.toBlob((blob) => (blob ? done(blob) : fail(new Error(t('avatar_read_error')))), 'image/jpeg', 0.9);
     });
   }
 
@@ -519,7 +568,7 @@
       if (!profileId) {
         avatar = profileAvatar;
       }
-      done('Restart Zwift for the changes to take effect.');
+      done(t('profile_restart_hint'));
     });
   }
 
@@ -553,6 +602,8 @@
         ...current.overrides,
         'ghosts.enabled': ghosts,
         'uploads.strava.method': stravaMethod,
+        'uploads.garmin.device.enabled': garminDevice,
+        'uploads.intervals.enabled': intervalsUpload,
         'workouts.trainingpeaks.bridgeFolder': bridgeFolder,
       },
     };
@@ -567,17 +618,17 @@
       mode = setupUsers.length ? 'existing' : 'new';
       keyAccepted = true;
     } catch (error) {
-      if (!(error instanceof Error) || error.message !== 'Setup refused.') {
+      if (!(error instanceof Error) || error.message !== t('setup_refused')) {
         throw error;
       }
-      fieldErrors = { key: ['This key does not match. Copy it again from the server console.'] };
+      fieldErrors = { key: [t('setup_key_mismatch')] };
     }
   }
 
   async function signIn() {
     if (!complete && mode === 'new' && password !== confirmPassword) {
-      fieldErrors = { confirm: ['Passwords do not match.'] };
-      throw new Error('Check the form fields.');
+      fieldErrors = { confirm: [t('password_mismatch')] };
+      throw new Error(t('form_validation_error'));
     }
 
     const body = complete
@@ -589,9 +640,9 @@
           ...(mode === 'new' ? { username, first_name: first, last_name: last } : { player_id: setupUserId }),
         }).catch((error) => {
           // The key stops working when the server restarts, so ask for the new one.
-          if (error instanceof Error && error.message === 'Setup refused.' && mode === 'new') {
+          if (error instanceof Error && error.message === t('setup_refused') && mode === 'new') {
             keyAccepted = false;
-            fieldErrors = { key: ['The server no longer accepts this key. Enter the key from the server console.'] };
+            fieldErrors = { key: [t('setup_key_expired')] };
           }
 
           throw error;
@@ -623,45 +674,45 @@
       return;
     }
     const who = name(selected);
-    const progress = selected.connected ? ` ${who} is riding now and can lose unsaved ride progress.` : '';
+    const progress = selected.connected ? t('user_active_ride_warning', { value1: who }) : '';
 
     const choices = {
       disable: {
-        title: `Disable ${who}?`,
-        detail: `${who} cannot sign in until you enable the account again. A ride in progress can still be saved for up to four hours.`,
-        label: 'Disable',
+        title: t('user_disable_confirm', { value1: who }),
+        detail: t('user_disabled_detail', { value1: who }),
+        label: t('user_disable_action'),
         destructive: true,
       },
       enable: {
-        title: `Enable ${who}?`,
-        detail: `${who} can sign in again. Old sessions stay ended.`,
-        label: 'Enable',
+        title: t('user_enable_confirm', { value1: who }),
+        detail: t('user_enabled_detail', { value1: who }),
+        label: t('user_enable_action'),
         destructive: false,
       },
       role:
         selected.role === 'administrator'
           ? {
-              title: `Remove the administrator role from ${who}?`,
-              detail: `${who} can no longer open Manage. All sessions of ${who} end.${progress}`,
-              label: 'Remove administrator',
+              title: t('admin_revoke_confirm', { value1: who }),
+              detail: t('admin_revoked_detail', { value1: who, value2: progress }),
+              label: t('remove_administrator'),
               destructive: true,
             }
           : {
-              title: `Give the administrator role to ${who}?`,
-              detail: `${who} can manage users and the server. All sessions of ${who} end.${progress}`,
-              label: 'Make administrator',
+              title: t('admin_grant_confirm', { value1: who }),
+              detail: t('admin_granted_detail', { value1: who, value2: progress }),
+              label: t('make_administrator'),
               destructive: false,
             },
       'revoke-sessions': {
-        title: `End all sessions of ${who}?`,
-        detail: `${who} must sign in again everywhere. This also stops a ride in progress.${progress}`,
-        label: 'End sessions',
+        title: t('sign_out_confirm', { value1: who }),
+        detail: t('user_stop_ride_warning', { value1: progress }),
+        label: t('sign_out_action'),
         destructive: true,
       },
       password: {
-        title: `Set a new password for ${who}?`,
-        detail: `All sessions of ${who} end.${progress}`,
-        label: 'Set password',
+        title: t('password_reset_confirm', { value1: who }),
+        detail: t('sign_out_detail', { value1: who, value2: progress }),
+        label: t('set_password'),
         destructive: false,
       },
     } satisfies Record<UserAction, Omit<Pending, 'confirm'>>;
@@ -675,8 +726,8 @@
     }
 
     if (action === 'password' && targetPassword !== targetConfirm) {
-      fieldErrors = { confirm: ['Passwords do not match.'] };
-      throw new Error('Check the form fields.');
+      fieldErrors = { confirm: [t('password_mismatch')] };
+      throw new Error(t('form_validation_error'));
     }
 
     const result = await api(
@@ -697,13 +748,11 @@
     users = users.map((r) => (r.player_id === result.player_id ? { ...r, ...result } : r));
 
     const messages = {
-      disable: result.completion_deadline
-        ? 'Disabled. The current ride can be saved for up to four hours. A server restart ends this permission.'
-        : 'Disabled.',
-      enable: 'Enabled.',
-      role: result.role === 'administrator' ? 'Administrator role given.' : 'Administrator role removed.',
-      'revoke-sessions': 'Sessions ended.',
-      password: 'Password set.',
+      disable: result.completion_deadline ? t('user_disabled_ride_hint') : t('user_disabled_notice'),
+      enable: t('user_enabled_notice'),
+      role: result.role === 'administrator' ? t('administrator_role_given') : t('administrator_role_removed'),
+      'revoke-sessions': t('signed_out_everywhere'),
+      password: t('password_set'),
     } satisfies Record<UserAction, string>;
 
     done(messages[action]);
@@ -711,8 +760,8 @@
 
   async function create() {
     if (newPassword !== newConfirm) {
-      fieldErrors = { confirm: ['Passwords do not match.'] };
-      throw new Error('Check the form fields.');
+      fieldErrors = { confirm: [t('password_mismatch')] };
+      throw new Error(t('form_validation_error'));
     }
 
     const created = await api(userSchema, '/api/manage/users', 'POST', {
@@ -727,7 +776,7 @@
     newConfirm = '';
     await loadUsers();
     await openUser(created);
-    done(`${name(created)} can now sign in.`);
+    done(t('setup_user_enabled', { value1: name(created) }));
   }
 
   function openPassword() {
@@ -748,8 +797,8 @@
   /** Changing the password ends every session, this one too. */
   async function changePassword() {
     if (password !== confirmPassword) {
-      fieldErrors = { confirm: ['Passwords do not match.'] };
-      throw new Error('Check the form fields.');
+      fieldErrors = { confirm: [t('password_mismatch')] };
+      throw new Error(t('form_validation_error'));
     }
 
     await api(ignored, '/api/me/password', 'POST', {
@@ -764,7 +813,7 @@
     password = '';
     confirmPassword = '';
     go('/sign-in');
-    done('Password changed. Sign in with the new password.');
+    done(t('password_changed_notice'));
   }
 
   function closeRegenerate() {
@@ -775,11 +824,7 @@
   async function regenerate() {
     regenerating = false;
     await api(ignored, '/api/me/power-curves', 'POST', { confirm: true, create: rebuild });
-    done(
-      rebuild
-        ? 'Regenerating power curves. They fill in as each saved activity is processed.'
-        : 'Power curves deleted. They fill in again as you ride.',
-    );
+    done(rebuild ? t('regenerating_power_curves') : t('power_curves_deleted_notice'));
   }
 
   function focusFirst(node: HTMLElement) {
@@ -796,7 +841,7 @@
     destructive: boolean,
   ) {
     pending = {
-      title: `${label}?`,
+      title: t('operation_confirm', { value1: label }),
       detail,
       label,
       destructive,
@@ -806,7 +851,7 @@
         });
 
         if (!body.ok) {
-          throw new Error(body.message ?? 'Operation failed.');
+          throw new Error(body.message ?? t('operation_failed'));
         }
         done(body.message ?? finished);
       },
@@ -815,7 +860,7 @@
 
   async function sendBots() {
     if (botUser === null) {
-      throw new Error('Choose a user who is riding now.');
+      throw new Error(t('bots_rider_hint'));
     }
 
     const body = await api(outcomeResponse, '/api/manage/server/bots', 'POST', {
@@ -826,57 +871,92 @@
     });
 
     if (!body.ok) {
-      throw new Error(body.message ?? 'Operation failed.');
+      throw new Error(body.message ?? t('operation_failed'));
     }
-    done(body.message ?? 'Sent to the bots.');
+    done(body.message ?? t('bot_command_success'));
   }
 
   onMount(() => {
+    const slowTimer = window.setTimeout(() => {
+      slowLoading = true;
+    }, 400);
     const pop = () => {
-      path = location.pathname;
-      void run(enter);
+      void navigate(location.pathname);
     };
 
     window.addEventListener('popstate', pop);
-    void run(async () => {
-      const setup = await api(setupResponse, '/api/setup');
-      complete = setup.complete;
-      version = setup.version;
-      zwiftVersion = setup.zwiftVersion;
+    let retryStartup = false;
+    let alive = true;
+    const start = async () => {
+      retryStartup = false;
+      loading = true;
+      await run(
+        async () => {
+          try {
+            const setup = await api(setupResponse, '/api/setup');
+            complete = setup.complete;
+            version = setup.version;
+            zwiftVersion = setup.zwiftVersion;
 
-      if (!complete) {
-        go('/setup');
+            if (!complete) {
+              go('/setup');
 
+              return;
+            }
+
+            try {
+              user = (await api(signedInResponse, '/api/me')).user;
+            } catch (error) {
+              if (error instanceof ConnectionError) {
+                throw error;
+              }
+
+              if (!['/sign-in', '/setup'].includes(path)) {
+                go('/sign-in');
+              }
+
+              return;
+            }
+
+            if (['/sign-in', '/setup'].includes(path)) {
+              go('/');
+            }
+
+            if (manage && !administrator) {
+              go('/');
+            }
+            await enter();
+          } catch (error) {
+            if (error instanceof ConnectionError) {
+              retryStartup = true;
+            }
+            throw error;
+          }
+        },
+        '',
+        true,
+      );
+      if (!alive) {
         return;
       }
-
-      try {
-        user = (await api(signedInResponse, '/api/me')).user;
-      } catch (error) {
-        if (error instanceof ConnectionError) {
-          throw error;
-        }
-
-        if (!['/sign-in', '/setup'].includes(path)) {
-          go('/sign-in');
-        }
-
-        return;
+      loading = retryStartup;
+      if (retryStartup && !get(connection).unavailable) {
+        void start();
       }
-
-      if (['/sign-in', '/setup'].includes(path)) {
-        go('/');
+    };
+    const unsubscribe = connection.subscribe((state) => {
+      if (alive && retryStartup && !state.unavailable && !busy) {
+        void start();
       }
-
-      if (manage && !administrator) {
-        go('/');
-      }
-      await enter();
-    }).finally(() => {
-      loading = false;
     });
+    void start();
 
-    return () => window.removeEventListener('popstate', pop);
+    return () => {
+      alive = false;
+      clearTimeout(slowTimer);
+      unsubscribe();
+      window.removeEventListener('popstate', pop);
+    };
   });
 </script>
 
@@ -900,10 +980,10 @@
   >{/snippet}
 
 {#snippet chips(r: User)}
-  {#if r.role === 'administrator'}<span class="chip admin">Administrator</span>{/if}
-  {#if !r.enabled}<span class="chip muted">Disabled</span>{/if}
-  {#if !r.has_password}<span class="chip alarm">No password</span>{/if}
-  {#if r.connected}<span class="chip riding">Riding now</span>{/if}
+  {#if r.role === 'administrator'}<span class="chip admin">{t('administrator')}</span>{/if}
+  {#if !r.enabled}<span class="chip muted">{t('user_disabled_status')}</span>{/if}
+  {#if !r.has_password}<span class="chip alarm">{t('no_password')}</span>{/if}
+  {#if r.connected}<span class="chip riding">{t('riding_now')}</span>{/if}
 {/snippet}
 
 {#snippet menu()}
@@ -916,34 +996,42 @@
         detail={user.username}
       />
     </div>
-    <nav class="menu" aria-label="Main">
-      {@render link('/', 'Profile', !manage && title === 'Profile')}
+    <nav class="menu" aria-label={t('main')}>
       {@render link('/activities', 'Activities', title === 'Activities')}
+      {@render link('/profile', 'Profile', !manage && title === 'Profile')}
       {@render link('/climbs', 'Climbs', title === 'Climbs')}
       {@render link('/integrations', 'Integrations', path === '/integrations')}
       {@render link('/settings', 'Settings', path === '/settings')}
       {@render link('/apps', 'Apps', apps || installing || companion)}
       {#if administrator}
-        <p class="group">Manage</p>
-        {@render link('/manage', 'Users', manage && path !== '/manage/server' && path !== '/manage/companion')}
+        <p class="group">{t('manage')}</p>
+        {@render link('/manage', 'Users', manage && path !== '/manage/server' && !androidApps.includes(path))}
+        {@render link('/manage/android', t('android_apps'), androidApps.includes(path))}
         {@render link('/manage/server', 'Server', path === '/manage/server')}
-        {@render link('/manage/companion', 'Companion', path === '/manage/companion')}
       {/if}
     </nav>
-    <button class="sign-out" disabled={busy} onclick={() => run(signOut)}>Sign out</button>
+    <button class="sign-out" disabled={busy} onclick={() => run(signOut)}>{t('sign_out')}</button>
   {/if}
 {/snippet}
 
-<svelte:head><title>Zluggish - {title}</title></svelte:head>
+<svelte:head><title>{loading ? t('zluggish') : t('document_title', { value1: title })}</title></svelte:head>
 
-<div class="app">
+{#if loading && slowLoading && !$connection.unavailable}
+  <div class="slow-loading" role="status">
+    <p>{t('loading_taking_longer')}</p>
+    <button type="button" onclick={() => location.reload()}>{t('reload_this_page')}</button>
+  </div>
+{/if}
+<div class="app" class:initializing={loading && !$connection.unavailable}>
   <Layout
     {title}
-    heading={!user && title !== 'Profile' && title !== 'Activities'}
+    heading={!loading && !user && title !== 'Profile' && title !== 'Activities'}
     page={manage ? 'manage' : 'account'}
-    {back}
+    back={loading ? undefined : back}
+    crumb={loading ? undefined : crumb}
     onback={() => {
-      if (back) void navigate(back.href);
+      const to = back ?? crumb;
+      if (to) void navigate(to.href);
     }}
     {version}
     {zwiftVersion}
@@ -952,23 +1040,25 @@
       void navigate('/');
     }}
   >
-    {#if administrator && certificateMode === 'legacy' && path !== '/manage/server'}
-      <aside class="unsafe-banner" aria-label="Unsafe Zwift certificate">
+    {#if certificateMode === 'legacy'}
+      <aside class="unsafe-banner" aria-label={t('unsafe_zwift_certificate')}>
         <p>
-          <strong>Unsafe Zwift certificate.</strong> This server still uses the shared certificate, whose private key is
-          public. Riders' Zwift traffic, passwords included, can be read on your network.
+          <strong>{t('certificate_unsafe_notice')}</strong>
+          {t('certificate_shared_warning')}
         </p>
-        {@render link('/manage/server', 'Fix it on the Server page', false)}
+        {#if administrator && path !== '/manage/server'}
+          {@render link('/manage/server', 'Fix it on the Server page', false)}
+        {/if}
       </aside>
     {/if}
     {#if message && !changing}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>{message}</p>{/if}
 
-    {#if loading}<p role="status">Loading…</p>
+    {#if loading}<span class="loading-status" role="status">{t('loading')}</span>
     {:else if !user}
       {#if path === '/setup' && complete}
         <section class="panel narrow">
-          <p>Setup is complete. Sign in with your login name and password.</p>
-          <button class="primary" onclick={() => navigate('/sign-in')}>Go to sign-in</button>
+          <p>{t('setup_complete')}</p>
+          <button class="primary" onclick={() => navigate('/sign-in')}>{t('go_to_sign_in')}</button>
         </section>
       {:else}
         <form
@@ -979,47 +1069,45 @@
           }}
         >
           {#if !complete}
-            <p class="lead">
-              Create the first administrator for this server. Find the setup key in the server console.
-            </p>
+            <p class="lead">{t('setup_description')}</p>
             {#if keyAccepted}
               <div class="accepted" role="status">
-                <span><span class="tick" aria-hidden="true">✓</span> Setup key accepted</span>
+                <span><span class="tick" aria-hidden="true">✓</span> {t('setup_key_accepted')}</span>
               </div>
               {#if setupUsers.length}
                 <div
                   class="choice"
                   role="radiogroup"
-                  aria-label="Setup method"
+                  aria-label={t('setup_method')}
                   onchange={() => {
                     password = '';
                     confirmPassword = '';
                   }}
                 >
                   <label class:checked={mode === 'new'}
-                    ><input type="radio" bind:group={mode} value="new" /> Create a new user</label
+                    ><input type="radio" bind:group={mode} value="new" /> {t('create_a_new_user')}</label
                   >
                   <label class:checked={mode === 'existing'}
-                    ><input type="radio" bind:group={mode} value="existing" /> Use an existing user</label
+                    ><input type="radio" bind:group={mode} value="existing" /> {t('setup_existing_user_action')}</label
                   >
                 </div>
               {/if}
             {:else}
               <TextField
                 id="setup-key"
-                label="Setup key"
+                label={t('setup_key')}
                 bind:value={key}
                 required
                 maxlength={200}
                 autocomplete="off"
-                hint="Case, spaces and hyphens do not matter."
+                hint="Find it in the server console."
                 errors={errors('sign-in', 'key')}
               />
             {/if}
             {#if keyAccepted && mode === 'new'}
               <TextField
                 id="setup-first"
-                label="First name"
+                label={t('first_name')}
                 bind:value={first}
                 required
                 maxlength={50}
@@ -1027,7 +1115,7 @@
               />
               <TextField
                 id="setup-last"
-                label="Last name"
+                label={t('last_name')}
                 bind:value={last}
                 maxlength={50}
                 errors={errors('sign-in', 'last_name')}
@@ -1036,37 +1124,31 @@
           {/if}
           {#if !complete && keyAccepted && mode === 'existing'}
             <div class="setup-picker">
-              <label for="setup-user">User</label>
-              <p id="setup-user-hint" class="muted">
-                Choose a user already on this server to make them the first administrator.
-              </p>
+              <label for="setup-user">{t('user_to_make_administrator')}</label>
               <select
                 id="setup-user"
                 bind:value={setupUserId}
                 required
-                aria-describedby="setup-user-hint"
                 onchange={() => {
                   password = '';
                 }}
               >
-                <option value={null} disabled>Choose a user</option>
+                <option value={null} disabled>{t('user_select_placeholder')}</option>
                 {#each setupUsers as r (r.player_id)}
                   <option value={r.player_id} disabled={!r.enabled || !r.has_password}>
                     {`${r.first_name} ${r.last_name}`.trim() || r.username} (#{r.player_id}, {r.username}){!r.enabled
                       ? ' — Disabled'
                       : !r.has_password
-                        ? ' — No password'
+                        ? t('user_password_missing_suffix')
                         : ''}
                   </option>
                 {/each}
               </select>
               {#if setupUsers.some((r) => !r.has_password)}
-                <p class="muted">
-                  Users without passwords need a password set with the server CLI before they can be used for setup.
-                </p>
+                <p class="muted">{t('setup_password_required_hint')}</p>
               {/if}
               {#if !setupUsers.some((r) => r.enabled && r.has_password)}
-                <p class="muted">No users are available for setup. Create a new user to continue.</p>
+                <p class="muted">{t('setup_no_eligible_users')}</p>
               {/if}
             </div>
           {/if}
@@ -1074,7 +1156,7 @@
             {#if complete || mode === 'new'}
               <TextField
                 id="sign-in-login"
-                label="Login name"
+                label={t('login_name')}
                 bind:value={username}
                 autocomplete="username"
                 required
@@ -1095,7 +1177,7 @@
             {#if !complete && mode === 'new'}
               <TextField
                 id="setup-confirm"
-                label="Confirm password"
+                label={t('confirm_password')}
                 password
                 bind:value={confirmPassword}
                 autocomplete="new-password"
@@ -1107,14 +1189,18 @@
           <button
             class="primary"
             disabled={busy || (!complete && keyAccepted && mode === 'existing' && setupUserId === null)}
-            >{complete ? 'Sign in' : keyAccepted ? 'Complete setup' : 'Check key'}</button
+            >{complete ? t('sign_in') : keyAccepted ? t('complete_setup') : t('check_key')}</button
           >
         </form>
       {/if}
     {:else if manage && administrator}
       <div>
-        {#if path === '/manage/companion'}
+        {#if path === '/manage/android'}
+          <AndroidAppsManage {api} {navigate} />
+        {:else if path === '/manage/companion'}
           <CompanionManage {api} {navigate} csrf={() => csrf} />
+        {:else if path === '/manage/zwift-android'}
+          <ZwiftAndroidManage {api} {navigate} csrf={() => csrf} />
         {:else if path === '/manage/server'}
           <ServerCertificate
             {api}
@@ -1160,17 +1246,15 @@
           {/if}
 
           <section class="panel">
-            <h2>Backups</h2>
-            <p class="muted">
-              Backups are saved in storage/backups. The server keeps the 10 most recent nightly backups.
-            </p>
-            <button disabled={busy || backingUp} onclick={() => void createBackup()}>Create backup</button>
+            <h2>{t('backups')}</h2>
+            <p class="muted">{t('backup_retention_hint')}</p>
+            <button disabled={busy || backingUp} onclick={() => void createBackup()}>{t('create_backup')}</button>
             {#if backupMessage}<p role="status">{backupMessage}</p>{/if}
           </section>
 
           <div class="columns">
             <section class="panel">
-              <h2>Bots</h2>
+              <h2>{t('bots')}</h2>
               <div class="actions">
                 <button
                   disabled={busy}
@@ -1181,7 +1265,7 @@
                       'Bots restart with the current world settings.',
                       'Bots reloaded.',
                       false,
-                    )}>Reload bots</button
+                    )}>{t('reload_bots')}</button
                 >
               </div>
             </section>
@@ -1193,45 +1277,45 @@
                 void run(sendBots, 'bots');
               }}
             >
-              <h2>Bots</h2>
+              <h2>{t('bots')}</h2>
               {#if connected.length === 0}
-                <p class="muted">Bot commands act around a user who is riding now. Nobody is riding.</p>
+                <p class="muted">{t('bots_no_active_riders')}</p>
               {:else}
-                <label for="bot-user">User</label>
+                <label for="bot-user">{t('user')}</label>
                 <select id="bot-user" bind:value={botUser} required>
-                  <option value={null} disabled>Choose a user</option>
+                  <option value={null} disabled>{t('user_select_placeholder')}</option>
                   {#each connected as r (r.player_id)}<option value={r.player_id}>{name(r)}</option>{/each}
                 </select>
-                <label for="bot-command">Command</label>
+                <label for="bot-command">{t('command')}</label>
                 <select id="bot-command" bind:value={botCommand}>
                   {#each botCommands as [value, label] (value)}<option {value}>{label}</option>{/each}
                 </select>
                 {#if botCommand === 'peloton'}
                   <TextField
                     id="bot-argument"
-                    label="Peloton size"
+                    label={t('peloton_size')}
                     bind:value={botArgument}
                     maxlength={3}
                     hint="0 to 200 bots, or off. Leave empty to see the current size."
                     errors={errors('bots', 'argument')}
                   />
                 {/if}
-                <button disabled={busy}>Send to bots</button>
+                <button disabled={busy}>{t('send_to_bots')}</button>
               {/if}
             </form>
           </div>
 
           <section class="panel">
-            <h2>Server logs</h2>
+            <h2>{t('server_logs')}</h2>
             <ServerLogs load={() => api(serverLogsResponse, '/api/manage/server/logs')} />
           </section>
 
           <section class="panel">
-            <h2>World settings</h2>
+            <h2>{t('world_settings')}</h2>
             {#if worldSettings.length === 0}
-              <p class="muted">No world settings are stored yet. Users create them with blob and peloton commands.</p>
+              <p class="muted">{t('worlds_empty')}</p>
             {:else}
-              <div class="pills" role="group" aria-label="World settings">
+              <div class="pills" role="group" aria-label={t('world_settings')}>
                 {#each worldSettings as item (item.id)}<button
                     aria-pressed={worldSetting?.id === item.id}
                     onclick={() => {
@@ -1284,15 +1368,15 @@
                       </div>{/if}
                   {/each}
                 </div>
-                <button disabled={busy}>Save world settings</button>
+                <button disabled={busy}>{t('save_world_settings')}</button>
               </form>
             {/if}
           </section>
 
           <section class="panel">
-            <h2>Events</h2>
+            <h2>{t('events')}</h2>
             {#if events.length === 0}
-              <p class="muted">No private events. Users create them in the Companion app.</p>
+              <p class="muted">{t('events_empty')}</p>
             {:else}
               <ul class="plain">
                 {#each events as item (item.id)}<li>
@@ -1328,17 +1412,17 @@
                   }, 'event');
                 }}
               >
-                <TextField id="event-description" label="Description" bind:value={eventDescription} />
+                <TextField id="event-description" label={t('description')} bind:value={eventDescription} />
                 <TextField
                   id="event-start"
-                  label="Start time (UTC)"
+                  label={t('start_time_utc')}
                   bind:value={eventStart}
                   required
                   hint="For example 2026-11-20T18:00:00.000Z"
                   errors={errors('event', 'changes')}
                 />
                 <div class="actions">
-                  <button disabled={busy}>Save event</button>
+                  <button disabled={busy}>{t('save_event')}</button>
                   <button
                     type="button"
                     class="danger"
@@ -1360,7 +1444,7 @@
                           done('Event deleted.');
                         },
                       };
-                    }}>Delete event</button
+                    }}>{t('delete_event')}</button
                   >
                 </div>
               </form>
@@ -1369,11 +1453,11 @@
 
           {#if serverConfig}
             <section class="panel">
-              <h2>Configuration</h2>
+              <h2>{t('configuration')}</h2>
               <dl class="config">
                 {#each serverConfig.rows as [field, value] (field)}<div>
                     <dt>{field}</dt>
-                    <dd class="num" class:muted={!value}>{value || 'Not set'}</dd>
+                    <dd class="num" class:muted={!value}>{value || t('not_set')}</dd>
                   </div>{/each}
               </dl>
             </section>
@@ -1386,13 +1470,10 @@
               void run(create, 'create');
             }}
           >
-            <p class="muted lead">
-              The user signs in with this login name and password. New users have no administrator role.
-            </p>
             <div class="pair">
               <TextField
                 id="new-first"
-                label="First name"
+                label={t('first_name')}
                 bind:value={newFirst}
                 required
                 maxlength={50}
@@ -1400,7 +1481,7 @@
               />
               <TextField
                 id="new-last"
-                label="Last name"
+                label={t('last_name')}
                 bind:value={newLast}
                 maxlength={50}
                 errors={errors('create', 'last_name')}
@@ -1408,7 +1489,7 @@
             </div>
             <TextField
               id="new-login"
-              label="Login name"
+              label={t('login_name')}
               bind:value={newLogin}
               required
               maxlength={254}
@@ -1417,7 +1498,7 @@
             <div class="pair">
               <TextField
                 id="new-password"
-                label="Password"
+                label={t('password')}
                 password
                 bind:value={newPassword}
                 autocomplete="new-password"
@@ -1426,7 +1507,7 @@
               />
               <TextField
                 id="new-confirm"
-                label="Confirm password"
+                label={t('confirm_password')}
                 password
                 bind:value={newConfirm}
                 autocomplete="new-password"
@@ -1435,13 +1516,13 @@
               />
             </div>
             <div class="actions">
-              <button class="primary" disabled={busy}>Create user</button>
-              <button type="button" disabled={busy} onclick={() => navigate('/manage')}>Cancel</button>
+              <button class="primary" disabled={busy}>{t('create_user')}</button>
+              <button type="button" disabled={busy} onclick={() => navigate('/manage')}>{t('cancel')}</button>
             </div>
           </form>
         {:else if selectedId}
           {#if selected}
-            <section class="panel summary" aria-label="Account">
+            <section class="panel summary" aria-label={t('account')}>
               <Avatar
                 initials={initials(selected)}
                 photo={selected.avatar ? `/api/manage/users/${selected.player_id}/avatar?v=${selected.avatar}` : null}
@@ -1450,15 +1531,16 @@
                 <p class="login">{name(selected)}</p>
                 <p>{selected.username}</p>
                 <button type="button" disabled={busy} onclick={() => navigate(`/profile/${selected.player_id}`)}
-                  >Edit profile</button
+                  >{t('edit_profile')}</button
                 >
                 <p class="facts">
-                  <span class="chip muted num">Player ID {selected.player_id}</span>
+                  <span class="chip muted num">{t('player_id', { value1: selected.player_id })}</span>
                   {@render chips(selected)}
                 </p>
                 {#if selected.completion_deadline}
                   <p class="muted">
-                    The current ride can be saved until <span class="num">{time(selected.completion_deadline)}</span>.
+                    {t('user_ride_save_deadline')}
+                    <span class="num">{time(selected.completion_deadline)}</span>.
                   </p>
                 {/if}
               </div>
@@ -1466,30 +1548,30 @@
 
             {#if conflict}
               <div class="conflict" role="alert">
-                <p>This user changed on the server. Your draft is kept. Review the server version:</p>
+                <p>{t('user_conflict_notice')}</p>
                 <dl class="config">
                   <div>
-                    <dt>Name</dt>
+                    <dt>{t('name')}</dt>
                     <dd>{name(conflict)}</dd>
                   </div>
                   <div>
-                    <dt>Login name</dt>
+                    <dt>{t('login_name')}</dt>
                     <dd>{conflict.username}</dd>
                   </div>
                   <div>
-                    <dt>Role</dt>
-                    <dd>{conflict.role === 'administrator' ? 'Administrator' : 'User'}</dd>
+                    <dt>{t('role')}</dt>
+                    <dd>{conflict.role === 'administrator' ? t('administrator') : t('user')}</dd>
                   </div>
                   <div>
-                    <dt>Account</dt>
-                    <dd>{conflict.enabled ? 'Enabled' : 'Disabled'}</dd>
+                    <dt>{t('account')}</dt>
+                    <dd>{conflict.enabled ? t('user_enabled_status') : t('user_disabled_status')}</dd>
                   </div>
                 </dl>
                 <button
                   onclick={() => {
                     users = users.map((r) => (r.player_id === conflict!.player_id ? conflict! : r));
                     conflict = null;
-                  }}>Use the server version</button
+                  }}>{t('user_conflict_resolve_action')}</button
                 >
               </div>
             {/if}
@@ -1504,13 +1586,11 @@
                     ask('password');
                   }}
                 >
-                  <h2>{selected.has_password ? 'Password' : 'Set a password'}</h2>
-                  {#if !selected.has_password}<p class="muted">
-                      This user cannot sign in until a password is set.
-                    </p>{/if}
+                  <h2>{selected.has_password ? t('password') : t('set_a_password')}</h2>
+                  {#if !selected.has_password}<p class="muted">{t('password_required_hint')}</p>{/if}
                   <TextField
                     id="target-password"
-                    label="New password"
+                    label={t('new_password')}
                     password
                     bind:value={targetPassword}
                     autocomplete="new-password"
@@ -1519,68 +1599,70 @@
                   />
                   <TextField
                     id="target-confirm"
-                    label="Confirm password"
+                    label={t('confirm_password')}
                     password
                     bind:value={targetConfirm}
                     autocomplete="new-password"
                     required
                     errors={errors('password', 'confirm')}
                   />
-                  <button disabled={busy}>Set password</button>
+                  <button disabled={busy}>{t('set_password')}</button>
                 </form>
               {:else}
                 <section class="panel">
-                  <h2>Password</h2>
+                  <h2>{t('password')}</h2>
                   <p class="muted">
-                    Change your own password on {@render link('/', 'your profile', false)}.
+                    {t('password_own_account_hint')}
+                    {@render link('/profile', 'your profile', false)}.
                   </p>
                 </section>
               {/if}
 
               <section class="panel">
-                <h2>Access</h2>
+                <h2>{t('access')}</h2>
                 <ul class="plain access">
                   <li>
                     <div>
-                      <h3>Sign-in</h3>
+                      <h3>{t('sign_in_title')}</h3>
                       <p class="muted">
-                        {selected.enabled ? 'This user can sign in.' : 'Disabled. This user cannot sign in.'}
+                        {selected.enabled ? t('user_enabled_status') : t('user_disabled_status')}
                       </p>
                     </div>
                     {#if selected.enabled}<button class="danger" disabled={busy} onclick={() => ask('disable')}
-                        >Disable</button
-                      >{:else}<button disabled={busy} onclick={() => ask('enable')}>Enable</button>{/if}
+                        >{t('user_disable_action')}</button
+                      >{:else}<button disabled={busy} onclick={() => ask('enable')}>{t('user_enable_action')}</button
+                      >{/if}
                   </li>
                   <li>
                     <div>
-                      <h3>Role</h3>
+                      <h3>{t('role')}</h3>
                       <p class="muted">
-                        {selected.role === 'administrator'
-                          ? 'Administrator. Can manage users and the server.'
-                          : 'User. Rides and manages their own account.'}
+                        {selected.role === 'administrator' ? t('administrator') : t('user')}
                       </p>
                     </div>
                     <button class:danger={selected.role === 'administrator'} disabled={busy} onclick={() => ask('role')}
-                      >{selected.role === 'administrator' ? 'Remove administrator' : 'Make administrator'}</button
+                      >{selected.role === 'administrator' ? t('remove_administrator') : t('make_administrator')}</button
                     >
                   </li>
                   <li>
                     <div>
-                      <h3>Sessions</h3>
-                      <p class="muted">Signs the user out everywhere, also in the game.</p>
+                      <h3>{t('sessions')}</h3>
+                      <p class="muted">{t('sign_out_scope_hint')}</p>
                     </div>
-                    <button class="danger" disabled={busy} onclick={() => ask('revoke-sessions')}>End sessions</button>
+                    <button class="danger" disabled={busy} onclick={() => ask('revoke-sessions')}
+                      >{t('sign_out_action')}</button
+                    >
                   </li>
                 </ul>
               </section>
             </div>
           {:else if !busy}
-            <p class="empty">This user does not exist. {@render link('/manage', 'Show all users', false)}</p>
+            <p class="empty">{t('user_not_found')} {@render link('/manage', 'Show all users', false)}</p>
           {/if}
         {:else}
           <div class="users-head">
             <div class="search">
-              <label for="user-search">Search users</label>
+              <label for="user-search">{t('search_users')}</label>
               <input
                 id="user-search"
                 type="search"
@@ -1588,16 +1670,18 @@
                 oninput={() => {
                   page = 0;
                 }}
-                placeholder="Name, login name or player ID"
+                placeholder={t('users_search_placeholder')}
               />
             </div>
-            <button class="primary" disabled={busy} onclick={() => navigate('/manage/users/new')}>Create user</button>
+            <button class="primary" disabled={busy} onclick={() => navigate('/manage/users/new')}
+              >{t('create_user')}</button
+            >
           </div>
           {#if users.length <= 1}
-            <p class="empty">No other users yet. Create a user so that somebody else can ride on this server.</p>
+            <p class="empty">{t('users_empty')}</p>
           {/if}
           {#if filtered.length === 0 && users.length > 1}
-            <p class="empty">No users match. Clear the search.</p>
+            <p class="empty">{t('users_no_search_results')}</p>
           {/if}
           <ul class="plain list">
             {#each filtered.slice(page * pageSize, page * pageSize + pageSize) as r (r.player_id)}<li>
@@ -1626,9 +1710,9 @@
           </ul>
           {#if pages > 1}
             <div class="pager">
-              <button disabled={page === 0} onclick={() => page--}>Previous</button>
-              <span class="num muted">Page {page + 1} of {pages}</span>
-              <button disabled={page + 1 >= pages} onclick={() => page++}>Next</button>
+              <button disabled={page === 0} onclick={() => page--}>{t('previous')}</button>
+              <span class="num muted">{t('page_of', { value1: page + 1, value2: pages })}</span>
+              <button disabled={page + 1 >= pages} onclick={() => page++}>{t('next')}</button>
             </div>
           {/if}
         {/if}
@@ -1643,38 +1727,41 @@
               user = (await api(signedInResponse, '/api/me')).user;
             }}
           />{/key}
-      {:else if path === '/activities' || path.startsWith('/activities/')}
+      {:else if path === '/' || path === '/activities' || path.startsWith('/activities/')}
         <Activities {path} {api} {go} />
       {:else if path === '/climbs'}
         <Climbs {api} />
       {:else if apps}
         <Apps {api} {navigate} {administrator} />
       {:else if installingPhone}
-        <InstallPhone {api} {path} {navigate} />
+        <InstallPhone {api} {path} {navigate} {administrator} />
       {:else if installing}
-        <Install {api} {path} {navigate} />
+        <Install
+          {api}
+          {path}
+          {navigate}
+          confirm={(confirmation) => {
+            pending = confirmation;
+          }}
+        />
       {:else if companion}
         <Companion {api} {path} {navigate} {administrator} />
       {:else if path === '/settings'}
         {#if settings}
           <section class="panel narrow ghosts" aria-labelledby="ghosts-title">
-            <h2 id="ghosts-title">Ghosts</h2>
+            <h2 id="ghosts-title">{t('ghosts')}</h2>
             <label class="check"
-              ><input type="checkbox" bind:checked={ghosts} disabled={busy} onchange={saveGhosts} /> Ride with ghosts</label
+              ><input type="checkbox" bind:checked={ghosts} disabled={busy} onchange={saveGhosts} />
+              {t('ride_with_ghosts')}</label
             >
             <p class="muted">
-              Every ride you finish is kept as a ghost of that route. The next time you ride the same route, your
-              earlier efforts appear on the road beside you, so you can race your past self. Type <kbd>.regroup</kbd> in
-              chat to bring them back to you.
+              {t('ghosts_description_prefix')} <kbd>{t('regroup')}</kbd>
+              {t('ghosts_regroup_hint_suffix')}
             </p>
           </section>
           <section class="panel narrow curves" aria-labelledby="curves-title">
-            <h2 id="curves-title">Power curves</h2>
-            <p class="muted">
-              Zwift shows your best power for every duration, from short sprints to long climbs, worked out from the
-              activities saved on this server. If those numbers look wrong, for example after importing old activities,
-              regenerate them.
-            </p>
+            <h2 id="curves-title">{t('power_curves')}</h2>
+            <p class="muted">{t('power_curves_rebuild_hint')}</p>
             <button
               type="button"
               bind:this={regenerateButton}
@@ -1682,13 +1769,21 @@
               onclick={() => {
                 rebuild = true;
                 regenerating = true;
-              }}>Regenerate power curves</button
+              }}>{t('regenerate_power_curves')}</button
             >
           </section>
         {/if}
       {:else if path === '/integrations'}
         {#if settings}
-          <Connections {api} bind:stravaMethod bind:bridgeFolder saved={preferences(settings)} save={saveSettings} />
+          <Connections
+            {api}
+            bind:stravaMethod
+            bind:garminDevice
+            bind:intervalsUpload
+            bind:bridgeFolder
+            saved={preferences(settings)}
+            save={saveSettings}
+          />
         {/if}
       {:else}
         <form
@@ -1731,10 +1826,11 @@
               ><Avatar
                 initials={initials(profileUser ?? user)}
                 photo={profileAvatar ? `${profileBase}/avatar?v=${profileAvatar}` : null}
-              /><span class="change" aria-hidden="true">{profileAvatar ? 'Change' : 'Choose'}</span></button
+              /><span class="change" aria-hidden="true">{profileAvatar ? t('change') : t('choose')}</span></button
             >
             <div>
-              <button type="button" disabled={busy} onclick={() => avatarInput?.click()}>Choose an avatar</button
+              <button type="button" disabled={busy} onclick={() => avatarInput?.click()}
+                >{t('avatar_select_action')}</button
               >{#if profileAvatar}<button
                   type="button"
                   class="danger"
@@ -1744,7 +1840,7 @@
                       profileAvatar = (await api(avatarResponse, `${profileBase}/avatar`, 'DELETE')).avatar;
                       if (!profileId) avatar = profileAvatar;
                       done('Restart Zwift for the changes to take effect.');
-                    })}>Remove</button
+                    })}>{t('remove')}</button
                 >{/if}
             </div>
             <input
@@ -1761,7 +1857,7 @@
           <div class="grid">
             <TextField
               id="profile-first"
-              label="First name"
+              label={t('first_name')}
               bind:value={first}
               autocomplete="given-name"
               required
@@ -1770,7 +1866,7 @@
             />
             <TextField
               id="profile-last"
-              label="Last name"
+              label={t('last_name')}
               bind:value={last}
               autocomplete="family-name"
               maxlength={50}
@@ -1779,7 +1875,7 @@
           </div>
           <TextField
             id="profile-email"
-            label="Email"
+            label={t('email')}
             bind:value={username}
             autocomplete="email"
             required
@@ -1789,24 +1885,24 @@
           />
           <TextField
             id="profile-birthday"
-            label="Birthday"
+            label={t('birthday')}
             type="date"
             bind:value={birthday}
             errors={errors('profile', 'birthday')}
           />
           <div class="actions">
-            <button class="primary" disabled={busy}>Save profile</button>
+            <button class="primary" disabled={busy}>{t('save_profile')}</button>
             {#if !profileId}<button type="button" bind:this={changeButton} disabled={busy} onclick={openPassword}
-                >Change password</button
+                >{t('change_password')}</button
               >{/if}
             {#if profileId}<button type="button" onclick={() => navigate(`/manage/users/${profileId}`)}
-                >Back to user settings</button
+                >{t('back_to_user_settings')}</button
               >{/if}
           </div>
         </form>
         {#if !profileId}
           <div class="actions">
-            <button type="button" onclick={() => navigate('/profile-data')}>Import / Export</button>
+            <button type="button" onclick={() => navigate('/profile-data')}>{t('import_export')}</button>
           </div>
         {/if}
       {/if}
@@ -1824,8 +1920,8 @@
       aria-describedby="password-detail"
       use:focusFirst
     >
-      <h2 id="password-title">Change password</h2>
-      <p id="password-detail" class="muted">You will be signed out everywhere, including in Zwift.</p>
+      <h2 id="password-title">{t('change_password')}</h2>
+      <p id="password-detail" class="muted">{t('password_sign_out_warning')}</p>
       <form
         onsubmit={(e) => {
           e.preventDefault();
@@ -1836,7 +1932,7 @@
         {#if !administrator}
           <TextField
             id="own-current"
-            label="Current password"
+            label={t('current_password')}
             password
             bind:value={currentPassword}
             autocomplete="current-password"
@@ -1846,7 +1942,7 @@
         {/if}
         <TextField
           id="own-new"
-          label="New password"
+          label={t('new_password')}
           password
           bind:value={password}
           autocomplete="new-password"
@@ -1855,7 +1951,7 @@
         />
         <TextField
           id="own-confirm"
-          label="Confirm new password"
+          label={t('confirm_new_password')}
           password
           bind:value={confirmPassword}
           autocomplete="new-password"
@@ -1863,8 +1959,8 @@
           errors={errors('password', 'confirm')}
         />
         <div class="actions">
-          <button type="button" disabled={busy} onclick={closePassword}>Cancel</button>
-          <button class="primary" disabled={busy}>Change password</button>
+          <button type="button" disabled={busy} onclick={closePassword}>{t('cancel')}</button>
+          <button class="primary" disabled={busy}>{t('change_password')}</button>
         </div>
       </form>
     </div>
@@ -1880,21 +1976,20 @@
       aria-labelledby="curves-dialog-title"
       aria-describedby="curves-dialog-detail"
     >
-      <h2 id="curves-dialog-title">Regenerate power curves?</h2>
+      <h2 id="curves-dialog-title">{t('power_curves_rebuild_confirm')}</h2>
       <p id="curves-dialog-detail">
         {#if rebuild}
-          Your current power curves are deleted and rebuilt from your saved activities. Rebuilding takes some time: the
-          curves fill in gradually as each activity is processed.
+          {t('power_curves_rebuild_description')}
         {:else}
-          Your current power curves are deleted and stay empty until your next ride.
+          {t('power_curves_delete_warning')}
         {/if}
       </p>
-      <label class="check"><input type="checkbox" bind:checked={rebuild} /> Rebuild from my saved activities</label>
+      <label class="check"><input type="checkbox" bind:checked={rebuild} /> {t('power_curves_rebuild_source')}</label>
       <div class="actions">
         <!-- svelte-ignore a11y_autofocus (the safe choice takes focus when the dialog opens) -->
-        <button autofocus disabled={busy} onclick={closeRegenerate}>Cancel</button>
+        <button autofocus disabled={busy} onclick={closeRegenerate}>{t('cancel')}</button>
         <button class="danger" disabled={busy} onclick={() => run(regenerate)}
-          >{rebuild ? 'Regenerate power curves' : 'Delete power curves'}</button
+          >{rebuild ? t('regenerate_power_curves') : t('delete_power_curves')}</button
         >
       </div>
     </div>
@@ -1914,7 +2009,7 @@
       <p id="dialog-detail">{pending.detail}</p>
       <div class="actions">
         <!-- svelte-ignore a11y_autofocus (the safe choice takes focus when the dialog opens) -->
-        <button autofocus disabled={busy} onclick={() => (pending = null)}>Cancel</button>
+        <button autofocus disabled={busy} onclick={() => (pending = null)}>{t('cancel')}</button>
         <button
           class={pending.destructive ? 'danger' : 'primary'}
           disabled={busy}
@@ -1930,6 +2025,26 @@
 {/if}
 
 <style>
+  .initializing {
+    visibility: hidden;
+  }
+  .slow-loading {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .loading-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
   .me {
     display: flex;
     align-items: center;
@@ -1979,7 +2094,6 @@
     color: var(--muted);
   }
 
-  /* The administrator's reminder on every page until the shared certificate is gone. */
   .unsafe-banner {
     display: flex;
     flex-wrap: wrap;

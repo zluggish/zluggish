@@ -17,6 +17,6 @@ To remove the server certificate too:
 - On macOS, open Keychain Access. In the **System** keychain, delete **\*.zwift.com** with **Zluggish** in its organizational unit. In `~/Library/Application Support/Zwift/data/cacert.pem`, delete the certificate you appended.
 - On Linux, delete `zluggish-zwift-*.crt` from the trust store directory, such as `/usr/local/share/ca-certificates`, and run `update-ca-certificates` or `update-ca-trust`. In `data/cacert.pem` of Zwift, delete the lines from `# BEGIN Zluggish` to `# END Zluggish`.
 
-On Android, turn off Virtual Hosts, or remove the DNS setting from the Wi-Fi connection.
+On Android, undo the DNS redirect you set up. This may mean turning off Virtual Hosts, restoring your Wi-Fi DNS settings, removing a router override or disconnecting the Cloudflare One Client.
 
 To remove the server, stop the container with `docker compose down` in the directory with `docker-compose.yml`. The `storage` directory stays. Delete it only if you do not need your data.

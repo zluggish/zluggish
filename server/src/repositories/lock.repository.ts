@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { ConfigError } from '#src/config/index';
 import { constants, flockSync, lockFileExSync, unlockFileExSync } from 'fs-ext-extra-prebuilt';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
@@ -27,7 +28,7 @@ export class LockRepository {
         }
       } catch {
         closeSync(descriptor);
-        throw new ConfigError('Storage is busy or cannot be locked; stop the server before changing it');
+        throw new ConfigError(t('lock_storage_lock_failed'));
       }
 
       let closed = false;

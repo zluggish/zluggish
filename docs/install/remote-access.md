@@ -1,110 +1,56 @@
 ---
 sidebar_position: 7
-description: Reach the Zluggish web app and game server from outside your home network with Cloudflare Tunnel and Cloudflare One.
+description: Reach the Zluggish web app and game server remotely through Cloudflare.
 ---
 
 # Remote access
 
-Zluggish is made for a local network. This page shows two ways to reach it from another place with [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/). You do not have to open ports on your router.
+By default, Zluggish listens to `127.0.0.1` which means it only accepts request from the local machine. This is fine if you are running Zwift on the same machine, but you will get an insecure http connection warning when browsing to the webapp.
 
-| Goal                      | Traffic            | What you need                                                                  |
-| ------------------------- | ------------------ | ------------------------------------------------------------------------------ |
-| [Web app](#web-app)       | HTTP only          | `cloudflared` on the server and a public name                                  |
-| [Zwift game](#zwift-game) | HTTPS, TCP and UDP | `cloudflared` on the server and the Cloudflare One Client on each Zwift device |
+You can set up remote access to Zluggish in several ways, including a simple reverse proxy (only secure if restricted to your local network), Wireguard Tailscale or Cloudflare Tunnel. This guide will show how to set up Cloudflare.
 
-Both procedures need a Cloudflare account. The web app procedure also needs a domain that uses Cloudflare DNS.
+With this setup, you will get a TLS certificate for the webapp and you and your friends can run the Zwift app from any location.
+
+| Access                    | What to set up                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [Web app](#web-app)       | Publish an HTTPS hostname with Cloudflare Access. The tunnel forwards requests to the Zluggish HTTP listener.                      |
+| [Zwift game](#zwift-game) | Route the server's private IP over the tunnel. Install the Cloudflare One Client on each Zwift device for game HTTPS, TCP and UDP. |
+
+Both need a Cloudflare account and a [tunnel with `cloudflared`](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) running where it can reach Zluggish. You can use the same tunnel for both.
 
 ## Web app
 
-The web app uses only HTTP on port 8080. A public hostname in Cloudflare Tunnel is sufficient.
+1. Choose a hostname on a domain you manage in Cloudflare, such as `zluggish.example.com`.
+2. [Create a self-hosted Access app](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) for that hostname. Add an Allow policy for the people who need access.
+3. Add a **Published application** route to your tunnel. Use service URL `http://localhost:8080` if `cloudflared` runs on the server, or `http://<server-ip>:8080` if it runs elsewhere. Enable **Protect with Access**.
+4. In `zluggish.config.ts`, set `network.web.publicUrl` to the full HTTPS origin, such as `https://zluggish.example.com`.
+5. Restart Zluggish, then open the HTTPS address and sign in.
 
-1. In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Zero Trust** > **Networks** > **Connectors** > **Cloudflare Tunnels**.
-2. Select **Create a tunnel**, then **Cloudflared**. Give the tunnel a name, for example `zluggish`.
-3. Install `cloudflared` on the Zluggish server with the command that the dashboard shows. The tunnel then shows as **Healthy**.
-4. Add a public hostname, for example `zluggish.example.com`:
-   - **Service type**: `HTTP`
-   - **URL**: `localhost:8080`, or `<server-ip>:8080` if `cloudflared` runs on a different computer.
-5. In `zluggish.config.ts`, set `network.web.publicUrl` to the public address:
-
-   ```ts
-   network: {
-     web: {
-       publicUrl: 'https://zluggish.example.com',
-     },
-   },
-   ```
-
-6. Start the server again.
-7. Open `https://zluggish.example.com`.
-
-Cloudflare gives the HTTPS certificate. With an `https` address, the sign-in cookies get the `Secure` flag. See [Use a reverse proxy](../usage/web-app.md#use-a-reverse-proxy).
-
-:::warning
-
-The public hostname makes the web app available to all of the internet. Add a [Cloudflare Access application](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/) for the hostname, so that only the people that you select can open the page.
-
-:::
+Cloudflare provides HTTPS to the browser. Zluggish uses the configured origin to validate changes and mark session cookies secure.
 
 ## Zwift game
 
-The game does not use only HTTP. It uses these ports on the Zluggish server:
+Zwift connects using the original Zwift hostnames and needs TCP port 3025 and UDP port 3024 for riding, in addition to HTTPS 443 and HTTP 80. Use a private route for these [game ports](../reference/ports.md).
 
-| Port | Protocol | Use                              |
-| ---- | -------- | -------------------------------- |
-| 443  | HTTPS    | Launcher, game app and Zwift API |
-| 80   | HTTP     | Zwift CDN                        |
-| 3025 | TCP      | Game connection                  |
-| 3024 | UDP      | Ride data                        |
+1. Add a **CIDR** route to the tunnel for the server's private IP, for example `192.168.1.10/32`.
+2. In the Cloudflare One device profile, [configure Split Tunnels](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/route-traffic/split-tunnels/) so the server IP goes through the tunnel. In **Include** mode, add the route. In **Exclude** mode, adjust any excluded range that contains the server IP.
+3. Enable [TCP and UDP proxying](https://developers.cloudflare.com/cloudflare-one/traffic-controls/proxy/).
+4. Set `server.advertisedIp` to that private IP in `zluggish.config.ts` and restart Zluggish.
+5. [Enroll the Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/warp/) on each Zwift device. Connect it in **Traffic and DNS** mode.
+6. Follow the setup guide for [Windows](clients/windows.md), [macOS](clients/macos.md), [Linux](clients/linux.md) or [Android](clients/android.md) to install the certificate or patched app. Use the private IP in the desktop hosts file or set a Gateway DNS override below.
 
-The game also connects to the `zwift.com` names, not to a hostname that you select. A public hostname cannot carry this traffic. Instead, the tunnel routes your private network, and each Zwift device connects to it with the [Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/warp/) (previously WARP). The Zwift device then reaches the server at its private IP address, as on the local network.
+If port 8080 is reachable over the private route and the web listener is enabled, open `http://<server-ip>:8080/health` on the Zwift device to check the route. Use different IP ranges at home and at the remote location to avoid routing conflicts.
 
-### Route the private network
+### Redirect the Zwift names with Gateway DNS
 
-1. Make the tunnel as in steps 1 to 3 of [Web app](#web-app). You can use the same tunnel for the two procedures.
-2. Open the tunnel and go to **CIDR routes**. Add the IP address of the Zluggish server, for example `192.168.1.10/32`. You can also add the full local network, for example `192.168.1.0/24`.
-3. Go to **Zero Trust** > **Settings** > **WARP Client**. Open the device profile and go to **Split Tunnels**.
-   - In **Exclude** mode (the default), remove the range that has your server address, for example `192.168.0.0/16`.
-   - In **Include** mode, add the server address.
-4. Go to **Zero Trust** > **Settings** > **Network**. Turn on **Proxy** and select **TCP** and **UDP**. The game needs UDP for ride data.
+Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traffic-controls/dns-policies/#override) to resolve the Zwift hostnames to the private IP.
 
-:::note
+1. Use the **Host** selector and **in** operator to match the hostnames for your app.
+   - For the game, match `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
+   - For Companion alone, match `secure.zwift.com` and `us-or-rly101.zwift.com`.
 
-The private range must not be the same on the Zwift device and at home. If the two networks both use `192.168.1.0/24`, the device sends the traffic to its own network. Change the home range, for example to `10.42.0.0/24`.
+2. Set the action to **Override** and enter the server's private IP in **Override Hostname**.
+3. Scope the policy to your riders, for example with **User Email**. It redirects official Zwift traffic for devices that match it.
+4. If you use a desktop setup script, turn off **Patch hosts file** in **Advanced settings** and remove any old Zluggish entries from the hosts file.
 
-:::
-
-### Set up Zluggish
-
-1. In `zluggish.config.ts`, set `server.advertisedIp` to the private IP address of the server, for example `192.168.1.10`. The game sends UDP and TCP traffic to this address.
-2. Start the server again.
-
-### Set up the Zwift device
-
-1. Install the Cloudflare One Client and sign in to your Zero Trust organization.
-2. Connect the client.
-3. Set up the client as in [Windows](clients/windows.md), [macOS](clients/macos.md) or [Android](clients/android.md). Install the certificate and use the private IP address of the server as `<server-ip>` in the hosts file.
-4. Start Zwift.
-
-To make sure that the tunnel works, open `http://<server-ip>:8080` on the Zwift device while the client is connected.
-
-### Optional: Redirect with Gateway DNS instead of the hosts file
-
-When the Cloudflare One Client is connected, it sends DNS queries to Cloudflare Gateway. A Gateway DNS policy can send the Zwift names to your server. Then you do not have to change the hosts file on each device. This is useful on Android, where you cannot change the hosts file without root.
-
-1. Go to **Zero Trust** > **Traffic policies** > **Firewall policies** > **DNS**.
-2. Add a policy:
-   - **Name**: `Zluggish`
-   - **Selector**: `Host`, **Operator**: `in`, **Value**: `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`
-   - **Action**: `Override`, **Override hostname**: the private IP address of the server, for example `192.168.1.10`
-3. Save the policy.
-4. Remove the Zluggish line from the hosts file on the Zwift devices, if it is there.
-
-To apply the policy only to some users, add an identity condition, for example `User Email` `in` the addresses of your riders.
-
-You must still install the certificate on each device. The DNS policy changes only the address.
-
-:::warning
-
-The policy applies to all devices in your organization. While the client is connected, these devices cannot reach the official Zwift servers. For Companion, leave out `cdn.zwift.com`, as in [Zwift Companion app](companion-app.md).
-
-:::
+On Android, turn off Virtual Hosts before connecting Cloudflare One Client. If Android **Private DNS** bypasses Gateway, turn it off. Companion uses the public CDN for images, so leave `cdn.zwift.com` out of Companion-only policies.

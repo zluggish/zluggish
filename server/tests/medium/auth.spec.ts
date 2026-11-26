@@ -1,3 +1,5 @@
+import { ACCESS_SECONDS, REFRESH_SECONDS } from '#src/services/browser-session.service';
+import { createHmac } from 'node:crypto';
 import { ManagementService } from '#src/services/management.service';
 import { decodeOwned } from '#src/schema';
 import { Schema } from 'effect';
@@ -193,4 +195,199 @@ await test('failed account creation rolls back rows and folders and leaves the s
   assert.equal(created.last_name, 'Rider');
   assert.equal(created.role, 'rider');
   assert.equal(existsSync(resolve(f.accounts.storage, String(nextId))), true);
+});
+
+await test('launcher handoff exchanges its refresh credential for API access', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  const launch = await browser.request('/ride');
+  assert.equal(launch.status, 302);
+  const location = launch.headers.get('Location');
+  assert.ok(location);
+  assert.ok(location.startsWith('http://zwift/?code=zwift_refresh_token'));
+  const code = new URL(location).searchParams.get('code');
+  assert.ok(code);
+  const response = await f.app.request(tokenPath, { method: 'POST', body: new URLSearchParams({ code }) });
+  assert.equal(response.status, 200);
+  const tokens = Schema.decodeUnknownSync(tokenSchema)(await response.json());
+  const profile = await f.app.request('/api/profiles/me', {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+  assert.equal(profile.status, 200);
+});
+
+await test('game token lifetimes and purposes survive the Zwift template and nosecret wrapper', async (t) => {
+  const f = await mediumFixture(t);
+  let now = Math.floor(Date.now() / 1000) * 1000;
+  t.mock.method(Date, 'now', () => now);
+  const issued = now;
+  const tokens = f.sessions.tokens(f.rider, f.tokens);
+  const payloadSchema = Schema.StructWithRest(identityClaims(), [Schema.Record(Schema.String, Schema.Json)]);
+  const decode = (token: string) =>
+    Schema.decodeUnknownSync(payloadSchema)(JSON.parse(Buffer.from(token.split('.', 2)[1]!, 'base64url').toString()));
+  const wrap = (payload: ReturnType<typeof decode>) => {
+    const header = tokens.access_token.split('.', 1)[0]!;
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const data = `${header}.${body}`;
+
+    return `${data}.${createHmac('sha256', 'nosecret').update(data).digest('base64url')}`;
+  };
+  const profile = async (token: string, status: number) => {
+    const response = await f.app.request('/api/profiles/me', { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(response.status, status);
+  };
+  const exchange = async (token: string, status: number) => {
+    for (const fields of [{ refresh_token: token }, { code: `zwift_refresh_token${token}` }]) {
+      const response = await f.app.request(tokenPath, { method: 'POST', body: new URLSearchParams(fields) });
+      assert.equal(response.status, status);
+      if (status !== 200) {
+        continue;
+      }
+      const renewed = Schema.decodeUnknownSync(tokenSchema)(await response.json());
+      assert.equal(f.sessions.bearer(renewed.access_token)?.player_id, f.rider.player_id);
+    }
+  };
+
+  assert.equal(tokens.expires_in, ACCESS_SECONDS);
+  assert.equal(tokens.refresh_expires_in, REFRESH_SECONDS);
+  for (const [token, template, purpose, seconds] of [
+    [tokens.access_token, f.tokens.access, 'Bearer', ACCESS_SECONDS],
+    [tokens.refresh_token, f.tokens.refresh, 'Refresh', REFRESH_SECONDS],
+  ] as const) {
+    const body = decode(token);
+    const original = JSON.parse(Buffer.from(template.split('.', 2)[1]!, 'base64url').toString());
+    assert.equal(body.typ, purpose);
+    assert.equal(body.iat, issued / 1000);
+    assert.equal(body.exp, issued / 1000 + seconds);
+    for (const key of ['iss', 'aud', 'azp', 'sub', 'realm_access', 'resource_access']) {
+      assert.deepEqual(body[key], original[key]);
+    }
+  }
+  assert.equal(tokens.id_token, f.tokens.id);
+  await profile(tokens.access_token, 200);
+  await profile(tokens.refresh_token, 401);
+  await exchange(tokens.access_token, 401);
+  await exchange(tokens.refresh_token, 200);
+
+  const access = decode(tokens.access_token);
+  const refresh = decode(tokens.refresh_token);
+  for (const body of [
+    { ...access, exp: 1 },
+    { ...access, exp: access.exp + REFRESH_SECONDS },
+    { ...access, iat: access.iat - 1 },
+    { ...refresh, typ: 'Bearer' },
+    {
+      ...access,
+      session_cookie: f.sessions.accounts.repositories.cryptoRepository.signIdentity(
+        f.accounts.identityOf(f.rider),
+        f.sessions.secret,
+      ),
+    },
+  ]) {
+    await profile(wrap(body), 401);
+  }
+  await exchange(wrap({ ...access, typ: 'Refresh' }), 401);
+  await exchange(wrap({ ...refresh, exp: refresh.exp + REFRESH_SECONDS }), 401);
+
+  now = issued + ACCESS_SECONDS * 1000 - 1;
+  await profile(tokens.access_token, 200);
+  now++;
+  await profile(tokens.access_token, 401);
+  // Editing the public wrapper cannot extend the authenticated deadline.
+  await profile(wrap({ ...access, exp: access.exp + REFRESH_SECONDS }), 401);
+  await exchange(tokens.refresh_token, 200);
+  now = issued + REFRESH_SECONDS * 1000 - 1;
+  await exchange(tokens.refresh_token, 200);
+  now++;
+  await exchange(tokens.refresh_token, 401);
+  await exchange(wrap({ ...refresh, exp: refresh.exp + REFRESH_SECONDS }), 401);
+});
+
+function identityClaims() {
+  return Schema.Struct({ session_cookie: Schema.String, exp: Schema.Number, iat: Schema.Number, typ: Schema.String });
+}
+
+await test('game password routes share throttling while refresh and remembered login still work', async (t) => {
+  const f = await mediumFixture(t);
+  const browser = await mediumBrowser(f);
+  const tokens = f.sessions.tokens(f.rider, f.tokens);
+  const verify = t.mock.method(f.accounts, 'verify', () => Promise.resolve(false));
+
+  for (let i = 0; i < 9; i++) {
+    const response = await f.app.request(tokenPath, {
+      method: 'POST',
+      body: new URLSearchParams({ username: f.rider.username.toUpperCase(), password: 'wrong' }),
+    });
+    assert.equal(response.status, 401);
+  }
+  const blocked = await browser.form('/login/', {
+    player_id: String(f.rider.player_id),
+    step: 'password',
+    password: 'test-password',
+  });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('Retry-After'), '60');
+  assert.equal(verify.mock.callCount(), 9);
+  const blockedToken = await f.app.request(tokenPath, {
+    method: 'POST',
+    body: new URLSearchParams({ username: f.rider.username, password: 'test-password' }),
+  });
+  assert.equal(blockedToken.status, 429);
+  assert.equal(blockedToken.headers.get('Retry-After'), '60');
+  const refresh = await f.app.request(tokenPath, {
+    method: 'POST',
+    body: new URLSearchParams({ refresh_token: tokens.refresh_token }),
+  });
+  assert.equal(refresh.status, 200);
+  const opened = f.sessions.open();
+  const remembered = await f.app.request('/login/', {
+    method: 'POST',
+    headers: {
+      Cookie: `zluggish_session=${opened.id}; zluggish_remember_${f.rider.player_id}=${f.sessions.remember(f.rider)}`,
+    },
+    body: new URLSearchParams({ csrf_token: opened.session.csrf, player_id: String(f.rider.player_id) }),
+  });
+  assert.equal(remembered.status, 302);
+  assert.equal(verify.mock.callCount(), 9);
+});
+
+await test('overlapping password requests reject before hashing and release slots after errors', async (t) => {
+  const f = await mediumFixture(t);
+  const pending = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const verify = t.mock.method(f.accounts, 'verify', async () => {
+    started.resolve();
+    await pending.promise;
+    throw new Error('hash failure');
+  });
+  const request = () =>
+    f.app.request(tokenPath, {
+      method: 'POST',
+      body: new URLSearchParams({ username: f.rider.username, password: 'wrong' }),
+    });
+  const first = request();
+  await started.promise;
+  const blocked = await request();
+  assert.equal(blocked.status, 429);
+  assert.equal(verify.mock.callCount(), 1);
+  pending.resolve();
+  const failed = await first;
+  assert.equal(failed.status, 500);
+  verify.mock.mockImplementation(() => Promise.resolve(false));
+  const retried = await request();
+  assert.equal(retried.status, 401);
+});
+
+await test('unknown usernames and forged forwarding headers cannot bypass peer limits', async (t) => {
+  const f = await mediumFixture(t);
+  const verify = t.mock.method(f.accounts, 'verify', () => Promise.resolve(true));
+  for (let i = 0; i < 31; i++) {
+    const response = await f.app.request(tokenPath, {
+      method: 'POST',
+      headers: { 'X-Forwarded-For': `192.0.2.${i}`, 'X-Real-IP': `192.0.2.${i}` },
+      body: new URLSearchParams({ username: `unknown-${i}`, password: 'wrong' }),
+    });
+    assert.equal(response.status, i < 30 ? 401 : 429);
+  }
+  assert.equal(verify.mock.callCount(), 0);
 });

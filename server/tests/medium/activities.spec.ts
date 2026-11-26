@@ -11,7 +11,7 @@ import { FitnessSchema } from '#src/protocol/generated/fitness_pb';
 import { GoalSchema, GoalsSchema } from '#src/protocol/generated/goal_pb';
 import { ActivityPrivacyType } from '#src/protocol/generated/profile_pb';
 import { AssetFiles } from '#src/repositories/files.repository';
-import { binary, decode, mediumFixture } from '#tests/medium/support';
+import { activityFolderOf, binary, decode, mediumFixture } from '#tests/medium/support';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -77,10 +77,7 @@ import { Schema } from 'effect';
 
     assert.equal(image.status, 200);
     const imageId = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.Finite }))(await image.json()).id;
-    assert.deepEqual(
-      readFileSync(resolve(f.profiles.folder(f.rider.player_id), 'images', `${imageId}.jpg`)),
-      Buffer.from(jpeg),
-    );
+    assert.deepEqual(readFileSync(resolve(activityFolderOf(f, id), 'images', `${imageId}.jpg`)), Buffer.from(jpeg));
 
     const media = await decode(
       await f.request(`${base}/${id}/medias`, {
@@ -98,10 +95,7 @@ import { Schema } from 'effect';
     const response5 = await f.app.request(url.pathname + url.search, { method: 'PUT', body: 'replay' });
     assert.equal(response5.status, 403);
     assert.equal(
-      readFileSync(
-        resolve(f.profiles.folder(f.rider.player_id), 'medias', `${url.pathname.split('/').at(-1)}.mp4`),
-        'utf8',
-      ),
+      readFileSync(resolve(activityFolderOf(f, id), 'videos', `${url.pathname.split('/').at(-1)}.mp4`), 'utf8'),
       'video',
     );
     const response6 = await f.request(`${base}/${id}`, { method: 'DELETE' }, f.other);
@@ -313,7 +307,7 @@ await test('private activities stay out of other riders feeds, lists, details an
       .prepare('INSERT INTO activity_file (activity_id,full) VALUES (?,0)')
       .run(id).lastInsertRowid;
 
-    new AssetFiles().writeDurable(resolve(f.config.storageDir, 'activities', String(chart)), '{"heartRate":[150]}');
+    new AssetFiles().writeDurable(resolve(activityFolderOf(f, id), 'chart.json'), '{"heartRate":[150]}');
     const ownerDetail = await f.request(`/api/activities/${id}`);
     assert.equal(ownerDetail.status, 200);
     const detail = Schema.decodeUnknownSync(Schema.Struct({ privacy: Schema.String }))(await ownerDetail.json());
@@ -370,11 +364,13 @@ for (const discard of [false, true]) {
       .prepare('INSERT INTO activity_media (player_id,activity_id,content_type) VALUES (?,?,?)')
       .run(f.rider.player_id, id, 'video/mp4').lastInsertRowid;
 
+    const folder = activityFolderOf(f, id);
+
     const paths = [
-      resolve(f.config.storageDir, 'activities', String(chartId)),
-      resolve(f.profiles.folder(f.rider.player_id), 'images', `${imageId}.jpg`),
-      resolve(f.profiles.folder(f.rider.player_id), 'medias', `${mediaId}.mp4`),
-      resolve(f.profiles.folder(f.rider.player_id), 'fit', `${id} - ride.fit`),
+      resolve(folder, 'chart.json'),
+      resolve(folder, 'images', `${imageId}.jpg`),
+      resolve(folder, 'videos', `${mediaId}.mp4`),
+      resolve(folder, 'activity.fit'),
     ];
 
     for (const path of paths) {
@@ -405,9 +401,7 @@ for (const discard of [false, true]) {
     // The rows go with the request; a cleanup job removes the files.
     await f.effects.runPromise(JobsService.use((service) => service.drain()));
 
-    for (const path of paths) {
-      assert.equal(existsSync(path), false);
-    }
+    assert.equal(existsSync(folder), false);
 
     for (const table of ['activity', 'activity_file', 'activity_image', 'activity_media']) {
       assert.equal(f.accounts.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n, 0);

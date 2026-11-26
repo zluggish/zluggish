@@ -27,6 +27,7 @@ Back up your zwift-offline folder before you start.
 4. [Install the Zluggish server](../install/server.md) and start it. The server converts the storage when it starts.
 5. Follow [first-time setup](../install/server.md#first-time-setup). Select **Use an existing user** and select a migrated user that has a password. That user becomes the administrator.
 6. Set the passwords of the other users again.
+7. Set up each Zwift device again from **Apps**. With the default TLS settings, Zluggish generates a [new server certificate](../install/certificate.md) the first time it starts.
 
 Migrated users do not have passwords. Before a user without a password can become the administrator, set a password with [account recovery](../reference/cli/accounts.md#recover-a-local-account).
 
@@ -37,7 +38,7 @@ You can also migrate offline with the CLI. Stop the server first.
 - To migrate the legacy settings, use [`config migrate`](../reference/cli/configuration.md).
 - To migrate the legacy accounts, use [`accounts migrate`](../reference/cli/accounts.md#migrate-legacy-accounts).
 
-If a migration stops before it is complete, run the same command with the same destination again. Keep `.config-migration.json`, and do not edit the config that the migration has written. JSONC-only installations must make the operator settings again manually.
+If a migration stops before it is complete, run the same command with the same destination again. Keep `.config-migration.json`, and do not edit the config that the migration has written.
 
 ## Roll back
 

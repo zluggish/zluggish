@@ -55,6 +55,8 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         }
 
         const activityId = yield* recordDataService.insert('activity', ActivitySchema, activity, ['fit']);
+        // Fix the activity folder name from the start date the client sent first.
+        yield* activitiesService.folder(activityId);
         yield* rideCompletionService.register(user.player_id, BigInt(activityId), c.req.header('Authorization') ?? '');
 
         return c.body(JSON.stringify({ id: Number(activityId) }), 200, {
@@ -238,9 +240,9 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       if (!(yield* activitiesService.findOwnedActivityFile(id, c.req.param('activityId')))) {
         throw new HTTPException(404);
       }
-      const file = yield* activitiesService.chartPath(id);
+      const file = yield* activitiesService.chartPath(c.req.param('activityId'));
 
-      if (!(yield* filesService.exists(file))) {
+      if (file === null || !(yield* filesService.exists(file))) {
         throw new HTTPException(404);
       }
 

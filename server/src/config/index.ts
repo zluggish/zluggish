@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { configSchema, riderSettingsSchema } from '#src/config/schema';
 import { schemaProblems, strict } from '#src/schema';
 import { Predicate, Schema } from 'effect';
@@ -58,23 +59,23 @@ export function validateConfig(value: ConfigInput): ResolvedConfig {
   const ids = config.pelotons.map((p) => p.id);
 
   if (new Set(ids).size !== ids.length) {
-    throw new ConfigError('pelotons: duplicate group ID');
+    throw new ConfigError(t('pelotons_duplicate_group_id'));
   }
 
   if (config.integrations.discord.enabled && !config.integrations.discord.credentialsFile) {
-    throw new ConfigError('integrations.discord.credentialsFile: required when enabled');
+    throw new ConfigError(t('config_discord_credentials_required'));
   }
 
   if (config.integrations.matrix.enabled) {
     for (const field of ['credentialsFile', 'homeserver', 'user', 'room'] as const) {
       if (!config.integrations.matrix[field]) {
-        throw new ConfigError(`integrations.matrix.${field}: required when enabled`);
+        throw new ConfigError(t('config_matrix_config_required', { value1: field }));
       }
     }
   }
 
   if (Boolean(config.tls.certFile) !== Boolean(config.tls.keyFile)) {
-    throw new ConfigError('tls.certFile and tls.keyFile: both required when configuring custom TLS');
+    throw new ConfigError(t('config_tls_key_pair_required'));
   }
 
   return freezeDeep(config);
@@ -90,7 +91,7 @@ export function envBoolean(value: string | undefined, fallback = false): boolean
   }
 
   if (value !== 'true' && value !== 'false') {
-    throw new ConfigError('Expected true or false environment value');
+    throw new ConfigError(t('config_boolean_environment_invalid'));
   }
 
   return value === 'true';
@@ -102,7 +103,7 @@ export function envInteger(value: string | undefined, fallback: number): number 
   }
 
   if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
-    throw new ConfigError('Expected integer environment value');
+    throw new ConfigError(t('expected_integer_environment_value'));
   }
 
   return Number(value);

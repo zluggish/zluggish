@@ -39,11 +39,19 @@ export class DurabilityRepository {
     // A running flush may have started before the caller's commit: queue one more,
     // shared by every caller that arrives while it runs.
     if (this.current) {
-      this.next ??= this.current.then(() => {
-        this.next = null;
+      // A catch would also handle the recursive flush and could clear its newer queue.
+      // eslint-disable-next-line unicorn/prefer-then-catch
+      this.next ??= this.current.then(
+        () => {
+          this.next = null;
 
-        return this.flush();
-      });
+          return this.flush();
+        },
+        (error: unknown) => {
+          this.next = null;
+          throw error;
+        },
+      );
 
       return this.next;
     }

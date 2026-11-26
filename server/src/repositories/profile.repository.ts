@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { atomic } from '#src/db/transaction';
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
@@ -102,7 +103,7 @@ export class Profiles {
     const user = this.accounts.get(id);
 
     if (!user) {
-      throw new Error('Unknown rider');
+      throw new Error(t('unknown_rider'));
     }
 
     return create(PlayerProfileSchema, {

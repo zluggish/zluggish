@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { DescMessage } from '@bufbuild/protobuf';
 import { fromBinary, toBinary } from '@bufbuild/protobuf';
 import { HTTPException } from 'hono/http-exception';
@@ -10,6 +11,6 @@ export function parseProtobuf<Schema extends DescMessage>(schema: Schema, bytes:
 
     return message;
   } catch {
-    throw new HTTPException(400, { message: 'Invalid request' });
+    throw new HTTPException(400, { message: t('invalid_request') });
   }
 }

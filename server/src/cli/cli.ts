@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { ConfigError, validateConfig } from '#src/config/index';
 import type { ResolvedConfig } from '#src/config/index';
 import type { LoadOptions } from '#src/config/load';
@@ -25,30 +26,7 @@ import { Schema, Effect } from 'effect';
 
 const decodeId = Schema.decodeUnknownSync(PositiveIntFromString);
 
-export const HELP = `Usage: zluggish [--config PATH] [--storage-dir DIR] config init|validate|show|typecheck|migrate
-       zluggish [--config PATH] settings show|set|reset --user ID [KEY] [VALUE]
-
-accounts recover --user ID --password-file PATH  Set a rider password offline; --admin also enables the rider, grants the administrator role, and completes setup
-accounts migrate [--solo-player ID]          Convert the legacy account database offline
-config migrate --dry-run                     Preview direct legacy -> zluggish.config.ts migration
-config migrate --output PATH [--solo-player ID]  Migrate offline, preserving original files
-config init                                 Create a default typed config; never overwrite
-config validate                             Evaluate trusted config and validate its values
-config typecheck                            Typecheck the selected operator config
-settings set/reset                          Update SQLite overrides, never TypeScript source
-storage backup --output PATH                 Back up the stopped server's storage and config
-storage restore --input PATH                 Restore a backup while stopped; uploads stay paused
-storage usage                               Show storage use by category
-storage cleanup [--dry-run]                 Apply retention rules, or preview them
-storage clean-legacy [--confirm]            Preview, or remove, legacy files the migration imported
-uploads list                                Show deliveries that wait or need a decision
-uploads pause                               Stop automatic deliveries (after a manual restore)
-uploads resume --confirm                    Allow automatic deliveries again
-uploads cancel --activity ID --provider P   Cancel one delivery
-
-Config files are trusted executable code. Editing operator config requires restart.
-JSONC is not read or produced. The Node server is still under compatibility development.
-`;
+export const HELP = t('cli_usage');
 
 export async function run(argv: Array<string>, output: (message: string) => void = console.log): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -81,7 +59,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
   }
 
   if (extra.length > 0) {
-    throw new ConfigError('Unexpected arguments');
+    throw new ConfigError(t('unexpected_arguments'));
   }
   const containerStorage = process.env.ZLUGGISH_CONTAINER_STORAGE_DIR;
 
@@ -108,7 +86,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
       const loaded = await loadConfig({ path: selected });
       storage = loaded.config.storageDir;
     } else if ((values.config !== undefined || process.env.ZLUGGISH_CONFIG !== undefined) && !existsSync(selected)) {
-      throw new ConfigError(`Missing ${selected}`);
+      throw new ConfigError(t('missing', { value1: selected }));
     }
 
     const release = await new LockRepository().acquireStorageLock(storage);
@@ -117,38 +95,34 @@ export async function run(argv: Array<string>, output: (message: string) => void
       if (action === 'migrate') {
         const selected = values['solo-player'];
         migrateAccounts(storage, selected === undefined ? undefined : decodeId(selected));
-        output('Accounts migrated');
+        output(t('accounts_migrated'));
       } else if (action === 'recover') {
         const playerId = decodeId(values.user);
 
         const passwordFile = values['password-file'];
 
         if (!passwordFile) {
-          throw new ConfigError('Choose --password-file PATH');
+          throw new ConfigError(t('password_file_required'));
         }
         const accounts = AccountsService.open(storage);
 
         try {
           if (!accounts.get(playerId)) {
-            throw new ConfigError('Unknown user');
+            throw new ConfigError(t('unknown_user'));
           }
           const password = readFileSync(passwordFile, 'utf8').replace(/\r?\n$/, '');
 
           if (password === '') {
-            throw new ConfigError('Password must not be empty');
+            throw new ConfigError(t('cli_password_empty'));
           }
 
           await accounts.changePassword(playerId, password, values.admin ?? false);
-          output(
-            values.admin
-              ? 'Account recovered and enabled with the administrator role; previous tokens revoked'
-              : 'Account recovered; enabled state and role preserved; previous tokens revoked',
-          );
+          output(values.admin ? t('cli_admin_password_set_notice') : t('cli_password_set_notice'));
         } finally {
           accounts.close();
         }
       } else {
-        throw new ConfigError('Unknown accounts command');
+        throw new ConfigError(t('unknown_accounts_command'));
       }
     } finally {
       await release();
@@ -159,7 +133,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
 
   if (group === 'storage' || group === 'uploads') {
     if (key !== undefined || raw !== undefined) {
-      throw new ConfigError(`Unexpected ${group} arguments`);
+      throw new ConfigError(t('cli_unexpected_arguments_list', { value1: group }));
     }
     const options: LoadOptions = { path: selected };
 
@@ -190,7 +164,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
 
   if (group === 'config') {
     if (key !== undefined || raw !== undefined) {
-      throw new ConfigError('Unexpected config arguments');
+      throw new ConfigError(t('unexpected_config_arguments'));
     }
 
     switch (action) {
@@ -199,7 +173,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
           selected,
           readFileSync(resolve(packageRoot(), '../examples/zluggish.config.ts'), 'utf8'),
         );
-        output(`Created ${selected}`);
+        output(t('created_notice', { value1: selected }));
 
         return 0;
       }
@@ -227,7 +201,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
       }
 
       case 'typecheck': {
-        // The runtime image includes TypeScript for offline operator config checks.
+        // The runtime image includes TypeScript for offline config checks.
         const ts = await import('typescript');
 
         const program = ts.createProgram([selected], {
@@ -282,8 +256,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
                   enabled: loaded.config.bots.enabled,
                   multiplier: loaded.config.bots.multiplier,
                 },
-                omitted:
-                  'Paths, integration values, rider defaults and operator strings are omitted to avoid exposing secrets',
+                omitted: t('cli_config_migration_preservation_hint'),
               },
               null,
               2,
@@ -295,13 +268,13 @@ export async function run(argv: Array<string>, output: (message: string) => void
       }
 
       default: {
-        throw new ConfigError('Unknown config command');
+        throw new ConfigError(t('unknown_config_command'));
       }
     }
   }
 
   if (group !== 'settings' || !['show', 'set', 'reset'].includes(action ?? '')) {
-    throw new ConfigError('Unknown command');
+    throw new ConfigError(t('unknown_command'));
   }
   const playerId = decodeId(values.user);
   const options: LoadOptions = { path: selected };
@@ -314,7 +287,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
 
   if (action === 'show') {
     if (key !== undefined) {
-      throw new ConfigError('Unexpected settings show arguments');
+      throw new ConfigError(t('unexpected_settings_show_arguments'));
     }
     const store = SettingsStore.openReadOnly(config.storageDir);
 
@@ -336,11 +309,11 @@ export async function run(argv: Array<string>, output: (message: string) => void
   const setting = decodeSettingKey(key);
 
   if (action === 'set' && raw === undefined) {
-    throw new ConfigError('Provide a JSON setting value');
+    throw new ConfigError(t('cli_setting_value_required'));
   }
 
   if (action === 'reset' && raw !== undefined) {
-    throw new ConfigError('Unexpected reset value');
+    throw new ConfigError(t('unexpected_reset_value'));
   }
   const value: unknown = action === 'set' ? JSON.parse(raw ?? '') : null;
 
@@ -365,7 +338,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
       store?.close();
     }
 
-    output('Valid change (dry run)');
+    output(t('valid_change_dry_run'));
 
     return 0;
   }
@@ -381,7 +354,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
       store.close();
     }
 
-    output('Settings saved');
+    output(t('settings_saved'));
   } finally {
     await release();
   }
@@ -425,14 +398,20 @@ async function storageCommand(
         output(`${file.reason}: ${file.path} (${file.bytes} bytes)`);
       }
       output(
-        `${plan.files.length} files (${bytes} bytes), ${plan.jobs} finished jobs, ${plan.deliveries} delivery records, ${plan.media.length} abandoned uploads`,
+        t('cli_storage_cleanup_summary', {
+          value1: plan.files.length,
+          value2: bytes,
+          value3: plan.jobs,
+          value4: plan.deliveries,
+          value5: plan.media.length,
+        }),
       );
 
       if (values['dry-run']) {
         return 0;
       }
       await Effect.runPromise(service.apply(plan));
-      output('Cleanup complete');
+      output(t('cleanup_complete'));
 
       return 0;
     } finally {
@@ -452,42 +431,42 @@ async function storageCommand(
     }
 
     if (!values.confirm) {
-      output(`${plan.removable.length} legacy files can be removed; run again with --confirm to remove them`);
+      output(t('cli_legacy_cleanup_preview', { value1: plan.removable.length }));
 
       return 0;
     }
 
     removeLegacy(storage, plan);
-    output(`${plan.removable.length} legacy files removed`);
+    output(t('legacy_files_removed', { value1: plan.removable.length }));
 
     return 0;
   }
 
   if (action === 'backup') {
     if (!values.output) {
-      throw new ConfigError('Choose a directory or .tar.gz file with --output PATH');
+      throw new ConfigError(t('cli_backup_output_required'));
     }
     // Opening the database applies pending migrations, so the backup has the current schema.
     openDatabase(storage).close();
     const path = resolve(values.output);
     const createBackup = path.endsWith(archiveSuffix) ? backupStorageArchive : backupStorage;
     const files = await createBackup(storage, path, config);
-    output(`Backup complete: ${files} files`);
+    output(t('backup_complete_files', { value1: files }));
 
     return 0;
   }
 
   if (action === 'restore') {
     if (!values.input) {
-      throw new ConfigError('Choose a directory or .tar.gz file with --input PATH');
+      throw new ConfigError(t('cli_backup_input_required'));
     }
     restoreStorage(storage, resolve(values.input), config);
-    output('Restore complete. Uploads stay paused: review them with uploads list, then run uploads resume --confirm');
+    output(t('cli_restore_success_hint'));
 
     return 0;
   }
 
-  throw new ConfigError('Unknown storage command');
+  throw new ConfigError(t('unknown_storage_command'));
 }
 
 function uploadsCommand(
@@ -498,7 +477,7 @@ function uploadsCommand(
 ) {
   if (action === 'pause') {
     pauseUploads(storage, 'operator');
-    output('Uploads paused');
+    output(t('uploads_paused'));
 
     return 0;
   }
@@ -511,13 +490,19 @@ function uploadsCommand(
 
     const list = () => {
       for (const delivery of repositories.uploadsRepository.waiting()) {
-        output(`activity ${delivery.activity_id} ${delivery.provider} ${delivery.state}`);
+        output(
+          t('activity_record_summary', {
+            value1: delivery.activity_id,
+            value2: delivery.provider,
+            value3: delivery.state,
+          }),
+        );
       }
     };
 
     switch (action) {
       case 'list': {
-        output(flags.get(SystemFlag.UploadPause) === null ? 'Uploads are running' : 'Uploads are paused');
+        output(flags.get(SystemFlag.UploadPause) === null ? t('uploads_running_status') : t('uploads_paused_status'));
         list();
 
         return 0;
@@ -526,11 +511,11 @@ function uploadsCommand(
       case 'resume': {
         if (!values.confirm) {
           list();
-          throw new ConfigError('Cancel unwanted deliveries first, then run uploads resume --confirm');
+          throw new ConfigError(t('cli_uploads_resume_hint'));
         }
 
         flags.clear(SystemFlag.UploadPause);
-        output('Uploads resumed');
+        output(t('uploads_resumed'));
 
         return 0;
       }
@@ -540,15 +525,15 @@ function uploadsCommand(
         const provider = Schema.decodeUnknownSync(Schema.NonEmptyString)(values.provider);
 
         if (!repositories.uploadsRepository.cancel(activity, provider)) {
-          throw new ConfigError('No pending, failed or ambiguous delivery matches');
+          throw new ConfigError(t('cli_delivery_not_found'));
         }
-        output('Delivery cancelled');
+        output(t('delivery_cancelled'));
 
         return 0;
       }
 
       default: {
-        throw new ConfigError('Unknown uploads command');
+        throw new ConfigError(t('unknown_uploads_command'));
       }
     }
   } finally {

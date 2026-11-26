@@ -5,6 +5,7 @@ import type { Hono } from 'hono';
 export interface HttpListenerOptions {
   host: string;
   port: number;
+  requestTimeout?: number;
   tls?: { cert: Buffer | string; key: Buffer | string };
 }
 
@@ -16,8 +17,12 @@ export function startHttp(app: Pick<Hono, 'fetch'>, options: HttpListenerOptions
   };
 
   if (options.tls) {
-    return serve({ ...common, createServer, serverOptions: options.tls });
+    return serve({
+      ...common,
+      createServer,
+      serverOptions: { ...options.tls, requestTimeout: options.requestTimeout },
+    });
   }
 
-  return serve(common);
+  return serve({ ...common, serverOptions: { requestTimeout: options.requestTimeout } });
 }

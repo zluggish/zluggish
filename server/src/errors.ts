@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Effect, Schema } from 'effect';
 
 const emptyMessage = Schema.String.pipe(Schema.optionalKey, Schema.withConstructorDefault(Effect.succeed('')));
@@ -43,6 +44,6 @@ export class JobError extends Schema.TaggedError<JobError>()('JobError', {
 
 export class FitQueueFullError extends Schema.TaggedError<FitQueueFullError>()('FitQueueFullError', {}) {
   override get message() {
-    return 'FIT processing queue is full';
+    return t('errors_fit_queue_full');
   }
 }

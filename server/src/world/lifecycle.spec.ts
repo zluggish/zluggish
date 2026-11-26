@@ -3,7 +3,6 @@ import { LoggingRepository } from '#src/repositories/logging.repository';
 import { Lifecycle } from '#src/world/lifecycle';
 import { World, worldTime } from '#src/world/state';
 import { create } from '@bufbuild/protobuf';
-import { Schema } from 'effect';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -13,7 +12,6 @@ await test('deduplicate transitions, throttle progress, and release state', () =
 
   const tracker = new Lifecycle(
     new LoggingRepository({
-      format: 'json',
       sink: (line) => {
         lines.push(line);
       },
@@ -36,8 +34,7 @@ await test('deduplicate transitions, throttle progress, and release state', () =
   tracker.end(42n, 'logout');
   tracker.end(42n, 'inactivity_timeout');
   tracker.close();
-  const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ event: Schema.String })));
-  const events = lines.map((line) => decodeEvent(line).event);
+  const events = lines.map((line) => line.split(' ', 3)[2]);
   assert.equal(events.filter((event) => event === 'game.connected').length, 1);
   assert.equal(events.filter((event) => event === 'companion.registered').length, 1);
   assert.equal(events.filter((event) => event === 'ride.started').length, 2);
@@ -78,7 +75,6 @@ await test('world acceptance gates lifecycle events for stale, invalid and out-o
   const lines: Array<string> = [];
   const world = new World();
   world.lifecycle.log = new LoggingRepository({
-    format: 'json',
     sink: (line) => {
       lines.push(line);
     },

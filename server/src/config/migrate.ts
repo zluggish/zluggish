@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { ConfigError, decodeConfigInput, validateConfig } from '#src/config/index';
 import { CONFIG_NAME } from '#src/config/load';
 import type { ConfigInput } from '#src/config/schema';
@@ -86,7 +87,7 @@ function legacySection(file: string, ...input: Parameters<typeof decodeConfigInp
   try {
     return decodeConfigInput(...input);
   } catch {
-    throw new ConfigError(`${file}: invalid legacy configuration`);
+    throw new ConfigError(t('invalid_legacy_configuration', { value1: file }));
   }
 }
 
@@ -105,15 +106,15 @@ export function migrationCandidate(options: MigrationOptions) {
   const output = resolve(options.output);
 
   if (basename(output) !== CONFIG_NAME) {
-    throw new ConfigError(`Migration output must be named ${CONFIG_NAME}`);
+    throw new ConfigError(t('migrate_output_name_required', { value1: CONFIG_NAME }));
   }
 
   if (existsSync(output)) {
-    throw new ConfigError('Destination exists; migration never overwrites configuration');
+    throw new ConfigError(t('migrate_destination_exists'));
   }
 
   if (!existsSync(storage)) {
-    throw new ConfigError('Legacy storage directory does not exist');
+    throw new ConfigError(t('migrate_storage_directory_missing'));
   }
   const exists = (name: string) => existsSync(resolve(storage, name));
 
@@ -137,14 +138,14 @@ export function migrationCandidate(options: MigrationOptions) {
     const parsed = decodeDiscord(parseIni(text('discord.cfg')));
 
     if (Exit.isFailure(parsed)) {
-      throw new ConfigError('discord.cfg: invalid legacy configuration');
+      throw new ConfigError(t('migrate_discord_config_invalid'));
     }
     const values = parsed.value.discord;
     const yes = ['1', 'yes', 'true', 'on'];
     const no = ['0', 'no', 'false', 'off'];
 
     if (![...yes, ...no].includes(String(values.announce_players).toLowerCase())) {
-      throw new ConfigError('discord.cfg: invalid announce_players');
+      throw new ConfigError(t('migrate_discord_announce_players_invalid'));
     }
 
     discord = {
@@ -247,14 +248,12 @@ export function migrationCandidate(options: MigrationOptions) {
     );
 
     if (folders.length > 0 && !options.soloPlayer) {
-      throw new ConfigError(
-        'Legacy solo data needs explicit --solo-player ID; no account is created by config migration',
-      );
+      throw new ConfigError(t('migrate_solo_player_required'));
     }
 
     if (options.soloPlayer) {
       if (!folders.includes(String(options.soloPlayer))) {
-        throw new ConfigError('--solo-player must identify an existing profile folder');
+        throw new ConfigError(t('migrate_solo_profile_missing'));
       }
 
       riders.push({
@@ -263,7 +262,7 @@ export function migrationCandidate(options: MigrationOptions) {
       });
     }
   } else if (options.soloPlayer) {
-    throw new ConfigError('--solo-player only applies to legacy solo storage');
+    throw new ConfigError(t('migrate_solo_player_inapplicable'));
   }
 
   const preferences: Array<Preference> = riders.map((rider) => {
@@ -286,7 +285,7 @@ export function migrationCandidate(options: MigrationOptions) {
     });
 
     if (Exit.isFailure(parsed)) {
-      throw new ConfigError(`Invalid legacy preferences for rider ${rider.player_id}`);
+      throw new ConfigError(t('migrate_preferences_invalid', { value1: rider.player_id }));
     }
 
     return parsed.value;
@@ -300,7 +299,7 @@ export function migrationCandidate(options: MigrationOptions) {
         const exists = store.has(preference.playerId);
 
         if (exists && JSON.stringify(store.read(preference.playerId)) !== JSON.stringify(preference.overrides)) {
-          throw new ConfigError(`Conflicting persisted preferences for rider ${preference.playerId}`);
+          throw new ConfigError(t('migrate_preferences_conflict', { value1: preference.playerId }));
         }
       }
     } finally {
@@ -337,7 +336,7 @@ export async function migrateConfig(options: MigrationOptions) {
       journal = decodeJournal(JSON.parse(readFileSync(journalPath, 'utf8')));
 
       if (resolve(options.output) !== journal.output) {
-        throw new ConfigError('An interrupted migration targets another output; resume that destination first');
+        throw new ConfigError(t('migrate_destination_conflict'));
       }
     } else {
       const candidate = migrationCandidate(options);
@@ -356,7 +355,7 @@ export async function migrateConfig(options: MigrationOptions) {
     }
 
     if (existsSync(journal.output) && readFileSync(journal.output, 'utf8') !== journal.source) {
-      throw new ConfigError('Migration output changed; recover manually before continuing');
+      throw new ConfigError(t('migrate_output_changed'));
     }
 
     const settings = SettingsStore.open(options.storage);

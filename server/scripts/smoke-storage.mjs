@@ -1,3 +1,4 @@
+import { request as httpsRequest } from 'node:https';
 // Container check of the production build on legacy storage: storage merge, legacy
 // cleanup, backup, restore with the upload pause, server start and clean shutdown.
 // Run: docker run --rm -i --read-only --tmpfs /tmp --entrypoint node zluggish:test --input-type=module < server/scripts/smoke-storage.mjs
@@ -18,7 +19,7 @@ mkdirSync('/tmp/storage-config');
 
 writeFileSync(
   config,
-  `export default {storageDir:${JSON.stringify(storage)},network:{host:"127.0.0.1",api:{port:25443,useCert:false},cdn:{port:25080},tcp:{port:25025},udp:{port:25024}}}`,
+  `export default {storageDir:${JSON.stringify(storage)},network:{host:"127.0.0.1",api:{port:25443,useCert:true},cdn:{port:25080},tcp:{port:25025},udp:{port:25024}}}`,
 );
 
 // A version 5 storage directory, as the previous release left it.
@@ -81,7 +82,7 @@ try {
   });
 
   assert.match(output, /upload\.paused/);
-  const health = await fetch('http://127.0.0.1:25443/health', { signal: AbortSignal.timeout(10_000) });
+  const health = await gameFetch('https://127.0.0.1:25443/health', { signal: AbortSignal.timeout(10_000) });
   assert.equal(health.status, 200);
   server.kill('SIGTERM');
   const [code] = await Promise.race([
@@ -99,3 +100,23 @@ assert.ok(!existsSync(wal) || statSync(wal).size === 0, 'the WAL is truncated at
 assert.match(zluggish('uploads', 'list'), /activity 10 intervals pending/);
 assert.ok(readFileSync(resolve(storage, 'storage-migration.json'), 'utf8').includes('"published"'));
 console.log('Storage smoke: migration, legacy cleanup, backup, restore, pause and shutdown passed');
+
+// Exercise the local self-signed game listener without changing global TLS verification.
+function gameFetch(url, init = {}) {
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(url, { ...init, rejectUnauthorized: false }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () =>
+        resolve(
+          new Response(Buffer.concat(chunks), {
+            status: response.statusCode,
+            headers: response.headers,
+          }),
+        ),
+      );
+    });
+    request.on('error', reject);
+    request.end(init.body);
+  });
+}

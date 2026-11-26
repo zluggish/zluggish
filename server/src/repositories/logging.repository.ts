@@ -24,7 +24,7 @@ type Serialized = string | number | boolean | null | undefined | Array<Serialize
 
 type Fields = Record<string, LogValue>;
 
-type Options = Partial<Pick<ResolvedConfig['logging'], 'level' | 'format'>> & {
+type Options = Partial<Pick<ResolvedConfig['logging'], 'level'>> & {
   sink?: (line: string, level: Level) => void;
   clock?: () => Date;
 };
@@ -89,6 +89,29 @@ function safe(value: LogValue, seen = new WeakSet<object>(), depth = 0): Seriali
 function multiline(value: string) {
   // eslint-disable-next-line no-control-regex
   return value.replaceAll(/[\u{0000}-\u{0008}\u{000B}-\u{001F}\u{007F}]/gu, ' ').slice(0, 10_000);
+}
+
+function fieldText(value: Serialized, includeStack: boolean, key = ''): string {
+  if (value === undefined) {
+    return '';
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const parts = Object.entries(value)
+      .filter(([name]) => includeStack || name !== 'stack')
+      .map(([name, field]) => {
+        const label = /^[\w-]+$/.test(name) ? name : inspect(name);
+        return fieldText(field, includeStack, key ? `${key}.${label}` : label);
+      })
+      .filter(Boolean);
+
+    return parts.length > 0 ? parts.join(' ') : '';
+  }
+
+  const display =
+    typeof value === 'string' && /^[\w./:@+\-[\]]+$/.test(value) ? value : inspect(value, { colors: false });
+
+  return `${key}=${display}`;
 }
 
 export class LoggingRepository {
@@ -157,25 +180,10 @@ export class LoggingRepository {
       const all = { ...this.context, ...fields };
       const data = safe(all);
 
-      const entry = {
-        timestamp: (this.options.clock?.() ?? new Date()).toISOString(),
-        level,
-        event: safe(event),
-        message: safe(message),
-        fields: data,
-      };
-
-      if (this.options.format === 'json') {
-        const line = JSON.stringify(entry);
-        this.remember(line);
-        this.sink(line, level);
-
-        return;
-      }
-
-      const prefix = `${entry.timestamp} ${level} ${entry.event} ${entry.message}`;
-      // Use redacted fields for the web view. Console traces inspect the original errors.
-      this.remember(`${prefix} ${JSON.stringify(data)}`);
+      const timestamp = (this.options.clock?.() ?? new Date()).toISOString();
+      const prefix = `${timestamp} ${level} ${safe(event)} ${safe(message)}`;
+      const historyFields = fieldText(data, true);
+      this.remember(historyFields ? `${prefix} ${historyFields}` : prefix);
 
       // Text logs print each error the way Node does, stack and causes on their own lines.
       const traces = Object.values(all)
@@ -183,10 +191,8 @@ export class LoggingRepository {
         .map((error) => `\n${multiline(inspect(error, { depth: 4 }))}`)
         .join('');
 
-      this.sink(
-        `${prefix} ${JSON.stringify(data, (key, value: Serialized) => (key === 'stack' ? undefined : value))}${traces}`,
-        level,
-      );
+      const consoleFields = fieldText(data, false);
+      this.sink(`${consoleFields ? `${prefix} ${consoleFields}` : prefix}${traces}`, level);
     } catch {
       // Logging must never interrupt a request, network callback, or shutdown.
     }

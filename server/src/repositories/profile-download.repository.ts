@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { ImportFiles } from '#src/dtos/profile-import.dto';
 import { EconomyConfigSchema, LoginRequestSchema, LoginResponseSchema } from '#src/protocol/generated/login_pb';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
@@ -28,12 +29,12 @@ export class ProfileDownloadRepository {
       });
 
       if (!response.ok) {
-        throw new Error('Official profile download failed');
+        throw new Error(t('official_profile_download_failed'));
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
 
       if (bytes.length > 16 * 1024 * 1024) {
-        throw new Error('Official profile download is too large');
+        throw new Error(t('profile_download_download_size_limit'));
       }
 
       return bytes;

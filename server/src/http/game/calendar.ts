@@ -1,13 +1,14 @@
+import { t } from '#src/i18n/index';
 import { XMLParser } from 'fast-xml-parser';
 import { Schema } from 'effect';
 
 export const mapChoices = [
-  { value: '7', key: 'LONDON', label: 'London / Yorkshire' },
-  { value: '13', key: 'MAKURIISLANDS', label: 'Makuri Islands / New York' },
-  { value: '14', key: 'FRANCE', label: 'France / Paris' },
-  { value: '2', key: 'RICHMOND', label: 'Richmond / London' },
-  { value: '9', key: 'INNSBRUCK', label: 'Innsbruck / Richmond' },
-  { value: '17', key: 'SCOTLAND', label: 'Scotland / Makuri Islands' },
+  { value: '7', key: 'LONDON', label: t('london_yorkshire') },
+  { value: '13', key: 'MAKURIISLANDS', label: t('makuri_islands_new_york') },
+  { value: '14', key: 'FRANCE', label: t('france_paris') },
+  { value: '2', key: 'RICHMOND', label: t('richmond_london') },
+  { value: '9', key: 'INNSBRUCK', label: t('innsbruck_richmond') },
+  { value: '17', key: 'SCOTLAND', label: t('scotland_makuri_islands') },
 ];
 
 const appointment = Schema.Struct({
@@ -72,5 +73,8 @@ export function calendarLabels(
     .toArray()
     .join(' / ');
 
-  return { map: map ? `${map} (Calendar)` : 'Calendar', climb: climb ? `${climb} (Calendar)` : 'Calendar' };
+  return {
+    map: map ? `${map} (Calendar)` : t('calendar'),
+    climb: climb ? `${climb} (Calendar)` : t('calendar'),
+  };
 }

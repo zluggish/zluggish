@@ -1,47 +1,34 @@
 ---
 sidebar_position: 3
-description: Set up a Mac to ride on your Zluggish server.
+description: Connect Zwift for macOS to Zluggish.
 ---
 
 # macOS
 
-This procedure makes macOS and Zwift trust the [server certificate](../certificate.md) and redirects Zwift to Zluggish.
+Zluggish supports running the game client on macOS.
 
-## Set up the client
+1. Install Zwift normally. Open it once to finish any updates and create its data folder, then quit before signing in.
+2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → macOS**. Use **Other systems** if macOS is hidden.
+3. Select **Download setup script**. Use the script from the specific Zluggish server you want to connect to, since each server has a unique certificate.
+4. In Terminal, run the command shown on the setup page. Enter your password when `sudo` prompts you.
+5. Open Zwift and sign in through the Zluggish launcher.
 
-1. Install Zwift, if it is not installed. Start it once and quit it, so that it creates its data folder.
-2. Sign in to the Zluggish web app and select **Apps** in the menu.
-3. On a Mac, select **Set up macOS**. On another device, select **Other systems** under **Zwift**, then **macOS**. Check the IP address of the server, then select **Download setup script**. The address is `server.advertisedIp` from the server configuration.
+The script adds the Zluggish certificate to the **System** keychain and to `~/Library/Application Support/Zwift/data/cacert.pem`. By default, the script also updates DNS lookup settings in `/etc/hosts` with the Zluggish IP address.
 
-   ![macOS setup in three steps: download the setup script, run it in Terminal and start Zwift, with the certificate fingerprints below](../../../media/screenshots/webapp-install-macos.png)
+If you don't want the script to change DNS settings, turn off **Patch hosts file** under **Advanced settings** before downloading the script. You can then manually follow the instructions on the [DNS settings page](dns-settings.md).
 
-4. Quit Zwift. Open Terminal and run the command that the **Install** page shows, for example:
+## Updating
 
-   ```sh
-   sh ~/Downloads/zluggish-zwift-*.sh
-   ```
+If Zwift updates, it may lose its connection to Zluggish. In that case, download the setup script from your server and run it again. Do the same when the [server certificate changes](../certificate.md).
 
-   The script asks for your password through `sudo`, and macOS asks again before it changes certificate trust. It:
-   - adds the certificate to the System keychain and trusts it for TLS, and removes the certificates that earlier setups of this server added, and the old shared certificate,
-   - adds the certificate to `~/Library/Application Support/Zwift/data/cacert.pem`, and removes the old shared certificate there,
-   - points the Zwift host names at the server in `/etc/hosts`.
+## If the script cannot find Zwift
 
-5. If the script does not find Zwift, run it again with the Zwift folder:
+Run the script with your Zwift data folder. Replace the sample filename with the name you downloaded.
 
-   ```sh
-   sh ~/Downloads/zluggish-zwift-*.sh "$HOME/Library/Application Support/Zwift"
-   ```
+```sh
+sh ~/Downloads/zluggish-zwift-XXXXXXXX.sh "$HOME/Library/Application Support/Zwift"
+```
 
-Run the script again after a Zwift update, and after the administrator rotates the certificate.
+## Uninstall
 
-The script saves the original files as `cacert.pem.zluggish-backup` and `/etc/hosts.zluggish-backup`.
-
-Do not import the certificate with Keychain Access instead. Double-clicking the file, or **File → Import Items…**, can add it without any message and without trusting it.
-
-## Check the certificate
-
-The **Install** page shows the thumbprint and the SHA-256 fingerprint of the certificate. The script stops if its certificate does not match its thumbprint. In Keychain Access, the certificate is **\*.zwift.com** in the **System** keychain, and its SHA-1 fingerprint is the thumbprint.
-
-## Next step
-
-Start Zwift, select your user and sign in. To stop using Zluggish, see [Uninstall](../../maintenance/uninstall.md).
+To remove the Zluggish patches, follow the [uninstall instructions](../../maintenance/uninstall.md).

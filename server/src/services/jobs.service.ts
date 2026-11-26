@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Context, Effect, Fiber, Layer } from 'effect';
 import type { JobType } from '#src/enum';
 import { RuntimeContext } from '#src/context';
@@ -211,7 +212,7 @@ const make = Effect.gen(function* () {
       const handler = handlers.get(claim.type);
 
       if (!handler) {
-        return yield* Effect.die(new Error('No handler for this job type'));
+        return yield* Effect.die(new Error(t('jobs_handler_missing')));
       }
 
       yield* Effect.promise(() => execute(claim, handler));

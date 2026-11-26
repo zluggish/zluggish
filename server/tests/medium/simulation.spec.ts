@@ -1,4 +1,5 @@
 import { Effect } from 'effect';
+import { blobRiderFigures, STAND_RATIO } from '#src/world/pro-build';
 import { RideRecoveryService } from '#src/services/ride-recovery.service';
 import { validateConfig } from '#src/config/index';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
@@ -318,8 +319,17 @@ await test('synthetic riders carry an FTP: pacers 400, bots and blobs from their
   assert.ok(blob);
   assert.equal(blob.riders.length, 3);
 
+  // Blob riders ride at the owner's W/kg scaled by their strength and stand up past a multiple of the owner's FTP.
   for (const bot of blob.riders) {
-    assert.equal(bot.profile.ftp, 250);
+    const traits = simulation.pool.traitsOf(bot.profile.id);
+    const figures = blobRiderFigures(
+      { ftp: 250, weightKg: 70 },
+      { weightKg: bot.profile.weightInGrams / 1000, ...traits },
+    );
+    assert.equal(bot.profile.ftp, figures.ftp);
+    assert.equal(bot.powerScale, figures.powerScale);
+    assert.ok(bot.profile.ftp > 250);
+    assert.ok(Math.abs((2 * bot.profile.ftp) / bot.powerScale / 250 - STAND_RATIO[traits.specialty]) < 0.01);
   }
 });
 
@@ -365,4 +375,46 @@ await test('replay bot weights follow changes to the owner’s weight privacy', 
   owner.privacyBits |= 4n;
   f.profiles.save(rider.player_id, owner);
   assert.equal(f.profiles.get(botId).weightInGrams, 95_000);
+});
+
+await test('.blob keeps four slots and refuses a fifth without saving it', async (t) => {
+  const f = runtimeFixture(t);
+  const riders = await Promise.all(
+    ['Rider One', 'Rider Two', 'Rider Three', 'Rider Four', 'Rider Five'].map((name) =>
+      f.accounts.create(name, 'test-password'),
+    ),
+  );
+  const ids = riders.map((rider) => BigInt(rider.player_id));
+  const simulation = new Simulation(f, () => 100);
+  t.after(() => simulation.close());
+  await simulation.ready;
+
+  for (const id of ids.slice(0, 4)) {
+    assert.equal(simulation.command(id, 'blob 6'), 'Blob settings saved.');
+  }
+  assert.equal(simulation.blobs.size, 4);
+  assert.equal(
+    new Set(simulation.blobs.values().map((blob) => blob.index)).size,
+    4,
+    'the four blobs have distinct slot indexes',
+  );
+
+  const fifth = ids[4]!;
+  assert.equal(
+    simulation.command(fifth, 'blob 6'),
+    'All four blob slots are taken. Another rider has to stop theirs with .blob off first.',
+  );
+  assert.equal(simulation.blobs.size, 4);
+  assert.notEqual(f.settings.world(`blob:${fifth}`).enabled, true);
+
+  f.settings.saveWorld(`blob:${fifth}`, { enabled: true, riders: 6 });
+  await simulation.reload();
+  assert.equal(simulation.blobs.size, 4);
+  for (const id of ids.slice(0, 4)) {
+    assert.ok(simulation.blobs.has(id));
+  }
+
+  assert.equal(simulation.command(ids[0]!, 'blob off'), 'Blob off.');
+  assert.equal(simulation.command(fifth, 'blob 6'), 'Blob settings saved.');
+  assert.ok(simulation.blobs.has(fifth));
 });

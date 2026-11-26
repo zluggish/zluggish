@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { PlayerState, ServerToClient, WorldAttribute } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerStateSchema, ServerToClientSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { Lifecycle } from '#src/world/lifecycle';
@@ -24,7 +25,12 @@ export function forward(state: PlayerState) {
   return (state.f19 & 4) !== 0;
 }
 
-/** Per authenticated relay; only accepted packets advance counters. Never an anti-replay policy. */
+/** Durable per-key nonce history. A connection identifier is never reused for TCP. */
+export interface RelayHistory {
+  tcp: Array<number>;
+  udp: Array<[number, number, number]>;
+}
+
 export class Relay {
   tcpConnection = 0;
 
@@ -38,31 +44,82 @@ export class Relay {
 
   udpWrite = 0;
 
+  private history: RelayHistory = { tcp: [], udp: [] };
+
+  private checkpoint: ((history: RelayHistory) => void) | undefined;
+
+  private failed = false;
+
   constructor(readonly key: Buffer) {}
 
-  acceptUdp(connection: number, explicitConnection?: number, sequence?: number) {
-    if (explicitConnection !== undefined && explicitConnection !== this.udpConnection) {
-      this.udpWrite = 0;
-    }
-    this.udpConnection = connection;
-    this.udpRead = sequence ?? this.udpRead + 1;
+  protect(history: RelayHistory, checkpoint: (history: RelayHistory) => void) {
+    this.history = history;
+    this.checkpoint = checkpoint;
   }
 
-  acceptTcp(connection: number, hello: boolean) {
+  private save() {
+    if (this.failed) {
+      throw new Error(t('relay_persistence_failed'));
+    }
+    try {
+      this.checkpoint?.(this.history);
+    } catch (error) {
+      this.failed = true;
+      throw error;
+    }
+  }
+
+  acceptUdp(connection: number, _explicitConnection?: number, sequence = this.udpRead) {
+    const previous = this.history.udp.find(([id]) => id === connection);
+    if (previous && sequence <= previous[1]) {
+      throw new Error(t('replayed_udp_packet'));
+    }
+    const entry: [number, number, number] = previous ?? [connection, -1, 0];
+    if (!previous) {
+      this.history.udp.push(entry);
+    }
+    entry[1] = sequence;
+    this.save();
+    this.udpConnection = connection;
+    this.udpRead = sequence + 1;
+    this.udpWrite = entry[2];
+  }
+
+  acceptTcp(connection: number, hello: boolean, sequence = hello ? 0 : this.tcpRead) {
     if (hello) {
+      if (sequence !== 0 || this.history.tcp.includes(connection)) {
+        throw new Error(t('reused_tcp_connection'));
+      }
+      // Burn the entire TCP connection ID before any reply. After a restart
+      // its implicit output counter cannot be reconstructed safely.
+      this.history.tcp.push(connection);
+      this.save();
       this.tcpConnection = connection;
       this.tcpRead = 1;
       this.tcpWrite = 0;
     } else {
+      if (connection !== this.tcpConnection || sequence !== this.tcpRead) {
+        throw new Error(t('unexpected_tcp_sequence'));
+      }
       this.tcpRead++;
     }
   }
 
   nextUdp() {
-    return this.udpWrite++;
+    const entry = this.history.udp.find(([id]) => id === this.udpConnection);
+    if (!entry || entry[2] > 0xff_ff_ff_ff) {
+      throw new Error(t('udp_nonce_space_exhausted'));
+    }
+    const sequence = entry[2]++;
+    this.save();
+    this.udpWrite = entry[2];
+    return sequence;
   }
 
   nextTcp() {
+    if (this.failed || this.tcpWrite > 0xff_ff_ff_ff) {
+      throw new Error(t('tcp_nonce_space_exhausted'));
+    }
     return this.tcpWrite++;
   }
 }
@@ -138,9 +195,10 @@ export class World {
 
   login(playerId: bigint, key: Uint8Array) {
     if (![16, 24, 32].includes(key.length)) {
-      throw new Error('Invalid relay key');
+      throw new Error(t('invalid_relay_key'));
     }
 
+    this.disconnect?.(playerId);
     const relay = new Relay(Buffer.from(key));
 
     this.relays.set(playerId, relay);
@@ -171,7 +229,7 @@ export class World {
 
   receive(playerId: bigint, state: PlayerState) {
     if (state.id && state.id !== playerId) {
-      throw new Error('State identity does not match relay');
+      throw new Error(t('state_relay_identity_mismatch'));
     }
     const previous = this.online.get(playerId);
 

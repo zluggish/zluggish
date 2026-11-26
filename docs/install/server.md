@@ -5,71 +5,30 @@ description: Install the Zluggish server with Docker Compose.
 
 # Install the server
 
-If you use legacy zwift-offline now, do the steps in [Migrate from zwift-offline](../maintenance/migrating.md) first.
+If you have an existing install of the legacy zwift-offline app, read the [migration guide](../maintenance/migrating.md) first.
 
-## Install with Docker Compose
-
-1. Make an empty directory on the server, for example `/etc/zluggish`.
-2. Download the [Docker Compose file](https://github.com/zluggish/zluggish/blob/main/docker/docker-compose.yml) to that directory and name it `docker-compose.yml`.
-
-3. Start the server from that directory:
+1. Create a directory for Zluggish and a `docker/` subdirectory inside it.
+2. Save the [Compose file](https://raw.githubusercontent.com/zluggish/zluggish/main/docker/docker-compose.yml) as `docker/docker-compose.yml`.
+3. Start the server and read its logs from the `docker/` directory.
 
    ```sh
    docker compose up -d
+   docker compose logs zluggish
    ```
 
-4. Look at the server output. Make sure that it shows this line:
-
-   ```sh
-   zluggish-1  | 2026-11-17T11:40:23.126Z INFO server.ready Zluggish is ready
-   ```
-
-The server makes the `storage` directory on the first start. This directory holds the configuration, the users and the activities.
-
-Backups are saved in `storage/backups/` on the host through the existing storage mount.
-
-The [ports reference](../reference/ports.md) tells what each port is for.
-
-## Build from source
-
-1. Clone the [repository](https://github.com/zluggish/zluggish).
-2. From the repository root, run:
-
-   ```sh
-   docker compose -f docker/docker-compose.yml up --build
-   ```
-
-This setup uses the `storage` directory in the repository root.
+The server is ready when the logs show `Zluggish is ready`. Compose mounts `../storage` for the configuration, database and other server data. With the directory layout above, `storage/` and `docker/` are siblings.
 
 ## First-time setup
 
-In order to set up a new server, you must authenticate yourself as the administrator by entering the setup key. The docker output for the first-time zluggish server is something like
+1. Find **Setup key** in the logs. It is valid until you complete setup or stop the server. Keep it private.
+2. On the server computer, open [http://localhost:8080/setup](http://localhost:8080/setup). To use a browser on another device, see [web app access](../usage/web-app.md).
+3. Enter the key and select **Check key**.
+4. Enter your name and login name. Enter and confirm your password, then select **Complete setup** to create the first administrator.
 
-```text
-zluggish-1  | ============================================================
-zluggish-1  | Zluggish first-time setup
-zluggish-1  | Open: http://127.0.0.1:8080/setup
-zluggish-1  | Setup key: 0QZR-DVH3-9VES-E7PW-NS6C-CX2N-PWXQ-GA2R-MTR5-R122-REFP-PJF9-5XFG
-zluggish-1  | This key works until setup is complete or the server stops.
-zluggish-1  | ============================================================
-```
+## Connect a client
 
-:::warning
+If Zwift runs on another device, set `server.advertisedIp` to the server's LAN IP in `storage/zluggish.config.ts` and restart Zluggish. See [Configuration](../reference/configuration.md) and [Ports](../reference/ports.md).
 
-Keep the setup key private, don't share it with anybody
+Set up Zwift on [Windows](clients/windows.md), [macOS](clients/macos.md), [Linux](clients/linux.md) or [Android](clients/android.md).
 
-:::
-
-Now open the setup address in a browser. The default address is `http://<server-ip>:8080/setup`.
-
-Then paste the key into **Setup key**.
-
-Enter a name, a login name and a password for the new user.
-
-Select **Complete setup**.
-
-This account is now the initial administrator.
-
-## Next steps
-
-See the [server documentation](../reference/configuration.md) for configuration, then set up the client for [Windows](clients/windows.md), [macOS](clients/macos.md) or [Android](clients/android.md).
+To work on Zluggish from source, see the [development guide](../development.md).

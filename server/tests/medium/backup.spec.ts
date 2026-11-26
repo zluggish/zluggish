@@ -1,5 +1,5 @@
 import { BackupSnapshotWorker } from '#src/migrations/backup-snapshot-worker';
-import { readArchivedFile } from '#src/migrations/backup-archive';
+import { readArchivedFile, withBackupDirectory } from '#src/migrations/backup-archive';
 import { JobType } from '#src/enum';
 import { backupDirectory } from '#src/migrations/backup-paths';
 import { BackupService } from '#src/services/backup.service';
@@ -223,13 +223,21 @@ await test('only web administrators can create a restorable manual backup', asyn
   }
 });
 
-await test('the offline archive command can write under storage/backups', async (t) => {
+await test('the offline archive can write under storage/backups and skips Android app folders', async (t) => {
   const f = await mediumFixture(t);
   const storage = f.config.storageDir;
   const archive = resolve(storage, 'backups', 'offline.tar.gz');
+  for (const folder of ['companion', 'zwift-android']) {
+    mkdirSync(resolve(storage, folder), { recursive: true });
+    writeFileSync(resolve(storage, folder, 'signer.pem'), 'test signer');
+  }
   f.accounts.close();
 
   await backupStorageArchive(storage, archive, null);
+  withBackupDirectory(archive, (directory) => {
+    assert.ok(!existsSync(resolve(directory, 'companion')));
+    assert.ok(!existsSync(resolve(directory, 'zwift-android')));
+  });
   restoreStorage(storage, archive, null);
 
   assert.ok(existsSync(archive));

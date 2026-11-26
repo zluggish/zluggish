@@ -10,12 +10,13 @@ export const companionStatus = z.object({
       current: z.boolean(),
     })
     .nullable(),
-  tlsMode: z.enum(['managed', 'legacy', 'custom', 'disabled']),
+  tlsMode: z.enum(['managed', 'legacy', 'custom']),
   serverAddress: z.string(),
 });
 
 const companionStep = z.enum([
   'upload',
+  'download',
   'runtime',
   'editor',
   'inspect',
@@ -28,7 +29,7 @@ const companionStep = z.enum([
 ]);
 
 const companionActivity = z.object({
-  kind: z.enum(['toolchain', 'patch', 'rekey']),
+  kind: z.enum(['toolchain', 'patch', 'rebuild', 'download', 'rekey']),
   state: z.enum(['running', 'waiting', 'done', 'failed']),
   steps: z.array(companionStep),
   step: companionStep,
@@ -48,6 +49,7 @@ export const companionAdminStatus = companionStatus.extend({
   }),
   activity: companionActivity.nullable(),
   pending: z.boolean(),
+  original: z.object({ name: z.string(), bytes: z.number(), uploadedAt: z.string() }).nullable(),
   uploadLimit: z.number(),
 });
 

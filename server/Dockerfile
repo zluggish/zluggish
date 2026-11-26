@@ -4,11 +4,13 @@ RUN npm install --global pnpm@12.18.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json server/package.json
 COPY web/package.json web/package.json
+COPY i18n/package.json i18n/package.json
 RUN pnpm install --frozen-lockfile
 COPY media media
 COPY assets/cdn/style assets/cdn/style
 COPY server/ server/
 COPY web/ web/
+COPY i18n/ i18n/
 RUN pnpm build
 # Install production dependencies in the same workspace layout; retain both entry outputs.
 RUN rm -rf node_modules server/node_modules web/node_modules && pnpm install --prod --frozen-lockfile
@@ -19,6 +21,7 @@ COPY --from=build /usr/src/app/zluggish/node_modules ../node_modules
 COPY --from=build /usr/src/app/zluggish/server/package.json ./
 COPY --from=build /usr/src/app/zluggish/server/node_modules ./node_modules
 COPY --from=build /usr/src/app/zluggish/server/dist ./dist
+COPY --from=build /usr/src/app/zluggish/i18n ../i18n
 COPY --from=build /usr/src/app/zluggish/web/package.json ../web/package.json
 COPY --from=build /usr/src/app/zluggish/web/node_modules ../web/node_modules
 COPY --from=build /usr/src/app/zluggish/web/dist ../web/dist

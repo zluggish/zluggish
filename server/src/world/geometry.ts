@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { course, forward, road } from '#src/world/state';
@@ -68,7 +69,7 @@ export class Random {
     const item = items[Math.floor(this.value() * items.length)];
 
     if (item === undefined) {
-      throw new Error('Empty random pool');
+      throw new Error(t('empty_random_pool'));
     }
 
     return item;

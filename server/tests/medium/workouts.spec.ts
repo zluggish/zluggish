@@ -63,9 +63,13 @@ await test('F07 browser home and Android login share one refresh; saved-token lo
   assert.match(await home.text(), /select name="climb"/);
   const relay = await decode(login, LoginResponseSchema);
   assert.equal(relay.relaySessionId, f.rider.player_id);
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0]?.signal);
-  assert.equal(calls[0]?.signal, calls[1]?.signal);
+  assert.equal(calls.length, 3);
+  const [events, athlete, download] = calls;
+  assert.ok(events && athlete && download);
+  assert.ok(events.signal);
+  assert.equal(events.signal, athlete.signal);
+  assert.equal(events.signal, download.signal);
+  assert.equal(athlete.url.pathname, '/api/v1/athlete/i123');
   const listed = await f.request('/api/workout/schedule/list');
   const [first] = Schema.decodeUnknownSync(schedules)(await listed.json());
   assert.ok(first);
@@ -82,7 +86,7 @@ await test('F07 browser home and Android login share one refresh; saved-token lo
   });
 
   await decode(savedToken, LoginResponseSchema);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 6);
   const refreshed = await f.request('/api/workout/schedule/list');
   assert.deepEqual(Schema.decodeUnknownSync(schedules)(await refreshed.json()), [first]);
   const other = await f.request('/api/workout/schedule/list', {}, f.other);
@@ -295,6 +299,53 @@ for (const sport of [undefined, 'CYCLING', 'cycling', 'RUNNING', 'running', 'ROW
     assert.equal(other.status, 404);
   });
 }
+
+await test('Intervals sync stores the athlete FTP and power zones, and survives an athlete profile failure', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });
+  const f = await mediumFixture(t);
+  const web = mediumWeb(f, f.rider);
+  f.effects.runSync(ConnectionsService.use((service) => service.save(f.rider.player_id, 'intervals', ['123', 'test'])));
+  const metadata = resolve(f.profiles.folder(f.rider.player_id), 'intervals_icu_workout.json');
+
+  const answer = (athleteFails: boolean) =>
+    t.mock.method(globalThis, 'fetch', (input: URL | string) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith('/download.zwo')) {
+        return Promise.resolve(new Response(xml));
+      }
+
+      if (url.pathname.endsWith('/events')) {
+        return Promise.resolve(Response.json([{ id: 42, start_date_local: `${day}T08:00:00` }]));
+      }
+
+      return athleteFails
+        ? Promise.resolve(new Response(null, { status: 500 }))
+        : Promise.resolve(
+            Response.json({
+              sportSettings: [
+                {
+                  types: ['Ride', 'VirtualRide'],
+                  ftp: 280,
+                  indoor_ftp: 280,
+                  power_zones: [55, 75, 90, 105, 120, 150, 999],
+                },
+              ],
+            }),
+          );
+    });
+
+  answer(false);
+  const synced = await web.request('/api/me/workouts/sync', 'POST', { provider: 'intervals' });
+  assert.equal(synced.status, 200);
+  const stored = JSON.parse(readFileSync(metadata, 'utf8'));
+  assert.deepEqual(stored.settings, { ftp: 280, power_zones: [55, 75, 90, 105, 120, 150] });
+
+  answer(true);
+  const survived = await web.request('/api/me/workouts/sync', 'POST', { provider: 'intervals' });
+  assert.equal(survived.status, 200);
+  assert.equal(JSON.parse(readFileSync(metadata, 'utf8')).settings, undefined);
+});
 
 await test('Intervals sync preserves interleaved exercise blocks and text events in downloaded assets', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });

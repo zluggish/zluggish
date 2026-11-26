@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaIssue, SchemaTransformation } from 'effect';
 import type { Types } from 'effect';
 
@@ -13,7 +14,7 @@ export function Strict<const Fields extends Schema.Struct.Fields>(fields: Fields
     Schema.makeFilter((input: typeof AnyObject.Type) => {
       const extra = Object.keys(input).filter((key) => !keys.has(key));
 
-      return extra.length === 0 || extra.map((key) => ({ path: [key], issue: 'Expected no excess property' }));
+      return extra.length === 0 || extra.map((key) => ({ path: [key], issue: t('schema_unknown_property') }));
     }),
   ).pipe(Schema.decodeTo(Schema.Struct(fields), SchemaTransformation.passthroughSupertype()));
 }
@@ -36,10 +37,10 @@ export function satisfies<T>(predicate: (value: T) => boolean, message: string) 
   return Schema.makeFilter<T>((value) => predicate(value), { message, expected: message });
 }
 
-export const Text = Schema.String.check(satisfies((value: string) => !value.includes('\0'), 'Invalid string'));
+export const Text = Schema.String.check(satisfies((value: string) => !value.includes('\0'), t('invalid_string')));
 
 export const NonBlank = Schema.String.check(
-  satisfies((value: string) => value.trim().length > 0 && !value.includes('\0'), 'Expected a non-empty string'),
+  satisfies((value: string) => value.trim().length > 0 && !value.includes('\0'), t('schema_string_required')),
 );
 
 export function IntBetween(minimum: number, maximum = Number.MAX_SAFE_INTEGER) {
@@ -86,11 +87,11 @@ export function fieldErrors(error: Schema.SchemaError) {
   return fields;
 }
 
-export const Url = Schema.String.check(satisfies((value: string) => URL.canParse(value), 'Expected a URL'));
+export const Url = Schema.String.check(satisfies((value: string) => URL.canParse(value), t('schema_url_invalid')));
 
 export const Email = Schema.String.check(
   Schema.isPattern(/^(?!\.)(?!.*\.\.)([\w'+.-]*[\w+-])@([\da-z][\da-z-]*\.)+[a-z]{2,}$/i, {
-    expected: 'an email address',
+    expected: t('schema_email_label'),
   }),
 );
 
@@ -108,7 +109,7 @@ export const IsoDateTime = Schema.String.check(
   satisfies(
     (value: string) =>
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/.test(value) && !Number.isNaN(Date.parse(value)),
-    'Expected an ISO date-time in UTC',
+    t('schema_utc_date_time_invalid'),
   ),
 );
 
@@ -121,7 +122,7 @@ export const IsoDate = Schema.String.check(
     const date = new Date(`${value}T00:00:00Z`);
 
     return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
-  }, 'Expected an ISO date'),
+  }, t('schema_iso_date_invalid')),
 );
 
 export function normalized(normalize: (value: string) => string, schema: Schema.Codec<string, string>) {

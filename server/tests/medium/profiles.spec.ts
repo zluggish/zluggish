@@ -216,3 +216,24 @@ await test('bot profiles expose their weight but clones of real riders keep it h
     assert.equal(body.profiles[0]?.weightInGrams, weight);
   }
 });
+
+await test('bot profiles expose their FTP, which the game poses avatars by, but clones of real riders keep it hidden', async (t) => {
+  const f = await mediumFixture(t);
+  const botId = 9_000_001n;
+  const ghostId = 9_000_002n;
+  const pool = new RiderPool(resolve(packageRoot(), '../assets'), '');
+  const bot = pool.profile(botId);
+  bot.ftp = 420;
+  f.profiles.synthetic.set(botId, bot);
+  f.profiles.synthetic.set(ghostId, create(PlayerProfileSchema, { id: ghostId, ftp: 300 }));
+
+  for (const [id, ftp] of [
+    [botId, 420],
+    [ghostId, 0],
+  ] as const) {
+    const response = await f.app.request(`/api/profiles?id=${id}`, { headers: f.headers(f.other) });
+    const body = await decode(response, PlayerProfilesSchema);
+
+    assert.equal(body.profiles[0]?.ftp, ftp);
+  }
+});

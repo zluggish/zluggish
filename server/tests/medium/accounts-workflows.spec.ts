@@ -7,6 +7,7 @@ import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { AccountsService } from '#src/services/auth.service';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { ImportsService } from '#src/services/profile-import.service';
 import { worldTime } from '#src/world/state';
 import { mediumBrowser, mediumFixture } from '#tests/medium/support';
@@ -203,6 +204,57 @@ await test('choosing a rider without a password fails on the rider list', async 
   assert.match(await guessed.text(), /Login failed\./);
   const profile = await client.request('/api/profiles/me');
   assert.equal(profile.status, 401);
+});
+
+await test('the rider picker advertises the workout planned today under each rider', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });
+  const f = await mediumFixture(t);
+
+  // One rider has a synced Intervals.icu workout planned today; the other has no files at all.
+  new AssetFiles().writeDurable(
+    resolve(f.profiles.folder(f.rider.player_id), 'intervals_icu_workout.json'),
+    JSON.stringify({
+      provider: 'intervals-icu',
+      event_id: 42,
+      workout_id: '3f2504e0-4f89-41d3-9a0c-1746aabcdef0',
+      name: 'Intervals Ride',
+      description: 'Two blocks at threshold',
+      start_date_local: '2026-11-13T08:00:00',
+      icu_training_load: '34',
+      filename: '3f2504e0-4f89-41d3-9a0c-1746aabcdef0.zwo',
+      synced_at: '2026-11-13T07:00:00.000Z',
+    }),
+    true,
+  );
+  const cache = resolve(f.config.storageDir, 'tp-workouts/intervalsicu');
+  mkdirSync(cache, { recursive: true });
+  new AssetFiles().writeDurable(
+    resolve(cache, '3f2504e0-4f89-41d3-9a0c-1746aabcdef0.zwo'),
+    '<workout_file><name>Stored Ride</name><sportType>bike</sportType><workout>' +
+      '<Warmup Duration="300" PowerLow="0.5" PowerHigh="0.7"/>' +
+      '<SteadyState Duration="600" Power="0.85"/>' +
+      '<Cooldown Duration="300" PowerLow="0.6" PowerHigh="0.4"/>' +
+      '</workout></workout_file>',
+    true,
+  );
+
+  const pickerResponse = await f.app.request('http://local:8080/login/');
+  const picker = await pickerResponse.text();
+  assert.match(picker, /<title>Who’s riding\?<\/title>/);
+  const props: { forms: Array<{ user?: { workout?: { name: string; minutes: number } | null } }> } = JSON.parse(
+    picker
+      .match(/<script type="application\/json" id="launcher-props">([\s\S]*?)<\/script>/)?.[1]
+      ?.replaceAll(String.raw`\u003c`, '<')
+      .replaceAll(String.raw`\u003e`, '>')
+      .replaceAll(String.raw`\u0026`, '&') ?? 'null',
+  );
+  const workouts = props.forms.map((form) => form.user?.workout);
+
+  assert.deepEqual(
+    workouts,
+    [{ name: 'Intervals Ride', minutes: 20 }, null],
+    'the rider with today workout gets the badge, the rider without files gets null',
+  );
 });
 
 await test('distinct riders launch and refresh independently; password change revokes existing tokens', async (t) => {
@@ -466,33 +518,68 @@ await test('anonymous API and asset traffic does not allocate sessions', async (
   assert.equal(f.sessions.browsers.size, 1);
 });
 
-await test('session capacity evicts anonymous sessions and preserves authenticated browsers', async (t) => {
+await test('session capacity preserves pending sign-ins and authenticated browsers', async (t) => {
   const f = await mediumFixture(t);
-  const browser = await mediumBrowser(f);
-  const identity = `${f.rider.player_id}:${f.rider.auth_version}`;
-  const signedIn = [...f.sessions.browsers].find(([, session]) => session.identity === identity);
-  assert.ok(signedIn);
+  const signedIn = await mediumBrowser(f);
+  const pending = browser(f.app);
+  await pending.picker();
   const anonymous = f.sessions.open();
 
-  // Populate the limit without 10,000 HTTP requests or repeated expiry scans.
-  for (let index = f.sessions.browsers.size; index < 10_000; index++) {
-    f.sessions.browsers.set(`anonymous-${index}`, { ...anonymous.session });
-  }
-  anonymous.session.touched = 0;
-  // Keep the deliberately oldest entry within the session lifetime.
-  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
-
-  for (const [key, session] of f.sessions.browsers) {
-    if (key !== anonymous.id) {
-      session.touched = 1000;
-    }
+  while (f.sessions.browsers.size < 10_000) {
+    f.sessions.open();
   }
 
-  const response = await f.app.request('/login/');
-  assert.equal(response.status, 200);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await f.app.request('/login/');
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.has('Set-Cookie'), false);
+  }
   assert.equal(f.sessions.browsers.size, 10_000);
-  assert.equal(f.sessions.browsers.has(anonymous.id), false);
-  assert.equal(f.sessions.browsers.has(signedIn[0]), true);
-  const dashboard = await browser.request(`/user/${f.rider.username}/`);
+  assert.equal(f.sessions.open(anonymous.id).session, anonymous.session);
+  assert.equal(f.sessions.validCsrf(anonymous.session, anonymous.session.csrf), true);
+  const dashboard = await signedIn.request(`/user/${f.rider.username}/`);
   assert.equal(dashboard.status, 200);
+
+  const login = await pending.form('/login/', {
+    player_id: String(f.rider.player_id),
+    step: 'password',
+    password: 'test-password',
+  });
+  assert.equal(login.status, 302);
+
+  f.sessions.end(anonymous.id);
+  assert.notEqual(f.sessions.open(anonymous.id).session, anonymous.session);
+  assert.equal(f.sessions.browsers.size, 10_000);
+});
+
+await test('session expiry is bounded, refreshes last use and checks requested sessions directly', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
+  const f = await mediumFixture(t);
+  f.sessions.browsers.clear();
+  const oldest = f.sessions.open();
+  const refreshed = f.sessions.open();
+
+  for (let index = 0; index < 200; index++) {
+    f.sessions.open();
+  }
+  const last = f.sessions.open();
+  f.sessions.transition(last.session, { type: 'login', identity: f.accounts.identityOf(f.rider) });
+  t.mock.timers.setTime(2000);
+  assert.equal(f.sessions.open(refreshed.id).session, refreshed.session);
+  t.mock.timers.setTime(1000 + 86_400_000);
+  assert.equal(f.sessions.open(oldest.id).session, oldest.session);
+  t.mock.timers.setTime(1001 + 86_400_000);
+  const before = f.sessions.browsers.size;
+  const replacement = f.sessions.open(last.id);
+  assert.notEqual(replacement.session, last.session);
+  // 64 expired entries reclaimed, plus the expired requested entry, then one admitted.
+  assert.equal(f.sessions.browsers.size, before - 64);
+  assert.equal(f.sessions.browsers.get(refreshed.id), refreshed.session);
+  assert.equal(f.sessions.browsers.get(oldest.id), oldest.session);
+
+  while (f.sessions.browsers.size > 3) {
+    f.sessions.open(refreshed.id);
+  }
+  assert.equal(f.sessions.browsers.has(last.id), false);
+  assert.equal(f.sessions.open(refreshed.id).session, refreshed.session);
 });

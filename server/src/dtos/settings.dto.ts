@@ -4,8 +4,10 @@ import { Schema } from 'effect';
 
 export const overrideSchema = Schema.Struct({
   'ghosts.enabled': Schema.optional(Schema.Boolean),
+  'uploads.intervals.enabled': Schema.optional(Schema.Boolean),
   'uploads.zwift.enabled': Schema.optional(Schema.Boolean),
   'uploads.strava.method': Schema.optional(Schema.Enum(StravaMethod)),
+  'uploads.garmin.device.enabled': Schema.optional(Schema.Boolean),
   'devices.zwiftClick.enabled': Schema.optional(Schema.Boolean),
   'workouts.trainingpeaks.bridgeFolder': Schema.optional(Schema.String),
 });

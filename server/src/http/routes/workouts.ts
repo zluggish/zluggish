@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { WorkoutsService } from '#src/services/workout.service';
 import { Effect } from 'effect';
 import { effectRoutes } from '#src/http/effect';
@@ -91,6 +92,6 @@ export function workoutRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     }),
   );
   app.get('/api/assetcms/*', (c) =>
-    c.json(c.req.path.endsWith('/partner_name_map.json/download') ? { intervalsicu: 'Intervals.icu' } : null),
+    c.json(c.req.path.endsWith('/partner_name_map.json/download') ? { intervalsicu: t('intervals_icu') } : null),
   );
 }

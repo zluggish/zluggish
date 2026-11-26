@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Schema } from 'effect';
 import type { RepositoryContext as Runtime } from '#src/context';
 import { ActivityType, Client, Events, GatewayIntentBits, WebhookClient } from 'discord.js';
@@ -47,7 +48,7 @@ export class DiscordRepository {
             activities: count
               ? [
                   {
-                    name: `${count} rider${count === 1 ? '' : 's'} online`,
+                    name: t('rider_online', { value1: count, value2: count === 1 ? '' : 's' }),
                     type: ActivityType.Playing,
                   },
                 ]

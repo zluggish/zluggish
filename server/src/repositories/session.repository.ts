@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 const agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 
 export interface SessionRequest {
@@ -63,7 +64,7 @@ export class CookieSession {
 
     if (response.status >= 300 && response.status < 400 && location) {
       if (redirects <= 0) {
-        throw new Error('Too many redirects');
+        throw new Error(t('too_many_redirects'));
       }
       const next = new URL(location, target).href;
 

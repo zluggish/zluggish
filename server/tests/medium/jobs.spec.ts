@@ -7,7 +7,7 @@ import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { JobsRepository } from '#src/repositories/jobs.repository';
 import { JobsService } from '#src/services/jobs.service';
 import { UploadsService } from '#src/services/uploads.service';
-import { binary, mediumFixture } from '#tests/medium/support';
+import { activityFolderOf, binary, mediumFixture } from '#tests/medium/support';
 import { create } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -105,7 +105,7 @@ await test('an old handler after lease expiry and a new claim cannot commit or p
 
   // File results: an old claim's attempt-specific file is never published.
   const id = await completed(f);
-  const export_ = resolve(f.profiles.folder(f.rider.player_id), 'fit', `${id} - ride.fit`);
+  const export_ = resolve(activityFolderOf(f, id), 'activity.fit');
   await f.effects.runPromise(JobsService.use((service) => service.drain()));
   rmSync(export_);
   const repository = f.accounts.repositories.jobsRepository;
@@ -141,7 +141,7 @@ await test('a delivery lease expiry does not authorize a second send', async (t)
   const jobs = jobRunner(f);
   f.effects.runSync(UploadsService.use((uploads) => uploads.registerJobs(jobs)));
 
-  const first = repository.claim('delivery', 50);
+  const first = repository.claim('delivery', 30_000);
   assert.ok(first);
   const sending = Effect.runPromise(jobs.run(first));
 
@@ -154,9 +154,7 @@ await test('a delivery lease expiry does not authorize a second send', async (t)
   );
 
   // The lease expires during the request: a replacement claim must not send again.
-  await new Promise((resolve) => {
-    setTimeout(resolve, 60);
-  });
+  f.accounts.db.prepare('UPDATE job SET lease_expires_at = 0 WHERE id = ?').run(first.id);
   const second = repository.claim('delivery', 30_000);
   assert.ok(second);
   await Effect.runPromise(jobs.run(second));

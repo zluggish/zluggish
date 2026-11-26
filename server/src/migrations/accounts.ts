@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Schema } from 'effect';
 import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
@@ -35,7 +36,7 @@ export function migrateAccounts(storage: string, soloPlayer?: number) {
       ).version;
 
       if (found > SCHEMA_VERSION || found < 3) {
-        throw new ConfigError('Unsupported activity database version; migrate with the original release first');
+        throw new ConfigError(t('accounts_activity_database_version_unsupported'));
       }
 
       // A current account schema is already migrated. Never recreate legacy permissions.
@@ -116,18 +117,18 @@ export function migrateAccounts(storage: string, soloPlayer?: number) {
     const selected = soloPlayer ?? (users.length === 0 && profiles.length === 1 ? profiles[0] : undefined);
 
     if (orphans.length > 0 && selected === undefined) {
-      throw new ConfigError('Ambiguous legacy riders; select --solo-player ID explicitly');
+      throw new ConfigError(t('accounts_legacy_rider_ambiguous'));
     }
 
     if (selected !== undefined) {
       if (!profiles.includes(selected)) {
-        throw new ConfigError('Selected legacy profile is missing');
+        throw new ConfigError(t('accounts_legacy_profile_missing'));
       }
 
       const profile = fromBinary(PlayerProfileSchema, readFileSync(resolve(storage, String(selected), 'profile.bin')));
 
       if (!profile.firstName.trim()) {
-        throw new ConfigError('Legacy profile has no name');
+        throw new ConfigError(t('accounts_legacy_profile_name_missing'));
       }
 
       if (!ids.has(selected)) {

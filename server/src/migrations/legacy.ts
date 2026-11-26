@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { archiveSuffix, readArchivedFile } from '#src/migrations/backup-archive';
 import { Schema } from 'effect';
 import { ConfigError } from '#src/config/index';
@@ -25,14 +26,14 @@ export function legacyPlan(storage: string): LegacyPlan {
   const manifest = readManifest(storage);
 
   if (manifest?.state !== 'published') {
-    throw new ConfigError('No published storage migration; nothing to clean');
+    throw new ConfigError(t('legacy_migration_missing'));
   }
 
   const archived = manifest.backup.endsWith(archiveSuffix);
   const backupPath = archived ? manifest.backup : resolve(manifest.backup, 'backup-manifest.json');
 
   if (!existsSync(backupPath)) {
-    throw new ConfigError(`The migration backup ${manifest.backup} is missing; keep the legacy files`);
+    throw new ConfigError(t('legacy_backup_missing', { value1: manifest.backup }));
   }
 
   const backup = Schema.decodeUnknownSync(Schema.Struct({ checksums: Schema.Record(Schema.String, Schema.String) }))(
@@ -58,11 +59,11 @@ export function legacyPlan(storage: string): LegacyPlan {
 
     const consider = (path: string, imported: boolean) => {
       if (!backedUp(path)) {
-        plan.kept.push({ path, reason: 'not identical to the migration backup' });
+        plan.kept.push({ path, reason: t('legacy_backup_mismatch') });
       } else if (imported) {
         plan.removable.push({ path, bytes: statSync(path).size });
       } else {
-        plan.kept.push({ path, reason: 'not in the database' });
+        plan.kept.push({ path, reason: t('legacy_database_record_missing') });
       }
     };
 
@@ -102,7 +103,7 @@ export function legacyPlan(storage: string): LegacyPlan {
       const root = resolve(storage, folder);
 
       if (!users.has(player)) {
-        plan.kept.push({ path: root, reason: 'no account for this rider folder' });
+        plan.kept.push({ path: root, reason: t('legacy_rider_account_missing') });
         continue;
       }
 
@@ -141,7 +142,7 @@ export function legacyPlan(storage: string): LegacyPlan {
         if (merged) {
           plan.removable.push({ path: settings, bytes: statSync(settings).size });
         } else {
-          plan.kept.push({ path: settings, reason: 'rows differ from the database; resolve them first' });
+          plan.kept.push({ path: settings, reason: t('legacy_database_rows_mismatch') });
         }
       } finally {
         legacy.close();

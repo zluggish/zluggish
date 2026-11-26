@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/shared';
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import ConnectionBanner from './ConnectionBanner.svelte';
@@ -8,6 +9,7 @@
     heading = true,
     page,
     back,
+    crumb,
     version,
     zwiftVersion,
     menu,
@@ -21,6 +23,8 @@
     heading?: boolean;
     page: string;
     back?: { href: string; label: string } | undefined;
+    /** A small link above the heading to the page this one sits under, such as Apps above a setup. */
+    crumb?: { href: string; label: string } | undefined;
     version: string;
     zwiftVersion?: string | undefined;
     /** Contents of the side menu behind the bar's menu button. The game app has none. */
@@ -28,7 +32,7 @@
     /** Sits beside the logo in the bar, such as the launcher's link out to the web app. */
     aside?: Snippet | undefined;
     onhome?: (() => void) | undefined;
-    /** Follows the back link inside the page instead of loading it again. */
+    /** Follows the back link or crumb inside the page instead of loading it again. */
     onback?: (() => void) | undefined;
     children: Snippet;
   } = $props();
@@ -68,7 +72,7 @@
 <div class="bar" class:has-menu={!!menu}>
   {#if menu && !desktop}<button
       class="round"
-      aria-label="Menu"
+      aria-label={t('menu')}
       aria-haspopup="dialog"
       aria-controls="menu"
       aria-expanded={open}
@@ -77,7 +81,7 @@
   <a
     class="brand"
     href="/"
-    aria-label="Zluggish home"
+    aria-label={t('zluggish_home')}
     onclick={(event) => {
       if (onhome && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
         event.preventDefault();
@@ -86,25 +90,25 @@
     }}
   >
     <span class="logo" aria-hidden="true"></span>
-    <span class="wordmark">zluggish</span>
+    <span class="wordmark">{t('zluggish')}</span>
   </a>
   {@render aside?.()}
   {#if !menu && version}<button
       class="version"
       aria-label={`About Zluggish v${version}`}
       aria-haspopup="dialog"
-      onclick={() => about?.showModal()}>v{version}</button
+      onclick={() => about?.showModal()}>{t('v', { value1: version })}</button
     >{/if}
 </div>
 {#if menu && desktop}
-  <aside class="sidebar" aria-label="Menu">
+  <aside class="sidebar" aria-label={t('menu')}>
     <div class="sheet">
       {@render menu()}
       {#if version}<button
           class="version"
           aria-label={`About Zluggish v${version}`}
           aria-haspopup="dialog"
-          onclick={() => about?.showModal()}>v{version}</button
+          onclick={() => about?.showModal()}>{t('v', { value1: version })}</button
         >{/if}
     </div>
   </aside>
@@ -112,7 +116,7 @@
   <dialog
     id="menu"
     class="drawer"
-    aria-label="Menu"
+    aria-label={t('menu')}
     bind:this={drawer}
     onclose={() => (open = false)}
     onclick={(event) => {
@@ -120,7 +124,7 @@
     }}
   >
     <div class="sheet">
-      <button class="round close" aria-label="Close menu"
+      <button class="round close" aria-label={t('close_menu')}
         ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" /></svg></button
       >
       {@render menu()}
@@ -128,7 +132,7 @@
           class="version"
           aria-label={`About Zluggish v${version}`}
           aria-haspopup="dialog"
-          onclick={() => about?.showModal()}>v{version}</button
+          onclick={() => about?.showModal()}>{t('v', { value1: version })}</button
         >{/if}
     </div>
   </dialog>
@@ -142,24 +146,35 @@
   }}
 >
   <div class="about-content">
-    <button class="round about-close" aria-label="Close about" onclick={() => about?.close()}
+    <button class="round about-close" aria-label={t('close_about')} onclick={() => about?.close()}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" /></svg></button
     >
-    <h2 id="about-title">About Zluggish</h2>
+    <h2 id="about-title">{t('about_zluggish')}</h2>
     <dl>
-      <dt>Version</dt>
+      <dt>{t('version')}</dt>
       <dd>{version}</dd>
-      <dt>Supports Zwift</dt>
-      <dd>{zwiftVersion || 'Unknown'}</dd>
+      <dt>{t('supports_zwift')}</dt>
+      <dd>{zwiftVersion || t('unknown')}</dd>
     </dl>
     <p class="star">
-      Enjoying Zluggish? Please
-      <a href="https://zluggish.com" target="_blank" rel="noopener noreferrer">star us on GitHub</a>.
+      <a href="https://github.com/zluggish/zluggish" target="_blank" rel="noopener noreferrer"
+        >{t('source_on_github')}</a
+      >
     </p>
   </div>
 </dialog>
 <main data-page={page} class:has-menu={!!menu}>
-  {#if heading || back}<header>
+  {#if heading || back || crumb}<header class:crumbed={!!crumb}>
+      {#if crumb}<a
+          class="crumb"
+          href={crumb.href}
+          onclick={(event) => {
+            if (onback && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+              event.preventDefault();
+              onback();
+            }
+          }}>{crumb.label}</a
+        >{/if}
       {#if back}<a
           class="back"
           href={back.href}
@@ -381,6 +396,40 @@
   }
   header h1 {
     margin: 0;
+  }
+  header.crumbed {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+  /* The way up stays quiet beside the heading: the back button's chevron, small, turning orange like it does. */
+  .crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: -0.3rem;
+    padding: 0.35rem 0.5rem 0.35rem 0.1rem;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .crumb::before {
+    content: '';
+    width: 1rem;
+    height: 1rem;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14.5 5.5 8 12l6.5 6.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14.5 5.5 8 12l6.5 6.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+  .crumb:hover {
+    color: var(--text);
+  }
+  .crumb:hover::before {
+    background: var(--orange);
   }
   /* A round outlined button like Zwift's header controls, holding a left chevron. */
   .bar .version {

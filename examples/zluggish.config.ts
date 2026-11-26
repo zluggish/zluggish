@@ -10,7 +10,7 @@ export default defineConfig({
     migrationBackups: 2,
     temporaryFileHours: 24,
   },
-  logging: { level: 'INFO', format: 'pretty', rideProgressIntervalSeconds: 60, metricsIntervalSeconds: 60 },
+  logging: { level: 'INFO', rideProgressIntervalSeconds: 60, metricsIntervalSeconds: 60 },
   server: { advertisedIp: '127.0.0.1' },
-  network: { host: '127.0.0.1', api: { port: 8787, useCert: false } },
+  network: { host: '127.0.0.1', api: { port: 8787, useCert: true } },
 });

@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Context, Effect, Layer } from 'effect';
 import { RuntimeContext } from '#src/context';
 import { MessageService } from '#src/services/message.service';
@@ -33,7 +34,7 @@ const make = Effect.gen(function* () {
     let pending = 0;
     let stopped = false;
 
-    const send = (content: string, sender = 'Server') => {
+    const send = (content: string, sender = t('server')) => {
       if (stopped || pending >= 100) {
         return;
       }
@@ -57,7 +58,7 @@ const make = Effect.gen(function* () {
         const current = settings();
 
         if (content === '!online') {
-          send(`${context.world.online.size} riders online`);
+          send(t('riders_online', { value1: context.world.online.size }));
         } else if (content === '!ping') {
           send('pong');
         } else if (content === '!help' && current.helpMessage) {
@@ -76,7 +77,7 @@ const make = Effect.gen(function* () {
           return;
         }
         const profile = context.profiles.get(Number(id));
-        send(joining ? 'Riding' : 'Leaving', `${profile.firstName} ${profile.lastName}`);
+        send(joining ? t('riding') : t('leaving'), `${profile.firstName} ${profile.lastName}`);
       },
 
       close: async () => {

@@ -8,6 +8,9 @@ import { runtimeFixture } from '#tests/support/runtime';
 import { createWebApp } from '#src/http/web-app';
 import type { User } from '#src/repositories/accounts.repository';
 import type { JsonValue } from '#src/dtos/management.dto';
+import { activityFolder } from '#src/activity-storage';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export async function mediumFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true) {
   const network = t.mock.method(globalThis, 'fetch', () => {
@@ -16,6 +19,16 @@ export async function mediumFixture(t: TestContext, publicUrl: string | null = n
 
   t.after(() => assert.equal(network.mock.callCount(), 0, 'External providers must be explicitly mocked'));
   const f = runtimeFixture(t, publicUrl, webEnabled);
+  // Runtime lifecycle tests must not schedule real release checks against external providers.
+  const empty = { apkmirror: null, apkpure: null, errors: { apkmirror: null, apkpure: null } };
+  writeFileSync(
+    resolve(f.config.storageDir, 'app-releases.json'),
+    JSON.stringify({
+      enabled: false,
+      checkedAt: null,
+      apps: { zwift: empty, companion: empty },
+    }),
+  );
   const rider = await f.accounts.create('Medium Rider', 'test-password');
   const other = await f.accounts.create('Other Rider', 'test-password');
   const headers = (user = rider) => ({ Authorization: `Bearer ${f.sessions.tokens(user, f.tokens).access_token}` });
@@ -127,4 +140,15 @@ export function mediumWeb(f: ReturnType<typeof runtimeFixture>, rider: User) {
   };
 
   return { app, request };
+}
+
+/** The folder of an activity in the new layout; assigns its name like the server does. */
+export function activityFolderOf(
+  f: Pick<ReturnType<typeof runtimeFixture>, 'accounts' | 'profiles'>,
+  activity: number | bigint,
+) {
+  const stored = f.accounts.repositories.activitiesRepository.storageDirectory(activity);
+  assert.ok(stored, `activity ${activity} exists`);
+
+  return activityFolder(f.profiles.folder(stored.player), stored.directory);
 }

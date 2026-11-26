@@ -1,14 +1,18 @@
+import { t } from '#src/i18n/index';
 import { BackupService } from '#src/services/backup.service';
 import { TlsService } from '#src/services/tls.service';
+import { AppReleasesService } from '#src/services/app-releases.service';
 import { CompanionService, companionUploadLimit } from '#src/services/companion.service';
 import { linuxSetupScript, macosSetupScript, setupFileName, windowsSetupScript } from '#src/http/client-setup';
 import { AccountsService } from '#src/services/auth.service';
 import { ManagementService } from '#src/services/management.service';
 import { WebSessionsService } from '#src/services/web-session.service';
 import { ActivitiesService } from '#src/services/activities.service';
+import { RideCompletionService } from '#src/services/ride-completion.service';
 import { DurabilityService } from '#src/services/durability.service';
 import { FilesService } from '#src/services/files.service';
 import { effectRoutes } from '#src/http/effect';
+import { ZwiftAndroidService, zwiftAndroidChunkSize } from '#src/services/zwift-android.service';
 import { fileResponse } from '#src/http/file-response';
 import { RecordsService } from '#src/services/records.service';
 import { ZwiftUpdatesService } from '#src/services/zwift-updates.service';
@@ -24,7 +28,7 @@ import { fieldErrors, NumberFromInput, satisfies, Strict } from '#src/schema';
 import { ApplicationError, UnreadableCredentialsError } from '#src/errors';
 import { credentials, password, newUser } from '#src/dtos/management.dto';
 import type { HttpRuntime } from '#src/http/runtime';
-import { climbFacts, readClimbSegments, readClimbs } from '#src/http/climbs';
+import { climbDetails, climbFacts, readClimbProfiles, readClimbSegments, readClimbs } from '#src/http/climbs';
 import { peerAddress } from '#src/http/routes/accounts';
 import { WORLD_TIME_EPOCH_MS } from '#src/world/state';
 import { isIP } from 'node:net';
@@ -77,8 +81,21 @@ export function createWebApp(runtime: HttpRuntime) {
   /** The Companion app upload: raw APK bytes, streamed to disk. */
   const companionUpload = (c: Context<WebEnv>) => c.req.method === 'PUT' && c.req.path === '/api/manage/companion/app';
 
+  /** One piece of a Zwift for Android upload: raw bytes, streamed to disk and counted there. */
+  const androidChunk = (c: Context<WebEnv>) =>
+    c.req.method === 'PUT' && /^\/api\/manage\/zwift-android\/uploads\/[^/]+$/.test(c.req.path);
+
   app.use('*', async (c: Context<WebEnv, string>, next: Next) => {
     const upload = c.req.method === 'POST' && c.req.path === '/api/me/import';
+
+    if (androidChunk(c)) {
+      if (Number(c.req.header('Content-Length')) > zwiftAndroidChunkSize) {
+        return c.json({ message: t('web_app_upload_chunk_size_limit') }, 413);
+      }
+
+      // The service counts bytes while writing to disk, including requests without Content-Length.
+      return next();
+    }
 
     if (companionUpload(c)) {
       return bodyLimit({ maxSize: companionUploadLimit })(c, next);
@@ -123,20 +140,20 @@ export function createWebApp(runtime: HttpRuntime) {
 
     if (!['GET', 'HEAD'].includes(c.req.method)) {
       if (!sameOrigin(c.req.header('Origin'), c.req.url, publicUrl) || c.req.header('X-CSRF-Token') !== c.get('csrf')) {
-        throw new ApplicationError({ status: 403, message: 'Reload the page and retry.' });
+        throw new ApplicationError({ status: 403, message: t('web_app_reload_required') });
       }
 
       if (
         !(c.req.method === 'POST' && c.req.path === '/api/me/import'
           ? c.req.header('Content-Type')?.startsWith('multipart/form-data;')
-          : companionUpload(c)
+          : companionUpload(c) || androidChunk(c)
             ? c.req.header('Content-Type') === 'application/octet-stream'
             : c.req.method === 'PUT' &&
                 (c.req.path === '/api/me/avatar' || /^\/api\/manage\/users\/\d+\/avatar$/.test(c.req.path))
               ? c.req.header('Content-Type') === 'image/jpeg'
               : c.req.header('Content-Type')?.startsWith('application/json'))
       ) {
-        throw new ApplicationError({ status: 400, message: 'JSON required.' });
+        throw new ApplicationError({ status: 400, message: t('json_required') });
       }
     }
 
@@ -155,7 +172,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const limit = attempts.get(key) ?? { count: 0, until: now + 60_000 };
 
       if (limit.count >= 10 || attempts.size >= 10_000) {
-        return c.json({ message: 'Try again shortly.' }, 429);
+        return c.json({ message: t('web_app_retry_later') }, 429);
       }
       limit.count++;
       attempts.set(key, limit);
@@ -228,7 +245,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const user = yield* managementService.signIn(input.username, input.password);
 
       if (!live()) {
-        throw new ApplicationError({ status: 401, message: 'Session changed.' });
+        throw new ApplicationError({ status: 401, message: t('session_changed') });
       }
 
       return login(c, user);
@@ -313,7 +330,7 @@ export function createWebApp(runtime: HttpRuntime) {
       );
 
       if (!(yield* filesService.isFile(path))) {
-        throw new ApplicationError({ status: 404, message: 'No photo.' });
+        throw new ApplicationError({ status: 404, message: t('photo_missing') });
       }
 
       return yield* fileResponse(c, path, { 'Content-Type': 'image/jpeg' });
@@ -374,42 +391,38 @@ export function createWebApp(runtime: HttpRuntime) {
     }),
   );
 
-  /** The certificate that the server presents, without its key. While a server still uses the shared certificate,
-  riders can install that one too, with a warning, so that new computers connect until the administrator rotates it.
-  */
-  const installable = Effect.fn('web.tls.installable')(function* (c: Context<WebEnv>, download: string) {
+  /** The certificate that the server presents, without its key. */
+  const installable = Effect.fn('web.tls.installable')(function* (c: Context<WebEnv>) {
     const tls = yield* TlsService;
-    const user = yield* sessions.require(c.get('sessionId'));
+    yield* sessions.require(c.get('sessionId'));
     const status = yield* tls.status();
     const material = tls.material();
 
-    if (status.mode === 'disabled' || !status.certificate || !material) {
-      throw new ApplicationError({ status: 409, message: 'This server has no certificate to install.' });
+    if (status.mode === 'legacy') {
+      throw new ApplicationError({
+        status: 409,
+        message: t('web_app_shared_certificate_blocked'),
+      });
     }
 
-    // A configured file may hold a chain, and the shared one holds its key: take the first certificate only.
+    if (!status.certificate || !material) {
+      throw new ApplicationError({ status: 409, message: t('web_app_certificate_unavailable') });
+    }
+
+    // A configured file may hold a chain. Take the first certificate only.
     const certificate = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/.exec(material.cert)?.[0];
 
     if (!certificate) {
-      throw new ApplicationError({ status: 409, message: 'This server has no certificate to install.' });
-    }
-    const pem = certificate + '\n';
-
-    if (status.mode === 'legacy') {
-      runtime.world.lifecycle.log.warn(
-        'tls.legacy_setup_download',
-        'A rider downloaded setup for the shared Zwift certificate, whose private key is public. Generate a server certificate under Manage → Server.',
-        { player: user.player_id, download },
-      );
+      throw new ApplicationError({ status: 409, message: t('web_app_certificate_unavailable') });
     }
 
-    return { pem, certificate: status.certificate };
+    return { pem: certificate + '\n', certificate: status.certificate };
   });
 
   appRoutes.get('/api/tls/certificate', (c) =>
     Effect.gen(function* () {
       const der = c.req.query('format') === 'der';
-      const { pem, certificate } = yield* installable(c, der ? 'certificate.cer' : 'certificate.crt');
+      const { pem, certificate } = yield* installable(c);
 
       const body = der ? Buffer.from(pem.replaceAll(/-----[A-Z ]+-----|\s/g, ''), 'base64') : Buffer.from(pem, 'utf8');
 
@@ -420,9 +433,125 @@ export function createWebApp(runtime: HttpRuntime) {
     }),
   );
 
+  appRoutes.get('/api/install/android', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'));
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.status()));
+    }),
+  );
+
+  appRoutes.get('/api/install/android/app', (c) =>
+    Effect.gen(function* () {
+      const user = yield* sessions.require(c.get('sessionId'));
+      const android = yield* ZwiftAndroidService;
+      const app = yield* Effect.promise(() => android.download());
+
+      if (!app) {
+        throw new ApplicationError({ status: 404, message: t('web_app_zwift_android_unavailable') });
+      }
+      runtime.world.lifecycle.log.info('android.download', 'A rider downloaded Zwift for Zluggish', {
+        player: user.player_id,
+      });
+
+      return yield* fileResponse(c, app.path, {
+        'Content-Type': 'application/vnd.android.package-archive',
+        'Content-Disposition': `attachment; filename="${app.filename}"`,
+      });
+    }),
+  );
+
+  appRoutes.get('/api/manage/zwift-android', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.adminStatus()));
+    }),
+  );
+
+  appRoutes.post('/api/manage/zwift-android/uploads', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+      const input = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, size: Schema.Number }))(
+        yield* Effect.promise(() => c.req.json()),
+      );
+
+      return c.json(yield* Effect.promise(() => android.begin(c.get('sessionId'), input.name, input.size)), 201);
+    }),
+  );
+
+  appRoutes.put('/api/manage/zwift-android/uploads/:id', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+      const body = c.req.raw.body;
+      const offset = c.req.query('offset');
+
+      if (!body || offset === undefined) {
+        throw new ApplicationError({
+          status: 400,
+          message: t('web_app_upload_chunk_invalid'),
+        });
+      }
+
+      return c.json(
+        yield* Effect.promise(() => android.chunk(c.get('sessionId'), c.req.param('id'), Number(offset), body)),
+      );
+    }),
+  );
+
+  appRoutes.delete('/api/manage/zwift-android/uploads/:id', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+      yield* Effect.promise(() => android.cancel(c.get('sessionId'), c.req.param('id')));
+
+      return c.json({ cancelled: true });
+    }),
+  );
+
+  appRoutes.post('/api/manage/zwift-android/rebuild', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.rebuild()), 202);
+    }),
+  );
+
+  appRoutes.post('/api/manage/zwift-android/download', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.fetchLatest()), 202);
+    }),
+  );
+
+  appRoutes.post('/api/manage/zwift-android/stop', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.stop()));
+    }),
+  );
+
+  appRoutes.delete('/api/manage/zwift-android/app', (c) =>
+    Effect.gen(function* () {
+      yield* sessions.require(c.get('sessionId'), true);
+      const android = yield* ZwiftAndroidService;
+
+      return c.json(yield* Effect.promise(() => android.remove()));
+    }),
+  );
+
   const setupAddress = Schema.String.check(
     Schema.isMaxLength(45),
-    satisfies((value: string) => value === '' || isIP(value) !== 0, 'Expected an IP address'),
+    satisfies((value: string) => value === '' || isIP(value) !== 0, t('web_app_ip_address_invalid')),
   );
 
   const setupPlatform = Schema.Literals(['windows', 'linux', 'macos']);
@@ -431,7 +560,7 @@ export function createWebApp(runtime: HttpRuntime) {
     Effect.gen(function* () {
       const platform = Schema.decodeUnknownSync(setupPlatform)(c.req.param('platform'));
       const address = Schema.decodeUnknownSync(setupAddress)(c.req.query('address') ?? '');
-      const { pem, certificate } = yield* installable(c, `${platform} script`);
+      const { pem, certificate } = yield* installable(c);
       const script = { pem, certificate, address, version: packageVersion(), now: new Date() };
 
       if (platform === 'windows') {
@@ -463,7 +592,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const app = yield* companion.download();
 
       if (!app) {
-        throw new ApplicationError({ status: 404, message: 'There is no Companion app on this server yet.' });
+        throw new ApplicationError({ status: 404, message: t('web_app_companion_unavailable') });
       }
       runtime.world.lifecycle.log.info('companion.download', 'A rider downloaded the Zwift Companion app', {
         player: user.player_id,
@@ -502,30 +631,37 @@ export function createWebApp(runtime: HttpRuntime) {
 
       const recordsService = yield* RecordsService;
 
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
       const stats = new Map(
-        (yield* recordsService.climbPortalStats((yield* webSessionsService.require(c.get('sessionId'))).player_id)).map(
-          (row) => [String(row.route_hash), row],
-        ),
+        (yield* recordsService.climbPortalStats(player)).map((row) => [String(row.route_hash), row]),
       );
 
       const climbs = [];
       const segments = yield* readClimbSegments(runtime);
+
+      const profiles = yield* readClimbProfiles(runtime);
       const all = yield* readClimbs(runtime);
 
       for (const climb of all) {
         const row = stats.get(climb.road);
 
-        if (row) {
-          climbs.push({
-            road: climb.road,
-            ...climbFacts(climb.name),
-            rides: row.rides,
-            bestMs: row.best_ms,
-            strava: segments[climb.road] ?? null,
-            lastRide:
-              row.last_world_time === null ? null : new Date(row.last_world_time + WORLD_TIME_EPOCH_MS).toISOString(),
-          });
+        if (!row) {
+          continue;
         }
+
+        const facts = climbFacts(climb.name);
+
+        climbs.push({
+          road: climb.road,
+          ...facts,
+          rides: row.rides,
+          bestMs: row.best_ms,
+          strava: segments[climb.road] ?? null,
+          lastRide:
+            row.last_world_time === null ? null : new Date(row.last_world_time + WORLD_TIME_EPOCH_MS).toISOString(),
+          ...climbDetails(facts, profiles[climb.road]),
+        });
       }
 
       return c.json({ climbs, total: all.length });
@@ -543,6 +679,26 @@ export function createWebApp(runtime: HttpRuntime) {
           Schema.decodeUnknownSync(activityId)(c.req.param('id')),
         ),
       );
+    }),
+  );
+  appRoutes.delete('/api/me/activities/:id', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const activitiesService = yield* ActivitiesService;
+
+      const rideCompletionService = yield* RideCompletionService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+      const id = BigInt(Schema.decodeUnknownSync(activityId)(c.req.param('id')));
+
+      // The game saves the ride again when it ends; deleting it underneath would lose the whole ride.
+      if (yield* rideCompletionService.riding(player, id)) {
+        throw new ApplicationError({ status: 409, message: t('activity_delete_in_progress') });
+      }
+      yield* activitiesService.deleteActivity(id, player);
+
+      return c.json({ deleted: true });
     }),
   );
   appRoutes.get('/api/me/activities/:id/fit', (c) =>
@@ -626,7 +782,7 @@ export function createWebApp(runtime: HttpRuntime) {
       );
 
       if (!user) {
-        throw new ApplicationError({ status: 404, message: 'User not found.' });
+        throw new ApplicationError({ status: 404, message: t('user_not_found_error') });
       }
 
       return c.json(yield* managementService.publicUser(user));
@@ -697,7 +853,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const path = yield* managementService.avatarPath(id);
 
       if (!accounts.get(id) || !(yield* filesService.isFile(path))) {
-        throw new ApplicationError({ status: 404, message: 'No photo.' });
+        throw new ApplicationError({ status: 404, message: t('photo_missing') });
       }
 
       return yield* fileResponse(c, path, { 'Content-Type': 'image/jpeg' });
@@ -818,7 +974,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const backup = yield* service.status(operation);
 
       if (!backup) {
-        throw new ApplicationError({ status: 404, message: 'Backup request not found.' });
+        throw new ApplicationError({ status: 404, message: t('backup_request_not_found') });
       }
 
       return c.json(backup);
@@ -851,10 +1007,51 @@ export function createWebApp(runtime: HttpRuntime) {
       const body = c.req.raw.body;
 
       if (!body) {
-        throw new ApplicationError({ status: 400, message: 'Choose an APK file to upload.' });
+        throw new ApplicationError({ status: 400, message: t('web_app_upload_file_required') });
       }
 
-      return c.json(yield* companion.upload(body), 202);
+      // The file's name, shown beside the saved upload. Only the last path segment, as browsers send.
+      const name = (c.req.query('name') ?? '').split(/[\\/]/).pop()?.slice(0, 255) || 'upload';
+
+      return c.json(yield* companion.upload(body, name), 202);
+    }),
+  );
+  appRoutes.post('/api/manage/companion/download', (c) =>
+    Effect.gen(function* () {
+      const companion = yield* CompanionService;
+
+      return c.json(yield* companion.fetchLatest(), 202);
+    }),
+  );
+  appRoutes.get('/api/manage/app-releases', (c) =>
+    Effect.gen(function* () {
+      const releases = yield* AppReleasesService;
+
+      return c.json(yield* releases.status());
+    }),
+  );
+  appRoutes.post('/api/manage/app-releases/check', (c) =>
+    Effect.gen(function* () {
+      const releases = yield* AppReleasesService;
+
+      return c.json(yield* releases.check());
+    }),
+  );
+  appRoutes.put('/api/manage/app-releases/settings', (c) =>
+    Effect.gen(function* () {
+      const input = Schema.decodeUnknownSync(Strict({ enabled: Schema.Boolean }))(
+        yield* Effect.promise(() => c.req.json()),
+      );
+      const releases = yield* AppReleasesService;
+
+      return c.json(yield* releases.setEnabled(input.enabled));
+    }),
+  );
+  appRoutes.post('/api/manage/companion/rebuild', (c) =>
+    Effect.gen(function* () {
+      const companion = yield* CompanionService;
+
+      return c.json(yield* companion.rebuild(), 202);
     }),
   );
   appRoutes.delete('/api/manage/companion/app', (c) =>
@@ -911,7 +1108,7 @@ export function createWebApp(runtime: HttpRuntime) {
                 await runtime.world.simulation?.reload();
               },
               bots: (user, command) =>
-                runtime.world.simulation?.command(BigInt(user), command, true) ?? 'Bots are not running.',
+                runtime.world.simulation?.command(BigInt(user), command, true) ?? t('bots_unavailable'),
             },
           ),
         );
@@ -984,6 +1181,7 @@ export function createWebApp(runtime: HttpRuntime) {
     '/setup',
     '/sign-in',
     '/settings',
+    '/profile',
     '/profile/:id',
     '/integrations',
     '/profile-data',
@@ -1008,13 +1206,13 @@ export function createWebApp(runtime: HttpRuntime) {
 
         return (yield* filesService.exists(index))
           ? c.html(yield* filesService.readText(index))
-          : c.text('Build the web app before starting.', 503);
+          : c.text(t('web_app_web_build_missing'), 503);
       }),
     );
   }
   app.onError((error, c) => {
     if (Schema.isSchemaError(error)) {
-      return c.json({ message: 'Check the form fields.', fieldErrors: fieldErrors(error) }, 400);
+      return c.json({ message: t('web_app_validation_error'), fieldErrors: fieldErrors(error) }, 400);
     }
 
     if (error instanceof HTTPException) {
@@ -1034,7 +1232,7 @@ export function createWebApp(runtime: HttpRuntime) {
         error,
       });
 
-      return c.json({ message: 'The saved credentials cannot be read. Enter them again in Integrations.' }, 409);
+      return c.json({ message: t('web_app_credentials_unreadable') }, 409);
     }
 
     runtime.world.lifecycle.log.error('web.failed', 'Web request failed unexpectedly', {
@@ -1043,7 +1241,7 @@ export function createWebApp(runtime: HttpRuntime) {
       error: error instanceof Error ? error : String(error),
     });
 
-    return c.json({ message: 'The server hit an unexpected error. The server log has the details.' }, 500);
+    return c.json({ message: t('web_app_unexpected_error') }, 500);
   });
 
   return app;

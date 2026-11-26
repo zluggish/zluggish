@@ -1,87 +1,108 @@
 ---
 sidebar_position: 7
-description: Build, check and test Zluggish from source.
+description: Run Zluggish from source, find the code you need and reproduce CI checks locally.
 ---
 
 # Development
 
-## Set up
+## Run locally
 
-1. Install [mise](https://mise.jdx.dev/getting-started.html).
-2. From the repository root, run:
+Install [mise](https://mise.jdx.dev/getting-started.html). Run the setup commands from the repository root. The project uses Node.js 26.13 or later in the 26.x series and pnpm 12.18.0.
 
-   ```sh
-   cd server
-   mise install
-   mise run install
-   mise run check
-   ```
+```sh
+mise install
+mise run install
+mise run dev
+```
 
-`mise run check` builds, lints, typechecks and tests the server and its CLI. It also checks the formatting.
+Open [http://localhost:5173](http://localhost:5173). Copy the setup key from the backend logs and create a local administrator. The development config uses `storage/dev/` and listens on loopback. Vite reloads the management UI and proxies `/api` and `/health` to the backend on port 8080. The backend restarts when its source changes. Rerun `mise run dev:assets` after changing launcher assets.
 
-## Individual checks
+For a game client on another device, use the [server and client setup guides](install/server.md). Check the [default game ports](reference/ports.md) before testing with a client. The local development config uses alternate ports for the game HTTPS listener (8787) and CDN (8788).
 
-From `server/`, run one of these commands:
+## How the pieces fit together
 
-| Command           | Result                |
-| ----------------- | --------------------- |
-| `pnpm lint`       | Lint the code.        |
-| `pnpm typecheck`  | Typecheck the code.   |
-| `pnpm test`       | Run the tests.        |
-| `pnpm format`     | Check the formatting. |
-| `pnpm lint:fix`   | Fix lint problems.    |
-| `pnpm format:fix` | Fix the formatting.   |
+| Component                                                                        | Role                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Server](https://github.com/zluggish/zluggish/tree/main/server/src)              | The Node.js process starts the game HTTPS API and launcher, the management HTTP API, the game CDN and the TCP and UDP ride listeners. Hono handles HTTP. The ride listeners feed player updates into the world simulation. |
+| [Game launcher](https://github.com/zluggish/zluggish/tree/main/web/src/game)     | Svelte pages served inside the desktop Zwift client. The backend renders the launcher. Riders sign in and choose a world before starting the game.                                                                         |
+| [Management web app](https://github.com/zluggish/zluggish/tree/main/web/src/app) | A Svelte app for browsers. It calls the management API to show activities, manage accounts and publish patched Android apps. In a production build, the backend serves the app files as well.                              |
+| [Admin CLI](https://github.com/zluggish/zluggish/tree/main/server/src/cli)       | Reads and writes configuration and storage directly. See the [CLI reference](reference/cli/index.md) for commands that need the server stopped.                                                                            |
+| [Public sites](https://github.com/zluggish/zluggish/tree/main/sites)             | Docusaurus builds this documentation from `docs/`. Vite builds the landing site. Both are deployed separately through Cloudflare Workers Builds.                                                                           |
 
-Linting and formatting do not include the generated protobuf codecs, the bundled assets and the vendored lint rules.
+The web and game APIs share Effect services under `server/src/services/`. The services use repositories under `server/src/repositories/` to read and write SQLite and files in the storage directory. For example, [ride completion](https://github.com/zluggish/zluggish/blob/main/server/src/services/ride-completion.service.ts) saves the activity, which the management UI reads through its own API. Optional upload integrations deliver the saved activity to external services.
 
-## Web app
+For backend changes, start with `server/src/http/app.ts` for the game API, `server/src/http/web-app.ts` for the management API or `server/src/node/network/` for ride traffic. Effect layers are wired in `server/src/layers.ts` and scoped in `server/src/runtime.ts`. Database transactions are synchronous. See the [database notes](https://github.com/zluggish/zluggish/blob/main/server/src/db/README.md).
 
-- Build the web app with `pnpm --dir web build`.
-- Typecheck it with `pnpm --dir web check`.
+## Run CI checks
 
-## Screenshots
+GitHub starts the [test workflow](https://github.com/zluggish/zluggish/blob/main/.github/workflows/tests.yml) when you open or push to a pull request and on pushes to `main`. Check the **Checks** tab of the pull request for results. The server job runs on Linux, Windows and macOS. The lint, translation, container and browser jobs run on Linux. The PR title has its own check. The public-site workflows run when their inputs change.
 
-To make the screenshots in `media/screenshots/` again, run `pnpm --dir server screenshots`. The command uses fictional riders on a temporary server.
+Run the main checks from the repository root.
 
-## Documentation
+```sh
+mise run check
+```
 
-This site is in [`docs/`](https://github.com/zluggish/zluggish/tree/main/docs). The Docusaurus configuration is in [`sites/docs.zluggish.com/`](https://github.com/zluggish/zluggish/tree/main/sites/docs.zluggish.com).
+This builds the server and web app, runs server and CLI tests, lints the source, typechecks the server and web app, checks formatting and validates translations. Use the table to rerun a specific check.
 
-1. Install the dependencies from the repository root:
+| Command                                      | What it does                                                   |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| `mise run test`                              | Build and run the unit and medium suites.                      |
+| `mise exec -- pnpm --dir server test:unit`   | Run only the unit suite.                                       |
+| `mise exec -- pnpm --dir server test:medium` | Build the web app and run the medium suite.                    |
+| `mise run lint` / `mise run lint:fix`        | Check or fix lint issues.                                      |
+| `mise run typecheck`                         | Typecheck the server, CLI and web app.                         |
+| `mise run format` / `mise run format-fix`    | Check or fix formatting.                                       |
+| `mise run i18n:check` / `mise run i18n:test` | Validate the message catalog and test the translation tooling. |
 
-   ```sh
-   pnpm install --frozen-lockfile --filter @zluggish/docs...
-   ```
+### Protocol files and launcher
 
-2. Start the local site:
+If you change `server/proto/`, run the generator and commit the updated files in `server/src/protocol/generated/`. CI reruns it and checks for changes.
 
-   ```sh
-   pnpm --filter @zluggish/docs start
-   ```
+```sh
+mise run server-codegen
+git status --short --untracked-files=all -- server/src/protocol/generated
+```
 
-3. Build the site:
+On Linux, install Chromium and its system dependencies before running the launcher tests.
 
-   ```sh
-   pnpm --filter @zluggish/docs build
-   ```
+```sh
+mise exec -- pnpm --dir server exec playwright install --with-deps chromium
+mise exec -- pnpm --dir server test:browser
+```
 
-Write new text in [ASD-STE100](https://www.asd-ste100.org/) Simplified Technical English. Give one action in each step.
+On macOS or Windows, omit `--with-deps`. To regenerate the project screenshots with fictional riders, run `mise exec -- pnpm --dir server screenshots` after installing Chromium.
 
-## Server architecture
+### Container smoke tests
 
-The server uses [Effect](https://effect.website/):
+Run these commands from the root with Docker Buildx. They test the image for your machine's architecture. CI tests both `linux/amd64` and `linux/arm64`.
 
-- Each service in `server/src/services` is a `Context.Service` with a `layer`. `server/src/layers.ts` builds every layer from the runtime context, in tiers: a service can use only the services in the tiers below it.
-- The runtime (`server/src/runtime.ts`) acquires its resources into an Effect scope. Closing the runtime releases them in reverse order.
-- HTTP handlers are Effects. Register them with `effectRoutes` from `server/src/http/effect.ts`. A handler failure goes to the Hono error handler unchanged.
-- Code that is not an Effect, such as socket callbacks and the world loop, runs effects with `runtime.effects.runSync` or `runtime.effects.runPromise`.
-- Errors are `Schema.TaggedError` classes in `server/src/errors.ts`. Validation uses Effect Schema; the shared helpers are in `server/src/schema.ts`.
-- Repositories and database transactions stay synchronous. See the [database notes](https://github.com/zluggish/zluggish/blob/main/server/src/db/README.md).
+```sh
+docker buildx build -f server/Dockerfile --target server --load -t zluggish:test .
+docker run --rm -i --read-only --tmpfs /tmp --tmpfs /usr/src/app/zluggish/storage --entrypoint node zluggish:test --input-type=module < server/scripts/smoke-container.mjs
+docker run --rm -i --read-only --tmpfs /tmp --entrypoint node zluggish:test --input-type=module < server/scripts/smoke-storage.mjs
+```
 
-In tests, the fixture gives `f.effects`, the application runtime. Get a service with `f.effects.runSync(Service)`, or run one call with `f.effects.runSync(Service.use((service) => service.method()))`.
+### Documentation and landing site
 
-## Lint rules
+After installing dependencies, start a local docs preview from the repository root.
 
-ESLint uses TypeScript-aware correctness rules, import checks and Unicorn conventions. The first configuration came from the `server/eslint.config.mjs` file of `immich-app/immich`. The vendored Oxlint rules record their source revision in [UPSTREAM.md](https://github.com/zluggish/zluggish/blob/main/server/tools/oxlint/anti-slop/UPSTREAM.md).
+```sh
+mise exec -- pnpm --filter @zluggish/docs start
+```
 
-The shared ESLint, Oxlint, Prettier and mise configuration is in `server/`.
+Stop the preview before running the GitHub Actions build and packaging checks locally.
+
+```sh
+mise exec -- pnpm --filter @zluggish/docs typecheck
+mise exec -- pnpm --filter @zluggish/docs deploy:dry-run
+mise exec -- pnpm --filter @zluggish/landing deploy:dry-run
+```
+
+The dry runs build the sites and validate their Cloudflare packages without deploying.
+
+## Edit interface text
+
+English messages live in `i18n/en.json`. Reuse a key when its meaning and wording match. For new messages, add a flat `snake_case` key and use the existing `t()` helper. Keep full sentences together and supply values for any placeholders. For example, `t('key', { value1: count })` fills `{value1}` in the catalog.
+
+Run `mise run i18n:check` to catch missing or unused keys, mismatched placeholders and hardcoded UI text. Keep protocol values, SQL and script syntax literal. When the checker flags a literal that must stay, record the exact value, file and reason in `scripts/i18n-exemptions.json`.

@@ -1,47 +1,34 @@
 ---
 sidebar_position: 2
-description: Set up Zwift in Wine, Lutris, Bottles or Steam on Linux to ride on your Zluggish server.
+description: Connect Zwift for Windows running under Wine or Proton to Zluggish.
 ---
 
 # Linux
 
-This procedure is for Zwift for Windows in Wine, Lutris, Bottles or Steam (Proton). It makes Linux and Zwift trust the [server certificate](../certificate.md) and redirects Zwift to Zluggish.
+Zluggish supports running the Windows game client on Linux through Wine or Proton.
 
-## Set up the client
+1. Install Zwift for Windows in Wine, Lutris, Bottles or Steam with Proton. Open Zwift once to finish any updates, then close it before signing in.
+2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → Linux**.
+3. Select **Download setup script**. Use the script from the specific Zluggish server you want to connect to, since each server has a unique certificate.
+4. In a terminal, run the command shown on the setup page. Enter your password when `sudo` prompts you.
+5. Restart the Wine or Proton session, then open Zwift and sign in through the Zluggish launcher.
 
-1. Install Zwift, if it is not installed.
-2. Sign in to the Zluggish web app and select **Apps** in the menu.
-3. On a Linux computer, select **Set up Linux**. On another device, select **Other systems** under **Zwift**, then **Linux**. Check the IP address of the server, then select **Download setup script**. The address is `server.advertisedIp` from the server configuration.
+The script adds the Zluggish certificate to the system trust store and to `data/cacert.pem` for the Zwift installations it finds. By default, the script also updates DNS lookup settings in `/etc/hosts` with the Zluggish IP address.
 
-   ![Linux setup in three steps: download the setup script, run it and start Zwift, with the certificate fingerprints below](../../../media/screenshots/webapp-install-linux.png)
+If you don't want the script to change DNS settings, turn off **Patch hosts file** under **Advanced settings** before downloading the script. You can then manually follow the instructions on the [DNS settings page](dns-settings.md).
 
-4. Close Zwift. In a terminal, run the script:
+## Updating
 
-   ```sh
-   sh ~/Downloads/zluggish-zwift-*.sh
-   ```
+If Zwift updates, it may lose its connection to Zluggish. In that case, download the setup script from your server and run it again. Do the same when the [server certificate changes](../certificate.md).
 
-   The script asks for your password through `sudo`. It:
-   - adds the certificate to the system trust store,
-   - adds the certificate to `data/cacert.pem` of each Zwift that it finds in a Wine, Lutris, Bottles or Steam prefix, and removes the old shared certificate there,
-   - points the Zwift host names at the server in `/etc/hosts`.
+## If the script cannot find Zwift
 
-5. If the script does not find Zwift, run it again with the Zwift folder:
+Run the script with your Zwift installation directory. Replace both paths in the command with your own.
 
-   ```sh
-   sh ~/Downloads/zluggish-zwift-*.sh "$HOME/.wine/drive_c/Program Files (x86)/Zwift"
-   ```
+```sh
+sh ~/Downloads/zluggish-zwift-XXXXXXXX.sh "$HOME/.wine/drive_c/Program Files (x86)/Zwift"
+```
 
-6. If the Wine prefix is still running, stop it with `wineserver -k`.
+## Uninstall
 
-Run the script again after a Zwift update, and after the administrator rotates the certificate.
-
-The script saves the original files as `cacert.pem.zluggish-backup` and `/etc/hosts.zluggish-backup`.
-
-## Check the certificate
-
-The **Install** page shows the thumbprint and the SHA-256 fingerprint of the certificate. The script stops if its certificate does not match its thumbprint.
-
-## Next step
-
-Start Zwift, select your user and sign in. To stop using Zluggish, see [Uninstall](../../maintenance/uninstall.md).
+To remove the Zluggish patches, follow the [uninstall instructions](../../maintenance/uninstall.md).

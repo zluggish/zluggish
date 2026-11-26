@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: Make, check, show and migrate the operator configuration.
+description: Make, check, show and migrate the configuration file.
 ---
 
 # Configuration commands
@@ -43,6 +43,5 @@ Back up the complete storage directory before a migration.
 - If the migration stops, run the same command with the same destination again.
 - Keep `.config-migration.json`.
 - Do not edit a config that the migration has not completed.
-- JSONC-only installations must make the operator settings again manually.
 
 See also [Migrate from zwift-offline](../../maintenance/migrating.md).

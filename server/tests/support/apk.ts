@@ -17,7 +17,13 @@ export function u32(value: number) {
 }
 
 /** A minimal binary AndroidManifest.xml, as aapt2 writes one: a UTF-16 string pool, resource map and elements. */
-export function binaryManifest(packageName: string, versionName: string, versionCode: number, minSdk: number) {
+export function binaryManifest(
+  packageName: string,
+  versionName: string,
+  versionCode: number,
+  minSdk: number,
+  split?: string,
+) {
   // Attribute names first, so their indices line up with the resource map.
   const strings = [
     'versionCode',
@@ -28,6 +34,7 @@ export function binaryManifest(packageName: string, versionName: string, version
     'uses-sdk',
     packageName,
     versionName,
+    ...(split ? ['split', split] : []),
   ];
 
   const index = (value: string) => strings.indexOf(value);
@@ -95,6 +102,7 @@ export function binaryManifest(packageName: string, versionName: string, version
       attribute('versionCode', 0x10, versionCode),
       attribute('versionName', 3, index(versionName)),
       attribute('package', 3, index(packageName)),
+      ...(split ? [attribute('split', 3, index(split))] : []),
     ]),
     element('uses-sdk', [attribute('minSdkVersion', 0x10, minSdk)]),
   ]);

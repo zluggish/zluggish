@@ -23,7 +23,7 @@
     "format:fix": "prettier --config .prettierrc --ignore-path ../.prettierignore --write ..",
     "lint": "pnpm lint:oxlint && pnpm lint:eslint",
     "lint:fix": "cd .. && node server/node_modules/oxlint/bin/oxlint --config server/oxlint.config.ts --fix server/src server/tests web && node server/node_modules/eslint/bin/eslint.js --config server/eslint.config.mjs \"server/src/**/*.{ts,tsx}\" \"server/tests/**/*.ts\" \"web/**/*.{ts,svelte}\" --fix",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm format",
+    "check": "pnpm i18n:check && pnpm lint && pnpm typecheck && pnpm test && pnpm format",
     "codegen": "buf generate && node scripts/normalize-generated.mjs",
     "test:unit": "node --conditions=development --import tsx --import ./scripts/register-svelte.mjs --test \"src/**/*.spec.ts\"",
     "test:medium": "pnpm build:web && node --conditions=development --import tsx --import ./scripts/register-svelte.mjs --test tests/medium/*.spec.ts",
@@ -35,13 +35,15 @@
     "check:web": "pnpm --dir ../web check",
     "test:browser": "pnpm build && node --test dist/tests/browser/*.spec.js",
     "screenshots": "pnpm build:web && node --conditions=development --import tsx --import ./scripts/register-svelte.mjs scripts/screenshots.ts",
-    "lint:oxlint": "cd .. && node server/node_modules/oxlint/bin/oxlint --config server/oxlint.config.ts server/src server/tests web"
+    "lint:oxlint": "cd .. && node server/node_modules/oxlint/bin/oxlint --config server/oxlint.config.ts server/src server/tests web",
+    "i18n:check": "pnpm --dir .. i18n:check"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",
     "@garmin/fitsdk": "^21.221.0",
     "@hono/node-server": "2.1.8",
     "@types/node": "^26.6.0",
+    "@zluggish/i18n": "workspace:*",
     "@zluggish/web": "workspace:*",
     "argon2": "^0.45.2",
     "discord.js": "^14.28.1",

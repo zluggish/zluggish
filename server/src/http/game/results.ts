@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { FormResult, GameSaved } from '#src/dtos/game-app.dto';
 import type { RuntimeEnv } from '#src/http/runtime';
 import type { Context } from 'hono';
@@ -17,7 +18,7 @@ export function navigationPath(path: string) {
 
 export function gameRedirect(c: Context<RuntimeEnv>, path: string) {
   if (!navigationPath(path)) {
-    throw new Error('Unsafe game app redirect');
+    throw new Error(t('unsafe_game_app_redirect'));
   }
   c.header('Cache-Control', 'no-store');
 

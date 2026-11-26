@@ -40,6 +40,15 @@ jobs:
             exit 1
           fi
 
+  translations:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: pnpm install --frozen-lockfile
+      - run: mise run i18n:check
+      - run: mise run i18n:test
+
   quality:
     runs-on: ubuntu-26.04
     steps:

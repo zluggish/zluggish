@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Context, Effect, Layer } from 'effect';
 import { RuntimeContext } from '#src/context';
 import type { User } from '#src/repositories/accounts.repository';
@@ -44,11 +45,11 @@ const make = Effect.gen(function* () {
         const credentials = repositories.connectionsRepository.read(rider.player_id, 'garmin');
 
         if (!credentials) {
-          throw new Error('Save credentials first');
+          throw new Error(t('save_credentials_first'));
         }
 
         if (!garminAttempts.has(key) && garminAttempts.size >= 100) {
-          throw new Error('Too many pending authorizations');
+          throw new Error(t('too_many_pending_authorizations'));
         }
         attempt = {
           status: 'login',
@@ -62,7 +63,7 @@ const make = Effect.gen(function* () {
         const pending = garminAttempts.get(key);
 
         if (!pending || pending.status !== 'mfa' || pending.identity !== identity) {
-          throw new Error('Expired authorization');
+          throw new Error(t('expired_authorization'));
         }
         attempt = pending;
       }
@@ -81,7 +82,7 @@ const make = Effect.gen(function* () {
 
       try {
         if (!current()) {
-          throw new Error('Expired authorization');
+          throw new Error(t('expired_authorization'));
         }
 
         if (attempt.status === 'mfa') {
@@ -93,12 +94,12 @@ const make = Effect.gen(function* () {
           const result = await attempt.client.login(attempt.credentials[0], attempt.credentials[1]);
 
           if (!current()) {
-            throw new Error('Expired authorization');
+            throw new Error(t('expired_authorization'));
           }
 
           if (result.state === 'mfa_required') {
             if (garminAttempts.size > 100) {
-              throw new Error('Too many pending authorizations');
+              throw new Error(t('too_many_pending_authorizations'));
             }
             attempt = { ...attempt, status: 'mfa', state: result.mfaState };
             garminAttempts.set(key, attempt);
@@ -108,7 +109,7 @@ const make = Effect.gen(function* () {
         }
 
         if (!current()) {
-          throw new Error('Expired authorization');
+          throw new Error(t('expired_authorization'));
         }
         await repositories.garminRepository.saveAuthorization(
           repositories.garminRepository.tokenStore(repositories.riderDocuments, rider.player_id),
@@ -134,7 +135,7 @@ const make = Effect.gen(function* () {
     const credentials = repositories.connectionsRepository.read(rider.player_id, 'strava');
 
     if (!credentials) {
-      throw new Error('Missing Strava credentials');
+      throw new Error(t('missing_strava_credentials'));
     }
 
     const token = yield* Effect.promise(() =>
@@ -144,7 +145,7 @@ const make = Effect.gen(function* () {
     const current = repositories.connectionsRepository.read(rider.player_id, 'strava');
 
     if (!live() || current?.[0] !== credentials[0] || current?.[1] !== credentials[1]) {
-      throw new Error('Expired authorization');
+      throw new Error(t('expired_authorization'));
     }
     repositories.riderDocuments.put(
       rider.player_id,

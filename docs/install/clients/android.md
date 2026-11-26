@@ -1,56 +1,42 @@
 ---
 sidebar_position: 4
-description: Set up a non-rooted Android device to ride on your Zluggish server.
+description: Publish and install Zwift for Zluggish on Android and send game traffic to your server.
 ---
 
 # Android
 
-This procedure is for a device that is not rooted. For a rooted device, see [Android (rooted)](android-rooted.md). In the web app, **Set up Android** on the **Apps** page shows the same steps with the address of the server filled in.
+**Zwift for Zluggish** is a patched Zwift app that lets you play Zwift on Android with Zluggish. It can be installed alongside the official Zwift app, and you don't need to root your device.
 
-Two apps do the work. Virtual Hosts redirects Zwift to Zluggish. ZofflineObb patches Zwift so that it accepts the shared zwift-offline certificate.
+If you just set up your Zluggish server, you must [download Zwift manually and let Zluggish patch it](#publish-zwift-for-android) before these instructions work..
 
-:::warning
+## Install Zwift
 
-ZofflineObb works only with a server that still uses the shared certificate, whose private key is public. A server with its [own certificate](../certificate.md) does not work with it.
+1. In the [web app](../../usage/web-app.md), open **Apps → Zwift → Android** on the Android device.
+2. Select **Download Zwift**. The page shows the version and download size. If a download is unavailable, ask your administrator to [publish the app](#publish-zwift-for-android).
+3. Open the downloaded file and allow your browser to install it. If Play Protect prompts about the unknown app, select **Install anyway**.
+4. [Change the DNS settings](#modify-android-dns-settings).
+5. Open **Zwift for Zluggish** and sign in with your Zluggish login name and password. The first launch unpacks the game files.
 
-:::
+## Update Zwift
 
-## Install the apps
+When there is a new app, the Zluggish administrator has to [upload the latest version to Zluggish](#publish-zwift-for-android), and then the patched version needs to be downloaded from there.
 
-1. Download and install `ZofflineObb.apk` from the [ZofflineObbAndroid releases](https://github.com/fatsbrown/ZofflineObbAndroid/releases/latest).
-2. Download and install `app-Github-release.apk` from the [Virtual Hosts releases](https://github.com/x-falcon/Virtual-Hosts/releases/latest).
-3. Make a file with the name `hosts.txt` on the device. Use a text editor app. Replace `<server-ip>` with the IP address of the Zluggish server:
+## Modify Android DNS settings
 
-   ```text
-   <server-ip> us-or-rly101.zwift.com
-   <server-ip> secure.zwift.com
-   <server-ip> cdn.zwift.com
-   ```
+The Android DNS settings need to be manually patched for the app to work. There are several methods documented on the [DNS settings page](dns-settings.md), but the [Virtual Hosts](dns-settings.md#virtual-hosts-android) method is usually the best place to start
 
-4. In the Android settings, turn off **Private DNS**.
-5. Open Virtual Hosts and select `hosts.txt`.
+If Android's **Private DNS** setting bypasses your chosen DNS server, turn it off while you use the redirect. The redirect applies to both installed copies of Zwift. Disable it before using the official service.
 
-Instead of Virtual Hosts, you can use the Zluggish DNS server:
+## Publish Zwift for Android
 
-1. Set `dns.enabled` to `true` in `zluggish.config.ts`. See [Configuration](../../reference/configuration.md).
-2. On the phone, set **DNS 1** of the Wi-Fi connection to the IP address of the Zluggish server.
+An administrator does this once per app version.
 
-If your router can change DNS records, you can also set the records on the router.
+1. Manually download the **BUNDLE 1 OBB** variant of Zwift from [APKMirror](https://www.apkmirror.com/apk/zwift-inc/zwift/). You need the `.apkm` file.
+2. On the Zluggish server riders will connect to, open **Manage → Android apps → Zwift** as an administrator.
+3. Use **Upload Zwift** or drop the `.apkm` file on the upload area. Keep the page open until the upload finishes.
+4. Wait for Zluggish to patch and sign the app. The server builds it in the background and shows its progress on the same page.
+5. When the build finishes, open **Apps → Zwift → Android** on the Android device, then [download and install the patched app](#install-zwift) from this server.
 
-## Patch Zwift
+The build status shows the recommended free space. The first build may download Java and APKEditor, which the [Companion patcher](companion-android.md#build-tools-and-backups) also uses. The server keeps the last upload so **Build again** can rebuild it.
 
-Do these steps after each installation or update of Zwift.
-
-1. Install or update Zwift from Google Play. Do not start it yet.
-2. If you started Zwift, go to **Android Settings → Applications → Zwift** and clear the data. You can also uninstall Zwift and install it again.
-3. Open ZofflineObb and run it. Allow access to all files and installation from unknown sources.
-4. Wait until the patch is complete. This takes 5 to 10 minutes.
-5. Start Zwift. Zwift checks the download and starts.
-
-If ZofflineObb does not work on your device, you can patch the OBB file on Windows. See [zwift-offline issue #505](https://github.com/zoffline/zwift-offline/issues/505).
-
-## Ride
-
-1. Make sure that the Virtual Hosts button is on.
-2. Ask an administrator to make your user in the [web app](../../usage/web-app.md), under **Manage → Users**. Your user must have a password.
-3. In Zwift, sign in with your username and password.
+The upload, published app and signing key are excluded from [server backups](../../maintenance/backup-and-restore.md). Save `storage/zwift-android/signer.pem` separately if you need to install future builds over existing copies.

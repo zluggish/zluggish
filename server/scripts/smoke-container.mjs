@@ -1,3 +1,4 @@
+import { request as httpsRequest } from 'node:https';
 import assert from 'node:assert/strict';
 import { writeFileSync, chmodSync, existsSync, readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
@@ -106,7 +107,7 @@ const file = '/tmp/zluggish.config.ts';
 
 writeFileSync(
   file,
-  'export default {storageDir:"/usr/src/app/zluggish/storage",network:{host:"127.0.0.1",api:{port:24443,useCert:false},cdn:{port:24080},tcp:{port:23025},udp:{port:23024}}}',
+  'export default {storageDir:"/usr/src/app/zluggish/storage",network:{host:"127.0.0.1",api:{port:24443,useCert:true},cdn:{port:24080},tcp:{port:23025},udp:{port:23024}}}',
 );
 
 chmodSync(file, 0o444);
@@ -127,15 +128,15 @@ const exited = once(child, 'exit');
 
 try {
   await waitForReady(child);
-  const health = await fetch('http://127.0.0.1:24443/health', { signal: AbortSignal.timeout(10_000) });
+  const health = await gameFetch('https://127.0.0.1:24443/health', { signal: AbortSignal.timeout(10_000) });
   assert.equal(health.status, 200, errors);
-  assert.equal((await fetch('http://127.0.0.1:24443/api/game_info')).status, 200);
+  assert.equal((await gameFetch('https://127.0.0.1:24443/api/game_info')).status, 200);
   assert.equal((await fetch('http://127.0.0.1:24080/gameassets/Zwift_Updates_Root/Zwift_ver_cur.xml')).status, 200);
   assert.ok(existsSync('/usr/src/app/zluggish/storage/zluggish.db'));
 
   let cookie = '';
   async function uiRequest(path, init = {}) {
-    const response = await fetch(`http://127.0.0.1:24443${path}`, {
+    const response = await gameFetch(`https://127.0.0.1:24443${path}`, {
       ...init,
       redirect: 'manual',
       headers: { Cookie: cookie, ...init.headers },
@@ -227,4 +228,37 @@ try {
   console.log('Node-only container: read-only root, external config, HTTP/CDN, storage and SIGTERM passed');
 } finally {
   if (child.exitCode === null) child.kill('SIGKILL');
+}
+
+// Exercise the local self-signed game listener without changing global TLS verification.
+async function gameFetch(url, init = {}) {
+  // A Request encodes the body (such as URLSearchParams) and its Content-Type the way fetch does.
+  const outgoing = new Request(url, init);
+  const body = outgoing.body ? Buffer.from(await outgoing.arrayBuffer()) : undefined;
+
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(
+      url,
+      {
+        method: outgoing.method,
+        headers: Object.fromEntries(outgoing.headers),
+        signal: init.signal,
+        rejectUnauthorized: false,
+      },
+      (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => {
+          // Node joins nothing, so each Set-Cookie stays separate for getSetCookie().
+          const headers = new Headers();
+          for (const [name, value] of Object.entries(response.headers))
+            for (const item of [value].flat()) headers.append(name, item);
+          const empty = [101, 204, 205, 304].includes(response.statusCode);
+          resolve(new Response(empty ? null : Buffer.concat(chunks), { status: response.statusCode, headers }));
+        });
+      },
+    );
+    request.on('error', reject);
+    request.end(body);
+  });
 }

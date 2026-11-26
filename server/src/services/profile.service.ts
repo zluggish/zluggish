@@ -83,6 +83,12 @@ const make = Effect.gen(function* () {
       publicProfile.weightInGrams = profile.weightInGrams;
     }
 
+    // The game stands an avatar up to sprint above twice its FTP, so a bot without one sprints at any power.
+    // Bots are nobody's personal data; clones of real riders do not set the bit and stay hidden.
+    if (synthetic.has(profile.id) && profile.privacyBits & 4n) {
+      publicProfile.ftp = profile.ftp;
+    }
+
     if (!(profile.privacyBits & 64n)) {
       publicProfile.age = ProfileJsonService.profileAge(profile);
     }

@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { ProtobufTable } from '#src/enum';
 import { query, SqliteExecutor } from '#src/db/query';
 import type { DescMessage } from '@bufbuild/protobuf';
@@ -89,7 +90,7 @@ export class ProtobufRows {
     const keys = values.keys().toArray();
 
     if (keys.length === 0) {
-      throw new Error('Empty database record');
+      throw new Error(t('empty_database_record'));
     }
 
     return this.executor.run(query.insertInto(table).values(Object.fromEntries(values))).lastInsertRowid;

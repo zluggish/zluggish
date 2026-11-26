@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Effect, Schema, Scope } from 'effect';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -19,6 +20,7 @@ import { MatrixService } from '#src/services/matrix.service';
 import { MetricsService } from '#src/services/metrics.service';
 import { ImportsService } from '#src/services/profile-import.service';
 import { BackupService } from '#src/services/backup.service';
+import { AppReleasesService } from '#src/services/app-releases.service';
 import { TlsService } from '#src/services/tls.service';
 import { RetentionService } from '#src/services/retention.service';
 import { RideCompletionService } from '#src/services/ride-completion.service';
@@ -128,15 +130,16 @@ const acquireRuntime = Effect.fn('runtime.acquire')(function* (
   yield* effects.runSync(UploadsService).start();
   yield* effects.runSync(RetentionService).schedule();
   yield* effects.runSync(BackupService).schedule();
+  yield* effects.runSync(AppReleasesService).schedule();
   yield* jobs.start();
   checkpoints.start();
 
   const bridges = [
     ...(config.integrations.discord.enabled
-      ? yield* optionalBridge(world, 'Discord', effects.runSync(DiscordService).start())
+      ? yield* optionalBridge(world, t('discord'), effects.runSync(DiscordService).start())
       : []),
     ...(config.integrations.matrix.enabled
-      ? yield* optionalBridge(world, 'Matrix', effects.runSync(MatrixService).start())
+      ? yield* optionalBridge(world, t('matrix'), effects.runSync(MatrixService).start())
       : []),
   ];
 
@@ -169,7 +172,7 @@ export async function openRuntime(config: ResolvedConfig, assets: string, config
     try {
       await resources.close();
     } catch (cleanupError) {
-      throw new AggregateError([error, cleanupError], 'Runtime initialization and cleanup failed', {
+      throw new AggregateError([error, cleanupError], t('runtime_initialization_cleanup_failed'), {
         cause: cleanupError,
       });
     }

@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { JobError } from '#src/errors';
 import { Schema } from 'effect';
 import { Worker } from 'node:worker_threads';
@@ -41,7 +42,7 @@ export class BackupSnapshotWorker {
       }
     });
     worker.on('error', (error) => {
-      failure = error instanceof Error ? error : new Error('Backup worker failed', { cause: error });
+      failure = error instanceof Error ? error : new Error(t('backup_worker_failed'), { cause: error });
     });
     const exited = new Promise<number>((resolve) => {
       worker.once('exit', resolve);

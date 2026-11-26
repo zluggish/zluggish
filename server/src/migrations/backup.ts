@@ -1,9 +1,9 @@
+import { t } from '#src/i18n/index';
 import { archiveSuffix, compressBackup, withBackupDirectory } from '#src/migrations/backup-archive';
 import {
   backupDirectory,
   backupManifest,
   backupPath,
-  excludedBackupPath,
   excludedStorageEntry,
   legacyDatabases,
   nightlyBackupTimestamp,
@@ -91,7 +91,7 @@ async function snapshotDatabase(source: string, target: string, signal?: AbortSi
       : null;
 
     if (current && version !== SCHEMA_VERSION) {
-      throw new ConfigError('Start the server once to upgrade storage first');
+      throw new ConfigError(t('backup_storage_upgrade_required'));
     }
 
     signal?.throwIfAborted();
@@ -129,11 +129,8 @@ async function copyTree(
     if (top && (excludedStorageEntry(entry.name) || entry.name === StorageFile.Database)) {
       continue;
     }
-    const from = resolve(source, entry.name);
 
-    if (excludedBackupPath(relative(root, from))) {
-      continue;
-    }
+    const from = resolve(source, entry.name);
     const to = resolve(target, entry.name);
 
     if (entry.isDirectory()) {
@@ -166,7 +163,7 @@ function requireSafeBackupOutput(storage: string, output: string) {
   }
 
   if (!isAbsolute(location) && location !== '..' && !location.startsWith(`..${sep}`)) {
-    throw new ConfigError('Choose a backup destination outside storage or inside its backups directory');
+    throw new ConfigError(t('backup_destination_invalid'));
   }
 }
 
@@ -196,7 +193,7 @@ async function writeSnapshot(
   const entries = await readdir(output);
 
   if (entries.length > 0) {
-    throw new ConfigError('The backup directory is not empty');
+    throw new ConfigError(t('backup_destination_not_empty'));
   }
 
   // A null prototype keeps file names such as __proto__ ordinary keys; Object.create returns any.
@@ -302,7 +299,7 @@ export async function backupStorageArchive(storage: string, output: string, conf
   await mkdir(directory, { recursive: true, mode: 0o700 });
 
   if (existsSync(output)) {
-    throw new ConfigError('The backup already exists');
+    throw new ConfigError(t('backup_exists'));
   }
   const stage = await mkdtemp(resolve(directory, '.backup-'));
 
@@ -348,12 +345,12 @@ function validateBackup(input: string) {
   const path = resolve(input, backupManifest);
 
   if (!existsSync(path)) {
-    throw new ConfigError('The backup has no manifest');
+    throw new ConfigError(t('backup_manifest_missing'));
   }
   const manifest = Schema.decodeUnknownSync(manifestSchema)(JSON.parse(readFileSync(path, 'utf8')));
 
   if (manifest.config && (basename(manifest.config) !== manifest.config || manifest.config === '..')) {
-    throw new ConfigError('The backup manifest contains an invalid config filename');
+    throw new ConfigError(t('backup_manifest_config_name_invalid'));
   }
 
   for (const [name, checksum] of Object.entries(manifest.checksums)) {
@@ -361,29 +358,29 @@ function validateBackup(input: string) {
     const location = relative(input, file);
 
     if (isAbsolute(location) || location === '' || location === '..' || location.startsWith(`..${sep}`)) {
-      throw new ConfigError('The backup manifest contains a path outside the backup');
+      throw new ConfigError(t('backup_manifest_path_unsafe'));
     }
 
     if (!existsSync(file) || crypto.sha256File(file) !== checksum) {
-      throw new ConfigError(`The backup file ${name} is missing or changed`);
+      throw new ConfigError(t('backup_file_changed', { value1: name }));
     }
   }
 
   if (manifest.schemaVersion > SCHEMA_VERSION) {
-    throw new ConfigError('The backup is newer than this release');
+    throw new ConfigError(t('backup_version_unsupported'));
   }
   const db = new DatabaseSync(resolve(input, StorageFile.Database), { readOnly: true });
 
   try {
     if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok') {
-      throw new ConfigError('The backup database failed its integrity check');
+      throw new ConfigError(t('backup_integrity_check_failed'));
     }
 
     if (
       db.prepare('SELECT 1 FROM rider_document WHERE encrypted=1 LIMIT 1').get() &&
       !existsSync(resolve(input, StorageFile.CredentialsKey))
     ) {
-      throw new ConfigError('The backup has encrypted credentials but no credentials-key.bin');
+      throw new ConfigError(t('backup_credentials_key_missing'));
     }
   } finally {
     db.close();
@@ -409,7 +406,7 @@ function closeCurrent(storage: string) {
     );
 
     if (result.busy !== 0) {
-      throw new ConfigError('The database is busy; stop the server before a restore');
+      throw new ConfigError(t('backup_database_busy'));
     }
     db.exec('PRAGMA journal_mode=DELETE');
   } finally {
@@ -417,7 +414,7 @@ function closeCurrent(storage: string) {
   }
 
   if (existsSync(`${path}-wal`) && statSync(`${path}-wal`).size > 0) {
-    throw new ConfigError('The current database still has WAL changes; stop the server before a restore');
+    throw new ConfigError(t('backup_database_wal_pending'));
   }
 
   rmSync(`${path}-wal`, { force: true });

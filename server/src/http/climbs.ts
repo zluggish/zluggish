@@ -3,6 +3,10 @@ import type { HttpRuntime } from '#src/http/runtime';
 import { resolve } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { FilesService } from '#src/services/files.service';
+import { climbCategory, straightProfile } from '#src/world/climb-category';
+import type { ClimbCategory } from '#src/world/climb-category';
+import { parseClimbProfiles } from '#src/world/climb-profile';
+import type { ClimbProfile } from '#src/world/climb-profile';
 
 const climbSegments = Schema.Record(
   Schema.String,
@@ -40,3 +44,69 @@ export const readClimbs = Effect.fn('climbs.read')(function* (runtime: HttpRunti
     JSON.parse(yield* files.readText(resolve(runtime.assets, 'data/climbs.txt'))),
   );
 });
+
+/** Read climb profiles from the assets directory; returns {} if the file is missing or unreadable. */
+export const readClimbProfiles = Effect.fn('climbs.profiles')(function* (runtime: HttpRuntime) {
+  const files = yield* FilesService;
+
+  const text = yield* files
+    .readText(resolve(runtime.assets, 'data/climb_profiles.txt'))
+    .pipe(Effect.orElseSucceed(() => ''));
+
+  return parseClimbProfiles(text);
+});
+
+export type ClimbDetails = {
+  category: ClimbCategory | null;
+  avgGradePct: number | null;
+  maxGradePct: number | null;
+  elevationLowM: number | null;
+  elevationHighM: number | null;
+  profile: ReadonlyArray<readonly [number, number]>;
+  profileSource: 'imported' | 'estimated';
+};
+
+/** Compute climb details from a profile or from distance/elevation facts. */
+export function climbDetails(
+  facts: { distanceKm: number | null; elevationM: number | null },
+  profile: ClimbProfile | undefined,
+): ClimbDetails {
+  if (profile) {
+    return {
+      category: profile.category ?? climbCategory(profile.distanceM, profile.avgGradePct),
+      avgGradePct: profile.avgGradePct,
+      maxGradePct: profile.maxGradePct,
+      elevationLowM: profile.elevationLowM,
+      elevationHighM: profile.elevationHighM,
+      profile: profile.points,
+      profileSource: 'imported',
+    };
+  }
+
+  if (facts.distanceKm === null || facts.elevationM === null) {
+    return {
+      category: null,
+      avgGradePct: null,
+      maxGradePct: null,
+      elevationLowM: null,
+      elevationHighM: null,
+      profile: [],
+      profileSource: 'estimated',
+    };
+  }
+
+  const distanceM = facts.distanceKm * 1000;
+  const avg = (facts.elevationM / distanceM) * 100;
+
+  return {
+    category: climbCategory(distanceM, avg),
+    avgGradePct: Math.round(avg * 10) / 10,
+    maxGradePct: null,
+    elevationLowM: null,
+    elevationHighM: null,
+    profile: straightProfile(distanceM, facts.elevationM),
+    profileSource: 'estimated',
+  };
+}
+
+export { climbProfileSchema, parseClimbProfiles, type ClimbProfile } from '#src/world/climb-profile';

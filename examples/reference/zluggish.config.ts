@@ -1,4 +1,4 @@
-// Every operator setting, set to its default value. Copy only the lines you want to change into your own
+// Every zluggish setting, showing its default value. Copy only the lines you want to change into your own
 // zluggish.config.ts (the file must have that name): anything left out keeps
 // its default. Unknown keys and invalid values stop the server at startup. The file is read once; restart after
 // editing. Relative paths resolve against the folder that holds this file.
@@ -136,8 +136,6 @@ export default defineConfig({
   logging: {
     // VERBOSE, INFO, WARN, ERROR, CRITICAL or NOTSET. DEBUG and WARNING are accepted as aliases.
     level: 'INFO',
-    // 'pretty' for people, 'json' for one structured record per line.
-    format: 'pretty',
     // Seconds between ride progress lines. 0 turns them off; otherwise at least 10.
     rideProgressIntervalSeconds: 60,
     // Seconds between server metrics lines. 0 turns them off; otherwise at least 10.
@@ -170,10 +168,14 @@ export default defineConfig({
   riderDefaults: {
     ghosts: { enabled: true },
     uploads: {
+      // Upload finished activities to Intervals.icu when it is connected.
+      intervals: { enabled: true },
       // Upload finished activities to Zwift.
       zwift: { enabled: false },
       // Strava upload method: 'paid' or 'free'.
       strava: { method: 'paid' },
+      // Send Garmin Connect the FIT file as recorded on the Garmin Edge you chose. Off means the file of the game.
+      garmin: { device: { enabled: false } },
     },
     // Pair a Zwift Click controller.
     devices: { zwiftClick: { enabled: false } },

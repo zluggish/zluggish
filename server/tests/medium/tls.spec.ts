@@ -1,12 +1,20 @@
+import { validateConfig } from '#src/config/index';
+import { packageRoot } from '#src/config/load';
+import { readArchivedFile } from '#src/migrations/backup-archive';
+import { CertificateRepository } from '#src/repositories/certificate.repository';
+import { CryptoRepository } from '#src/repositories/crypto.repository';
+import { openRuntime } from '#src/runtime';
+import { legacyDatabase } from '#tests/support/legacy';
 import { ManagementService } from '#src/services/management.service';
-import { TlsService } from '#src/services/tls.service';
+import { TlsService, legacyCertificateThumbprint } from '#src/services/tls.service';
 import { createWebApp } from '#src/http/web-app';
 import { mediumWeb } from '#tests/medium/support';
 import { runtimeFixture } from '#tests/support/runtime';
 import { responseStatus } from '#tests/support/html';
 import assert from 'node:assert/strict';
 import { X509Certificate } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 
@@ -42,7 +50,7 @@ await test('a server without riders generates its own certificate on first start
   const tls = f.effects.runSync(TlsService);
   const warnings = t.mock.method(f.world.lifecycle.log, 'warn');
 
-  assert.equal(tls.mode(), 'legacy');
+  assert.equal(tls.material(), null);
   await f.effects.runPromise(tls.start());
 
   assert.equal(tls.mode(), 'managed');
@@ -54,12 +62,52 @@ await test('a server without riders generates its own certificate on first start
   assert.equal(warnings.mock.callCount(), 0);
 });
 
-await test('a server with riders keeps the shared certificate and warns in the log and the launcher', async (t) => {
+await test('startup backs up legacy storage and generates a certificate for migrated riders', async (t) => {
+  const storage = mkdtempSync(resolve(tmpdir(), 'zluggish-tls-migration-'));
+  t.after(() => rmSync(storage, { recursive: true, force: true }));
+  const db = legacyDatabase(storage);
+  db.exec("INSERT INTO user (player_id, username, first_name, last_name) VALUES (42, 'existing', 'Existing', 'Rider')");
+  db.close();
+  renameSync(resolve(storage, 'zluggish.db'), resolve(storage, 'zwift-offline.db'));
+  writeFileSync(resolve(storage, 'server-ip.txt'), '192.0.2.42');
+
+  const config = validateConfig({ storageDir: storage });
+  const assets = resolve(packageRoot(), '../assets');
+  const { runtime, close } = await openRuntime(config, assets);
+
+  try {
+    const tls = runtime.effects.runSync(TlsService);
+    assert.equal(runtime.accounts.list().length, 1);
+    assert.equal(tls.mode(), 'managed');
+    assert.ok(tls.material());
+    assert.ok(existsSync(resolve(storage, 'tls', 'zwift-server.pem')));
+
+    const directory = resolve(storage, 'backups');
+    const backup = readdirSync(directory).find((file) => file.startsWith('pre-migration-'));
+    assert.ok(backup);
+    assert.equal(readArchivedFile(resolve(directory, backup), 'server-ip.txt'), '192.0.2.42');
+  } finally {
+    await close();
+  }
+});
+
+await test('an explicitly supplied shared certificate still warns and cannot be downloaded', async (t) => {
+  const repository = new CertificateRepository();
+  const material = await repository.create({ serverId: '0123456789ab', years: 5, now: new Date() });
+  t.mock.method(CertificateRepository.prototype, 'read', () => material);
+
+  // Simulate the old fingerprint without keeping a copy of the shared certificate or key in the test.
+  const cryptoRepository = new CryptoRepository();
+  const facts = cryptoRepository.certificateFacts.bind(cryptoRepository);
+  t.mock.method(CryptoRepository.prototype, 'certificateFacts', (pem: string) => {
+    const value = facts(pem);
+
+    return pem === material.cert ? { ...value, thumbprint: legacyCertificateThumbprint } : value;
+  });
+
   const f = runtimeFixture(t);
-  await f.accounts.create('Existing Rider', 'test-password', 'existing');
   const tls = f.effects.runSync(TlsService);
   const warnings = t.mock.method(f.world.lifecycle.log, 'warn');
-
   await f.effects.runPromise(tls.start());
 
   assert.equal(tls.mode(), 'legacy');
@@ -68,6 +116,18 @@ await test('a server with riders keeps the shared certificate and warns in the l
     ['tls.legacy_certificate'],
   );
   assert.match(await text(f.app.request('/login/')), /shared Zwift certificate, whose private key is public/);
+
+  const owner = await administrator(f);
+  const web = mediumWeb(f, owner);
+  const status = await json(web.request('/api/tls'));
+  assert.equal(status.mode, 'legacy');
+  assert.equal(await responseStatus(web.request('/api/tls/certificate')), 409);
+  assert.equal(await responseStatus(web.request('/api/tls/setup/windows')), 409);
+  assert.equal(await responseStatus(web.request('/api/manage/companion/app', 'PUT', Buffer.from('apk'))), 409);
+  assert.equal(
+    await responseStatus(web.request('/api/manage/zwift-android/uploads', 'POST', { name: 'zwift.apkm', size: 1 })),
+    409,
+  );
 
   await f.effects.runPromise(tls.rotate(crypto.randomUUID()));
   assert.doesNotMatch(await text(f.app.request('/login/')), /shared Zwift certificate/);
@@ -80,6 +140,7 @@ await test('riders download the certificate and setup scripts, and only administ
   const admin = mediumWeb(f, owner);
   const web = mediumWeb(f, rider);
   const tls = f.effects.runSync(TlsService);
+  await f.effects.runPromise(tls.start());
   const applied: Array<string> = [];
   tls.subscribe((material) => {
     applied.push(material.cert);
@@ -87,27 +148,13 @@ await test('riders download the certificate and setup scripts, and only administ
 
   assert.equal(await responseStatus(createWebApp(f).request('http://local:8080/api/tls')), 401);
   const before = await json(web.request('/api/tls'));
-  assert.equal(before.mode, 'legacy');
-  // Until the administrator switches, riders can still set up the shared certificate: never its key, and with
-  // a warning in the script and in the server log.
-  const warnings = t.mock.method(f.world.lifecycle.log, 'warn');
-  const shared = await text(web.request('/api/tls/certificate'));
-  assert.equal(new X509Certificate(shared).fingerprint256, before.certificate.fingerprint256);
-  assert.doesNotMatch(shared, /PRIVATE KEY/);
-  const legacyScript = await web.request('/api/tls/setup/windows?address=192.168.1.20');
-  assert.match(legacyScript.headers.get('Content-Disposition')!, /filename="zluggish-zwift-shared\.bat"/);
-  const legacyBat = await legacyScript.text();
-  assert.doesNotMatch(legacyBat, /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/);
-  assert.match(legacyBat, /WARNING: This server still uses the shared Zwift certificate/);
-  assert.deepEqual(
-    warnings.mock.calls.map((call) => call.arguments[0]),
-    ['tls.legacy_setup_download', 'tls.legacy_setup_download'],
-  );
+  assert.equal(before.mode, 'managed');
 
   const operation = crypto.randomUUID();
   assert.equal(await responseStatus(web.request('/api/manage/server/certificate', 'POST', { operation })), 403);
   const rotated = await json(admin.request('/api/manage/server/certificate', 'POST', { operation }));
   assert.equal(rotated.mode, 'managed');
+  assert.notEqual(rotated.certificate.fingerprint256, before.certificate.fingerprint256);
   const retried = await json(admin.request('/api/manage/server/certificate', 'POST', { operation }));
   assert.equal(retried.certificate.fingerprint256, rotated.certificate.fingerprint256);
 
@@ -137,7 +184,6 @@ await test('riders download the certificate and setup scripts, and only administ
   assert.ok(bat.includes(`$Thumbprint = '${next.certificate.thumbprint}'`));
   assert.ok(bat.includes("$ServerAddress = '192.168.1.20'"));
   assert.doesNotMatch(bat, /WARNING/);
-  assert.equal(warnings.mock.callCount(), 2);
 
   const linux = await text(web.request('/api/tls/setup/linux?address=fd00::20'));
   assert.ok(linux.startsWith('#!/bin/sh'));

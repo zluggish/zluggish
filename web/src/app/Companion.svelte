@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index';
+  import SlowLoading from '../components/SlowLoading.svelte';
   import type { z } from 'zod';
   import { onMount } from 'svelte';
   import type { CompanionStatus } from './companion';
@@ -63,119 +65,91 @@
     try {
       status = await api(companionStatus, '/api/companion');
     } catch (error) {
-      failure = error instanceof Error ? error.message : 'The Companion app could not be loaded.';
+      failure = error instanceof Error ? error.message : t('companion_load_error');
     }
   });
 </script>
 
-{#snippet switcher(name: string)}
-  <p class="switch">
-    {name}.
-    <a href="/apps" onclick={(event) => go(event, '/apps')}>Choose another phone</a>
-  </p>
-{/snippet}
-
 {#snippet manageLink()}
-  <a href="/manage/companion" onclick={(event) => go(event, '/manage/companion')}>Manage → Companion</a>
+  <a href="/manage/companion" onclick={(event) => go(event, '/manage/companion')}>{t('manage_companion')}</a>
 {/snippet}
 
 {#if failure}<p class="notice failed" role="alert">{failure}</p>{/if}
 
 {#if status === null}
-  {#if !failure}<p role="status">Loading…</p>{/if}
+  {#if !failure}<SlowLoading />{/if}
 {:else if platform === 'ios'}
   <section class="panel" aria-labelledby="companion-ios">
-    {@render switcher('iPhone and iPad')}
-    <h2 id="companion-ios">Companion on iPhone and iPad cannot use this server</h2>
-    <p class="lead">
-      Companion connects only to servers it trusts. On Android this server hands out a copy of the app that trusts it.
-      Apple does not allow that on iOS:
-    </p>
-    <ul class="reasons">
-      <li>
-        <strong>App Store apps are locked.</strong> Each copy is encrypted for the Apple ID that downloaded it, so it cannot
-        be changed to trust another server.
-      </li>
-      <li>
-        <strong>iOS runs only apps that Apple signed.</strong> Installing a changed app takes an Apple developer account,
-        and the free kind makes you reinstall it every 7 days.
-      </li>
-      <li>
-        <strong>An added certificate is not enough.</strong> iOS fully trusts only certificates that can vouch for other
-        sites. This server's certificate deliberately cannot, so it is never a risk to the rest of your phone.
-      </li>
-    </ul>
-    <p class="hint">Use Companion on an Android phone or tablet instead. Zwift itself rides fine from a computer.</p>
+    <h2 id="companion-ios">{t('companion_ios_unsupported')}</h2>
+    <p class="lead">{t('companion_ios_description')}</p>
   </section>
 {:else if platform === 'android'}
-  <section class="panel" aria-label="Android setup steps">
-    {@render switcher('Setting up Android')}
-
+  <section class="panel" aria-label={t('android_setup_steps')}>
     {#if status.app && !status.app.current}
       <p class="stale" role="status">
-        The server certificate changed after this app was made, so it cannot connect yet.
-        {#if administrator}Upload the app again under {@render manageLink()}.{:else}Ask the server administrator to
-          update it.{/if}
+        {t('companion_app_stale_certificate_warning')}
+        {#if administrator}{t('update_it_under')} {@render manageLink()}.{:else}{t('companion_app_update_hint')}{/if}
       </p>
     {/if}
 
     <ol class="walk">
       <li>
-        <h2>Remove the Play Store version</h2>
-        <p>
-          Android updates an app only with one signed by the same key. If Zwift Companion came from the Play Store or
-          another site, uninstall it first.
-        </p>
-        <p class="hint">Skip this when you update an app you installed from this page.</p>
-      </li>
-      <li>
-        <h2>Download the app</h2>
+        <h2>{t('download_companion_for_zluggish')}</h2>
         {#if status.app}
-          <p>Open this page on the phone, then download Companion patched for this server.</p>
+          <p>
+            {t('companion_app_coexistence')}
+          </p>
           <a class="download" class:muted-action={!status.app.current} href="/api/companion/app" download
-            >Download Companion {status.app.versionName}</a
+            >{t('download_companion', { value1: status.app.versionName })}</a
           >
-          <p class="hint">{megabytes(status.app.bytes)}, patched on {day(status.app.createdAt)}.</p>
+          <p class="hint">
+            {t('patched_on', { value1: megabytes(status.app.bytes), value2: day(status.app.createdAt) })}
+          </p>
         {:else}
           <p class="empty">
-            There is no app on this server yet.
-            {#if administrator}Upload one under {@render manageLink()}.{:else}Ask the server administrator to add it.{/if}
+            {t('companion_app_unavailable')}
+            {#if administrator}{t('set_it_up_under')} {@render manageLink()}.{:else}{t(
+                'companion_app_unavailable_hint',
+              )}{/if}
           </p>
         {/if}
       </li>
       <li>
-        <h2>Install it</h2>
+        <h2>{t('install_it')}</h2>
         <p>
-          Open the downloaded file. Android asks whether your browser may install apps: allow it, then select
-          <strong>Install</strong>.
+          {t('companion_install_open_file_hint')}
+          <strong>{t('install')}</strong>.
         </p>
-        <p class="hint">Google Play Protect may warn about an unknown app. Select <strong>Install anyway</strong>.</p>
+        <p class="hint">
+          {t('companion_install_play_protect_hint_prefix')} <strong>{t('install_anyway')}</strong>.
+        </p>
       </li>
       <li>
-        <h2>Send Companion to this server</h2>
+        <h2>{t('companion_description')}</h2>
+        <p>{t('companion_dns_override_hint')}</p>
         <p>
-          Install <a
-            href="https://github.com/x-falcon/Virtual-Hosts/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer">Virtual Hosts</a
-          >, save these lines as <strong>hosts.txt</strong> on the phone, and select the file in Virtual Hosts:
+          {t('install_virtual_hosts_if_needed')}
+          <a href="https://github.com/x-falcon/Virtual-Hosts/releases/latest" target="_blank" rel="noopener noreferrer"
+            >{t('virtual_hosts')}</a
+          >{t('save_these_lines_as')} <strong>{t('hosts_txt')}</strong>
+          {t('companion_hosts_select_file_suffix')}
         </p>
         <div class="command">
           <code>{hosts}</code>
           {#if canCopy}
             <button type="button" class="copy" onclick={copyHosts} aria-live="polite"
-              >{copied ? 'Copied' : 'Copy'}</button
+              >{copied ? t('copied') : t('copy')}</button
             >
           {/if}
         </div>
         <p class="hint">
-          Turn off <strong>Private DNS</strong> in the Android settings. Leave cdn.zwift.com out: Companion loads its images
-          from Zwift. If the server runs its own DNS, set it as the Wi-Fi network's DNS instead.
+          {t('turn_off')} <strong>{t('private_dns')}</strong>
+          {t('companion_hosts_private_dns_hint')}
         </p>
       </li>
       <li>
-        <h2>Sign in</h2>
-        <p>Open Companion and sign in with your account on this server.</p>
+        <h2>{t('sign_in')}</h2>
+        <p>{t('companion_install_launch_hint')}</p>
       </li>
     </ol>
   </section>
@@ -216,30 +190,6 @@
     color: inherit;
   }
   .empty {
-    color: var(--muted);
-  }
-
-  .switch {
-    margin: -0.25rem 0 1.25rem;
-    color: var(--muted);
-    font-size: 0.875rem;
-  }
-  .switch a {
-    color: var(--muted);
-    text-decoration-thickness: 1px;
-  }
-  .switch a:hover {
-    color: var(--text);
-  }
-
-  .reasons {
-    margin: 0;
-    padding-left: 1.2rem;
-  }
-  .reasons li {
-    margin: 0 0 0.75rem;
-  }
-  .reasons li::marker {
     color: var(--muted);
   }
 

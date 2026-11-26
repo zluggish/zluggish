@@ -6,7 +6,7 @@ description: Run the Zluggish admin CLI natively or with Docker Compose.
 
 # Admin CLI
 
-The CLI manages the operator configuration, user settings, legacy migrations, account recovery and storage. It works directly on the configuration files and the storage. It does not connect to a running server, and it does not start one.
+The CLI manages the configuration, user settings, legacy migrations, account recovery and storage. It works directly on the configuration files and the storage. It does not connect to a running server, and it does not start one.
 
 Run the commands from the **repository root**. Replace the sample paths and the rider ID `1` with your values.
 
@@ -56,11 +56,7 @@ You can also run the image directly on a storage directory:
 docker run --rm -v /absolute/path/to/storage:/usr/src/app/zluggish/storage ghcr.io/zluggish/zluggish:latest zluggish config validate
 ```
 
-For a local source checkout, build the image first:
-
-```sh
-docker compose -f docker/docker-compose.yml build zluggish
-```
+The Compose file uses the published image. To build an image from source, see [Container smoke tests](../../development.md#container-smoke-tests).
 
 :::warning
 
@@ -68,60 +64,21 @@ Config files are trusted code. The CLI has full administrator access to the moun
 
 :::
 
-## Run natively
+## Run from source
 
-Use Node.js **26.13 or later in the 26.x series** and **pnpm 12.18.0**. The CLI is part of the server package.
-
-### macOS and Linux
-
-1. Install the correct Node.js version.
-2. Turn on the pinned pnpm version, install and build:
-
-   ```sh
-   corepack enable
-   corepack prepare pnpm@12.18.0 --activate
-   pnpm install --frozen-lockfile
-   pnpm build
-   ```
-
-3. Run the CLI:
-
-   ```sh
-   node server/dist/src/cli/bin.js --help
-   node server/dist/src/cli/bin.js --config ./examples/zluggish.config.ts config validate
-   ```
-
-To run the TypeScript entry point without a build, use `pnpm --dir server cli`:
+Follow [Run locally](../../development.md#run-locally) through `mise run install`. Build and run the CLI from the repository root.
 
 ```sh
-pnpm --dir server cli --help
-pnpm --dir server cli --config ./examples/zluggish.config.ts config validate
+mise run build
+mise exec -- node server/dist/src/cli/bin.js --help
+mise exec -- node server/dist/src/cli/bin.js --config ./examples/reference/zluggish.config.ts config validate
 ```
 
-### Windows (PowerShell)
-
-The code supports native Windows, including Windows storage locks. These steps are not verified on Windows.
-
-1. Install the same Node.js and pnpm versions.
-2. Open PowerShell in the repository root.
-3. Run:
-
-   ```powershell
-   corepack enable
-   corepack prepare pnpm@12.18.0 --activate
-   pnpm install --frozen-lockfile
-   pnpm build
-   node .\server\dist\src\cli\bin.js --help
-   node .\server\dist\src\cli\bin.js --config .\server\zluggish.config.ts config validate
-   ```
-
-`pnpm --dir server cli --help` also works. Put quotes around paths with spaces, for example `--storage-dir 'C:\Zluggish Data\storage'`.
-
-If the native dependencies do not install on your Windows architecture, use Docker Desktop and the Docker Compose steps.
+To run the TypeScript entry point before building, use `mise run cli -- --help`. That task runs from `server/`, so use absolute paths or paths relative to that directory for its arguments.
 
 ## Common options
 
-The examples use `node server/dist/src/cli/bin.js`. You can use `pnpm --dir server cli` or `docker compose run --rm --no-deps zluggish zluggish` instead.
+The examples use `node server/dist/src/cli/bin.js`. You can also run them with Docker Compose. Use container paths for arguments when you do.
 
 | Option              | Meaning                                                                        |
 | ------------------- | ------------------------------------------------------------------------------ |

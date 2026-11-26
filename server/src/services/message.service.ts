@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Context, Effect, Layer } from 'effect';
 import { RuntimeContext } from '#src/context';
 import { SocialPlayerActionSchema, SocialPlayerActionType } from '#src/protocol/generated/tcp-node-msgs_pb';
@@ -32,7 +33,7 @@ const make = Effect.gen(function* () {
             playerId: 0n,
             toPlayerId: 0n,
             spaType: SocialPlayerActionType.SOCIAL_TEXT_MESSAGE,
-            firstName: sender,
+            firstName: sender === 'Server' ? t('server') : sender,
             lastName: '',
             message,
             countryCode: 0,

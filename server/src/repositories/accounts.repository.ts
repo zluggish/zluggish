@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { normalizeLoginName } from '#src/dtos/management.dto';
 import { atomic } from '#src/db/transaction';
 import { integer } from '#src/db/values';
@@ -92,7 +93,7 @@ export class AccountsRepository {
   // Offline recovery preserves disabled state unless administrator access is requested.
   setPassword(id: number, hash: string | null, admin: boolean) {
     if (!hash) {
-      throw new Error('A password is required');
+      throw new Error(t('password_required'));
     }
     atomic(this.db, () => {
       this.executor.run(

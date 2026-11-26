@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { CryptoRepository } from '#src/repositories/crypto.repository';
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
@@ -92,13 +93,21 @@ function execute(command: string, args: ReadonlyArray<string>, options: { cwd?: 
       if (code === 0) {
         done(output);
       } else {
-        fail(new Error(`${command} exited with code ${code}: ${output.trim().split('\n').slice(-8).join('\n')}`));
+        fail(
+          new Error(
+            t('toolchain_process_exit_error', {
+              value1: command,
+              value2: code,
+              value3: output.trim().split('\n').slice(-8).join('\n'),
+            }),
+          ),
+        );
       }
     });
   });
 }
 
-/** The Java runtime and the APK tools that a Play Store Companion app needs, downloaded only on request. */
+/** The Java runtime and the APK tools that a Play Store Companion app needs, downloaded when a rebuild needs them. */
 export class ToolchainRepository {
   private system: Promise<JavaRuntime | null> | null = null;
 
@@ -193,7 +202,12 @@ export class ToolchainRepository {
       const runtime = this.runtime;
 
       if (!runtime) {
-        throw new Error(`No Java runtime is published for ${platform()} on ${arch()}. Install Java 11 or later.`);
+        throw new Error(
+          t('toolchain_java_platform_unsupported', {
+            value1: platform(),
+            value2: arch(),
+          }),
+        );
       }
       const archive = resolve(this.folder, runtime.url.endsWith('.zip') ? 'jre.zip' : 'jre.tar.gz');
       const staging = resolve(this.folder, 'jre.staging');
@@ -213,7 +227,7 @@ export class ToolchainRepository {
       }
 
       if (!(await this.java())) {
-        throw new Error('The downloaded Java runtime does not start on this server.');
+        throw new Error(t('toolchain_java_startup_failed'));
       }
     }
 
@@ -240,7 +254,7 @@ export class ToolchainRepository {
     const java = await this.java();
 
     if (!java || !(await this.exists(this.editorPath))) {
-      throw new Error('The Java tools are not installed.');
+      throw new Error(t('toolchain_java_tools_missing'));
     }
 
     return execute(java.command, ['-Djava.awt.headless=true', '-jar', this.editorPath, ...args], options);
@@ -250,7 +264,7 @@ export class ToolchainRepository {
     const response = await fetch(file.url, { signal });
 
     if (!response.ok || !response.body) {
-      throw new Error(`Downloading ${file.url} failed with status ${response.status}.`);
+      throw new Error(t('toolchain_download_http_error', { value1: file.url, value2: response.status }));
     }
     let received = 0;
 
@@ -259,7 +273,7 @@ export class ToolchainRepository {
         received += chunk.length;
 
         if (received > file.bytes) {
-          next(new Error(`${file.url} is larger than expected.`));
+          next(new Error(t('toolchain_download_size_limit', { value1: file.url })));
 
           return;
         }
@@ -275,7 +289,7 @@ export class ToolchainRepository {
     });
 
     if ((await this.crypto.sha256FileAsync(target)) !== file.sha256) {
-      throw new Error(`${file.url} does not match its pinned checksum.`);
+      throw new Error(t('toolchain_checksum_mismatch', { value1: file.url }));
     }
   }
 }

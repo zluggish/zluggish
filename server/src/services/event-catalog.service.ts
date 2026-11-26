@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Context, Effect, Layer } from 'effect';
 import { RuntimeContext } from '#src/context';
 import type { Event } from '#src/protocol/generated/events_pb';
@@ -149,7 +150,7 @@ const make = Effect.gen(function* () {
           visible: true,
           overrideMapPreferences: false,
           invisibleToNonParticipants: false,
-          description: 'Auto-generated event',
+          description: t('auto_generated_event'),
           distanceInMeters: item.distance,
           laps: 0,
           durationInSeconds: 0,
@@ -169,7 +170,7 @@ const make = Effect.gen(function* () {
               startLocation: BigInt(category),
               label: category,
               lateJoinInMinutes: 30,
-              name: `Cat. ${'ABCD'[category - 1]}`,
+              name: t('cat', { value1: 'ABCD'[category - 1] }),
               description: '#zwiftoffline',
               courseId: BigInt(item.course),
               paceType: 1,

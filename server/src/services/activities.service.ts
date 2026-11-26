@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { RuntimeContext } from '#src/context';
 import { activityMediaSchema } from '#src/dtos/activities.dto';
 import { ApplicationError } from '#src/errors';
@@ -6,6 +7,8 @@ import type { Activity } from '#src/protocol/generated/activity_pb';
 import { ActivityPrivacyType, Sport, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { WA_TYPE, WorldAttributeSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import type { ActivitiesRepository } from '#src/repositories/activities.repository';
+import { ActivityStorage, activityDirectoryPattern, activityFolder, imagePath, videoPath } from '#src/activity-storage';
+import type { IntegerInput } from '#src/db/values';
 import { immediate } from '#src/db/transaction';
 import { Metric, metrics } from '#src/repositories/metrics.repository';
 import type { RunningJob } from '#src/repositories/jobs.repository';
@@ -21,14 +24,6 @@ import { StateHistory } from '#src/world/state-history';
 import { clearField, clone, create, toBinary } from '@bufbuild/protobuf';
 import { dirname, resolve } from 'node:path';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
-
-function identifiers(job: RunningJob, key: string) {
-  return job.text(key).split(',').filter(Boolean);
-}
-
-function ids(rows: ReadonlyArray<{ id: number }>) {
-  return rows.map((row) => row.id).join(',');
-}
 
 function withoutFit(activity: Activity) {
   const stripped = clone(ActivitySchema, activity);
@@ -144,8 +139,12 @@ const make = Effect.gen(function* () {
       if (Option.isNone(row)) {
         throw new ApplicationError({ status: 404 });
       }
-      const extension = row.value.content_type.includes('quicktime') ? 'mov' : 'mp4';
-      const path = resolve(context.profiles.folder(row.value.player_id), 'medias', `${id}.${extension}`);
+      const folder = folderOf(row.value.activity_id);
+
+      if (folder === null) {
+        throw new ApplicationError({ status: 404 });
+      }
+      const path = videoPath(folder, row.value.id, row.value.content_type);
       await repositories.filesRepository.writeDurableAsync(path, bytes, true);
 
       // The file is durable before the row is ready. The activity can be deleted while
@@ -179,7 +178,10 @@ const make = Effect.gen(function* () {
       !Buffer.from(saved.payload).equals(Buffer.from(toBinary(ActivitySchema, withoutFit(activity)))) ||
       !Buffer.from(stored).equals(Buffer.from(activity.fit))
     ) {
-      throw new ApplicationError({ status: 409, message: 'Completed activities cannot be replaced.' });
+      throw new ApplicationError({
+        status: 409,
+        message: t('activities_completed_activity_immutable'),
+      });
     }
 
     return true;
@@ -381,24 +383,12 @@ const make = Effect.gen(function* () {
         throw new ApplicationError({ status: 404 });
       }
 
+      const stored = repositories.activitiesRepository.storageDirectory(id);
+
       const payload = {
         activityId: Number(id),
         playerId: player,
-        charts: ids(
-          Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ id: Schema.Finite })))(
-            repositories.activitiesRepository.listActivityFile(id),
-          ),
-        ),
-        images: ids(
-          Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ id: Schema.Finite })))(
-            repositories.activitiesRepository.listActivityImage(player, id),
-          ),
-        ),
-        media: ids(
-          Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ id: Schema.Finite })))(
-            repositories.activitiesRepository.listActivityMedia(player, id),
-          ),
-        ),
+        directory: stored?.directory ?? '',
       };
 
       repositories.activitiesRepository.deleteActivityData(id, player);
@@ -420,8 +410,13 @@ const make = Effect.gen(function* () {
 
   /** Reserve the row, write the file durably, then mark the row ready. */
   async function saveImage(player: number, activity: string, jpg: Uint8Array) {
+    const folder = folderOf(activity, player);
+
+    if (folder === null) {
+      throw new ApplicationError({ status: 404 });
+    }
     const id = Number(repositories.activitiesRepository.insertActivityImage(player, activity).lastInsertRowid);
-    const path = resolve(context.profiles.folder(player), 'images', `${id}.jpg`);
+    const path = imagePath(folder, id);
 
     try {
       await repositories.filesRepository.writeDurableAsync(path, jpg, true);
@@ -447,15 +442,18 @@ const make = Effect.gen(function* () {
   }
 
   function photos(player: number, activity: bigint) {
-    const folder = context.profiles.folder(player);
+    const folder = folderOf(activity, player);
 
+    if (folder === null) {
+      return [];
+    }
     const paths = [];
 
     for (const row of Schema.decodeUnknownSync(
       Schema.Array(Schema.Struct({ id: Schema.Finite, state: Schema.String })),
     )(repositories.activitiesRepository.listActivityImage(player, activity))) {
       if (row.state === 'ready') {
-        paths.push(resolve(folder, 'images', `${row.id}.jpg`));
+        paths.push(imagePath(folder, row.id));
       }
     }
 
@@ -463,7 +461,7 @@ const make = Effect.gen(function* () {
       Schema.Array(Schema.Struct({ id: Schema.Finite, content_type: Schema.String, state: Schema.String })),
     )(repositories.activitiesRepository.listActivityMedia(player, activity))) {
       if (row.state === 'ready') {
-        paths.push(resolve(folder, 'medias', `${row.id}.${row.content_type.includes('quicktime') ? 'mov' : 'mp4'}`));
+        paths.push(videoPath(folder, row.id, row.content_type));
       }
     }
 
@@ -556,7 +554,7 @@ const make = Effect.gen(function* () {
     const [activity] = own(player, id);
 
     if (!activity) {
-      throw new ApplicationError({ status: 404, message: 'Activity not found.' });
+      throw new ApplicationError({ status: 404, message: t('activity_not_found') });
     }
 
     const images = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ id: Schema.Finite, state: Schema.String })))(
@@ -566,9 +564,9 @@ const make = Effect.gen(function* () {
       .map((row) => row.id);
 
     const fileId = activity.fit ? chartFile(BigInt(id)) : null;
+    const path = fileId === null ? null : chartPath(id);
 
-    const chart =
-      fileId === null ? null : decodeJson(repositories.filesRepository.readFileSync(chartPath(fileId), 'utf8'));
+    const chart = path === null ? null : decodeJson(repositories.filesRepository.readFileSync(path, 'utf8'));
 
     return { ...activity, imageIds: images, chart, chartPending: activity.fit && chart === null };
   }
@@ -578,7 +576,7 @@ const make = Effect.gen(function* () {
     const stored = repositories.activitiesRepository.fit(id);
 
     if (!stored?.fit || stored.player !== player) {
-      throw new ApplicationError({ status: 404, message: 'FIT file not found.' });
+      throw new ApplicationError({ status: 404, message: t('fit_file_not_found') });
     }
 
     const base = stored.filename
@@ -597,14 +595,16 @@ const make = Effect.gen(function* () {
       repositories.activitiesRepository.listActivityImage(player, activity),
     ).some((row) => row.id === image && row.state === 'ready');
 
-    const path = resolve(context.profiles.folder(player), 'images', `${image}.jpg`);
+    const folder = folderOf(activity, player);
+    const path = folder === null ? null : imagePath(folder, image);
 
     if (
+      path === null ||
       !ready ||
       !repositories.filesRepository.existsSync(path) ||
       !repositories.filesRepository.statSync(path).isFile()
     ) {
-      throw new ApplicationError({ status: 404, message: 'Image not found.' });
+      throw new ApplicationError({ status: 404, message: t('image_not_found') });
     }
 
     return path;
@@ -652,7 +652,9 @@ const make = Effect.gen(function* () {
     const row = repositories.activitiesRepository.findActivityFile(activity);
     const fileId = row ? Schema.decodeUnknownSync(Schema.Finite)(row.id) : null;
 
-    if (fileId !== null && repositories.filesRepository.existsSync(chartPath(fileId))) {
+    const path = chartPath(activity);
+
+    if (fileId !== null && path !== null && repositories.filesRepository.existsSync(path)) {
       return fileId;
     }
 
@@ -669,18 +671,29 @@ const make = Effect.gen(function* () {
     return null;
   }
 
-  function chartPath(fileId: number) {
-    return resolve(context.config.storageDir, 'activities', String(fileId));
+  /** The folder of an activity, assigned on first use; null when the activity does not
+  exist or belongs to another rider.
+  */
+  function folderOf(activity: IntegerInput, player?: number) {
+    const stored = repositories.activitiesRepository.storageDirectory(activity);
+
+    if (!stored || (player !== undefined && stored.player !== player)) {
+      return null;
+    }
+
+    return activityFolder(context.profiles.folder(stored.player), stored.directory);
   }
 
-  function exportPath(player: number, activity: number, filename: string) {
-    const name =
-      filename
-        .normalize('NFKD')
-        .replaceAll(/[^\w. -]/g, '_')
-        .replace(/^\.+/, '') || 'activity.fit';
+  function chartPath(activity: IntegerInput) {
+    const folder = folderOf(activity);
 
-    return resolve(context.profiles.folder(player), 'fit', `${activity} - ${name}`);
+    return folder === null ? null : resolve(folder, ActivityStorage.Chart);
+  }
+
+  function exportPath(activity: IntegerInput) {
+    const folder = folderOf(activity);
+
+    return folder === null ? null : resolve(folder, ActivityStorage.Fit);
   }
 
   /** Write a job result to an attempt-specific path. Only the current claim publishes
@@ -751,13 +764,13 @@ const make = Effect.gen(function* () {
           return;
         }
         const player = stored.player;
+        const path = exportPath(id);
 
-        await publish(
-          job,
-          exportPath(player, id, stored.filename),
-          stored.fit,
-          () => !!repositories.activitiesRepository.findActivity(id, player),
-        );
+        if (path === null) {
+          return;
+        }
+
+        await publish(job, path, stored.fit, () => !!repositories.activitiesRepository.findActivity(id, player));
       },
     });
 
@@ -773,11 +786,16 @@ const make = Effect.gen(function* () {
         if (!stored?.fit) {
           return;
         }
+        const path = chartPath(id);
+
+        if (path === null) {
+          return;
+        }
         const chart = await FitService.chart(stored.fit);
 
         await publish(
           job,
-          chartPath(fileId),
+          path,
           JSON.stringify(chart),
           () => !!repositories.activitiesRepository.findOwnedActivityFile(fileId, id),
         );
@@ -788,25 +806,17 @@ const make = Effect.gen(function* () {
       concurrency: 1,
       attempts: 5,
       timeoutMs: 120_000,
+      // Jobs queued before the activity folders carry no directory: the folder
+      // migration removed their files.
       run: async (job) => {
-        const activity = job.number('activityId');
         const player = job.number('playerId');
-        const folder = context.profiles.folder(player);
-        const exports = await repositories.filesRepository.entriesAsync(resolve(folder, 'fit'));
+        const directory = String(job.payload['directory'] ?? '');
 
-        const paths = [
-          ...identifiers(job, 'charts').map((id) => chartPath(Number(id))),
-          ...identifiers(job, 'images').map((id) => resolve(folder, 'images', `${id}.jpg`)),
-          ...identifiers(job, 'media').flatMap((id) => [
-            resolve(folder, 'medias', `${id}.mp4`),
-            resolve(folder, 'medias', `${id}.mov`),
-          ]),
-          ...exports
-            .filter((entry) => entry.name.startsWith(`${activity} - `))
-            .map((entry) => resolve(folder, 'fit', entry.name)),
-        ];
+        if (!activityDirectoryPattern.test(directory)) {
+          return;
+        }
 
-        await Promise.all(paths.map((path) => repositories.filesRepository.removeAsync(path)));
+        await repositories.filesRepository.removeTreeAsync(activityFolder(context.profiles.folder(player), directory));
       },
     });
 
@@ -1005,16 +1015,16 @@ const make = Effect.gen(function* () {
       return chartFile(activity);
     }),
 
-    chartPath: Effect.fn('ActivitiesService.chartPath')(function* (fileId: number) {
-      return chartPath(fileId);
+    chartPath: Effect.fn('ActivitiesService.chartPath')(function* (activity: IntegerInput) {
+      return chartPath(activity);
     }),
 
-    exportPath: Effect.fn('ActivitiesService.exportPath')(function* (
-      player: number,
-      activity: number,
-      filename: string,
-    ) {
-      return exportPath(player, activity, filename);
+    exportPath: Effect.fn('ActivitiesService.exportPath')(function* (activity: IntegerInput) {
+      return exportPath(activity);
+    }),
+
+    folder: Effect.fn('ActivitiesService.folder')(function* (activity: IntegerInput) {
+      return folderOf(activity);
     }),
   };
 });

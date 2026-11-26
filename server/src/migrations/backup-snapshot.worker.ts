@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { stageBackup } from '#src/migrations/backup';
 import { snapshotRequest } from '#src/migrations/backup-snapshot-worker';
 import { Schema } from 'effect';
@@ -6,7 +7,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 const port = parentPort;
 
 if (!port) {
-  throw new Error('Backup snapshot requires a worker thread');
+  throw new Error(t('backup_snapshot_worker_worker_required'));
 }
 
 const { storage, config, snapshot } = Schema.decodeUnknownSync(snapshotRequest)(workerData);

@@ -1,94 +1,28 @@
 # Contributing to Zluggish
 
-Thank you for helping out. Zluggish is maintained by a small team in our spare time, so this guide is mostly about making good use of that time. Yours and ours.
+Use the [development guide](docs/development.md) to run Zluggish and reproduce CI checks locally.
 
-## Getting started
+## Propose a change
 
-You need [mise](https://mise.jdx.dev/getting-started.html). It installs the right versions of Node and pnpm for you. From the repository root, run:
+Open an issue before starting a large change. Explain the problem and what you want to change. Use [Discussions](https://github.com/zluggish/zluggish/discussions) for open-ended ideas and questions. For a typo, broken link or clear bug, open a pull request directly.
 
-```sh
-cd server
-mise install
-mise run install
-mise run check
-```
+Zluggish is for riding on your own server. Keep play separate from the official Zwift multiplayer world. Contributions must respect the licenses of the Zwift client and assets and must not enable cheating on the official service.
 
-`mise run check` builds, lints, typechecks and tests the server and its CLI. It also checks the formatting. Run it before you open a pull request. CI runs the same checks on Linux, Windows and macOS.
+## Open a pull request
 
-Other useful commands, run from `server/`:
+- Keep the pull request focused on one change. Run `mise run check`.
+- Use a [Conventional Commits](https://www.conventionalcommits.org/) title such as `fix: keep ghost order after a regroup`. CI accepts `feat`, `fix`, `docs`, `test`, `ci`, `refactor`, `perf`, `chore` and `revert`.
+- Explain what changed, why and how you tested it. Include screenshots for UI changes and the client platform for game changes.
+- Update the relevant pages in `docs/` and the tests for changed behavior. If you edit `server/proto/`, run `mise run server-codegen` and commit the generated files.
 
-| Command               | Result                                                    |
-| --------------------- | --------------------------------------------------------- |
-| `mise run server-dev` | Start the server from source.                             |
-| `pnpm lint:fix`       | Fix lint problems.                                        |
-| `pnpm format:fix`     | Fix the formatting.                                       |
-| `pnpm codegen`        | Regenerate the protobuf codecs after you change `proto/`. |
+If you use an AI tool, review and test its changes, remove unrelated edits and say how you used it. Write or edit the pull request title and description yourself. Ask the agent for a compare link if it prepares a branch for a new pull request. Write issues and review comments in your own words. Translation tools are fine.
 
-The web app is in `web/`. Build it with `pnpm --dir web build` and typecheck it with `pnpm --dir web check`.
+Maintainers may push small fixes to your branch. Say so in the pull request if you prefer to make those edits yourself.
 
-## Talk to us first
+## Report a bug
 
-For anything bigger than a bug fix or a small improvement, open an issue before you write the code. Describe what you want to change and why. For open-ended ideas and questions, start a [discussion](https://github.com/zluggish/zluggish/discussions) instead. With a small team, we can't promise to review every large pull request. A short conversation up front saves you from writing something we can't merge.
+Search the open issues first. Include the Zluggish version or image tag, server operating system, install method, Zwift client platform, steps to reproduce, expected and actual behavior, and relevant logs. Remove passwords and tokens before sharing logs or configuration.
 
-You don't need to ask before you fix a typo, a clear bug, or a broken link. Just open the pull request.
+Report security issues through [private vulnerability reporting](https://github.com/zluggish/zluggish/security/advisories/new).
 
-## Pull requests
-
-- **Do one thing per pull request.** A pull request that fixes a bug and refactors the code around it is two pull requests. Small pull requests get reviewed and merged faster.
-- **Use a [Conventional Commits](https://www.conventionalcommits.org/) title.** CI checks it. The allowed types are `feat`, `fix`, `docs`, `test`, `ci`, `refactor`, `perf`, `chore` and `revert`, for example `fix: keep ghost order after a regroup`. We squash pull requests when we merge them, so the title becomes the commit message on `main`.
-- **Explain the change.** Say what the pull request changes, why, and how you tested it. If it changes the game or the web app, say which client you tested with.
-- **Include screenshots for UI changes.** Attach screenshots showing the updated interface in the pull request description.
-- **Add or update tests** when you change behaviour. If something is hard to test, say so in the description.
-- **Commit generated files.** If you change `proto/`, run `pnpm codegen` and commit the result. CI fails if the generated files are out of date.
-- **Update the README** if you add a setting or change how a feature works.
-
-We may push small fixes to your branch, such as formatting or a typo, instead of asking you to do it. If you would rather we didn't, say so in the pull request.
-
-## Scope
-
-Zluggish is an offline server that you run for yourself, your household or your friends. We won't accept changes that:
-
-- connect to Zwift's official servers or its multiplayer world,
-- redistribute Zwift's client, game assets or other proprietary files, or
-- are mainly useful for cheating on the official service.
-
-If you aren't sure whether an idea fits, ask in an issue first.
-
-## Reporting bugs
-
-Search the existing issues first. If nobody has reported the problem yet, open an issue and include:
-
-- the Zluggish version or Docker image tag,
-- how you run the server (Docker or from source) and on which operating system,
-- which Zwift client you use (Windows, macOS or Android),
-- the steps to reproduce the problem, what you expected, and what happened instead, and
-- the relevant server logs.
-
-Remove passwords, tokens and other private data from logs and config files before you post them.
-
-If you think you have found a security problem, don't open a public issue. Use [private vulnerability reporting](https://github.com/zluggish/zluggish/security/advisories/new) instead.
-
-## Use of generative AI
-
-You may use AI tools to help you write code. You are still the author, and you are responsible for every line you submit:
-
-- **Understand your change.** You must be able to explain what each part of it does and answer questions about it in review. If you can't, don't open the pull request.
-- **Test it yourself.** Run `mise run check`. For changes that affect the game, ride with them on a real client.
-- **Keep it focused.** AI tools tend to rewrite more than the task needs. Remove unrelated changes before you submit.
-- **Say so.** Mention in the pull request description that you used an AI tool, and for what.
-- **Write or edit the pull request title and description yourself.** If an agent prepares the branch, have it give you the GitHub compare link so you can write or edit both fields in the pull request form before submitting.
-- **Write issues and review comments in your own words.** Using a translation tool is fine.
-
-We close pull requests that look generated without care, especially large ones that nobody has discussed with us first.
-
-## Other ways to help
-
-You don't have to write code to help:
-
-- **Test on your setup.** Try new releases with your client and trainer, and report what breaks. Android and macOS clients get less testing than Windows.
-- **Improve the documentation.** If a setup step confused you, a pull request that makes it clearer is very welcome.
-- **Help other riders.** Answer questions from people who are setting up their own server.
-
-## License
-
-Zluggish is licensed under the [GNU Affero General Public License, version 3](LICENSE). When you contribute, you agree that your contribution is licensed under the same terms.
+Contributions are licensed under the [GNU Affero General Public License, version 3](LICENSE).

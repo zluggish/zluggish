@@ -11,7 +11,7 @@ import { openRuntime } from '#src/runtime';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { UploadsRepository } from '#src/repositories/uploads.repository';
 import { GarminRepository } from '#src/repositories/garmin.repository';
-import { mediumFixture } from '#tests/medium/support';
+import { activityFolderOf, mediumFixture } from '#tests/medium/support';
 import { create } from '@bufbuild/protobuf';
 import { GarminClient } from 'garminconnect-js';
 import type { LoginResult, Tokens, MfaState } from 'garminconnect-js';
@@ -151,10 +151,11 @@ await test('media upload claims serialize requests and deletion during body read
     ),
     { status: 403 },
   );
+  const folder = activityFolderOf(f, id);
   f.effects.runSync(ActivitiesService.use((service) => service.deleteActivity(BigInt(id), f.rider.player_id)));
   gate.resolve(new ArrayBuffer(1));
   await assert.rejects(uploading, { status: 404 });
-  assert.equal(existsSync(resolve(f.profiles.folder(f.rider.player_id), 'medias', `${media}.mp4`)), false);
+  assert.equal(existsSync(resolve(folder, 'videos', `${media}.mp4`)), false);
 });
 
 await test('failed media body reads release the claim; successful uploads consume it', async (t) => {

@@ -1,12 +1,10 @@
-import { packageRoot } from '#src/config/load';
+import { CertificateRepository } from '#src/repositories/certificate.repository';
 import { startHttp } from '#src/node/network/http';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono } from 'hono';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
 import { request } from 'node:https';
-import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { Schema } from 'effect';
 
@@ -16,15 +14,12 @@ await test('Node adapter serves HTTPS, binary bodies, forms, and actual peer add
   app.get('/peer', (c) => c.text(getConnInfo(c).remote.address ?? ''));
   app.post('/binary', async (c) => c.body(new Uint8Array(await c.req.arrayBuffer())));
   app.post('/form', async (c) => c.json(await c.req.parseBody()));
-  const root = resolve(packageRoot(), '../assets');
+  const tls = await new CertificateRepository().create({ serverId: '0123456789ab', years: 5, now: new Date() });
 
   const server = startHttp(app, {
     host: '127.0.0.1',
     port: 0,
-    tls: {
-      cert: readFileSync(resolve(root, 'ssl/cert-zwift-com.pem')),
-      key: readFileSync(resolve(root, 'ssl/key-zwift-com.pem')),
-    },
+    tls,
   });
 
   t.after(

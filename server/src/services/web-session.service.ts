@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { RuntimeContext } from '#src/context';
 import { ApplicationError } from '#src/errors';
 import { Context, Effect, Layer, Schema } from 'effect';
@@ -71,7 +72,7 @@ const make = Effect.gen(function* () {
     accounts.db.prepare('DELETE FROM web_session WHERE expires <= ?').run(now);
 
     if (sessions.size >= 10_000) {
-      throw new ApplicationError({ status: 503, message: 'Too many web sessions' });
+      throw new ApplicationError({ status: 503, message: t('too_many_web_sessions') });
     }
     const id = token();
     const session: WebSession = { csrf: token(), identity, expires: now + 86_400_000, confirmedUntil };
@@ -111,11 +112,11 @@ const make = Effect.gen(function* () {
     const user = userNow(id);
 
     if (!user) {
-      throw new ApplicationError({ status: 401, message: 'Sign in again.' });
+      throw new ApplicationError({ status: 401, message: t('sign_in_again') });
     }
 
     if (manage && user.role !== 'administrator') {
-      throw new ApplicationError({ status: 403, message: 'Administrator role required.' });
+      throw new ApplicationError({ status: 403, message: t('administrator_role_required') });
     }
 
     return user;
@@ -140,7 +141,7 @@ const make = Effect.gen(function* () {
       const session = find(id);
 
       if (!session) {
-        throw new ApplicationError({ status: 401, message: 'Sign in again.' });
+        throw new ApplicationError({ status: 401, message: t('sign_in_again') });
       }
 
       return session;

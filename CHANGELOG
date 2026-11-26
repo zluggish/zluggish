@@ -1,36 +1,28 @@
 # Only breaking changes in releases will be documented here.
 
 Update to Zwift_1.0.166297:
-  * This update requires Zwift Launcher 1.1.18 which replaces Zwift's cacert.pem. You will need
-    to re-append cert-zwift-com.pem to Zwift's cacert.pem.
+  * This update requires Zwift Launcher 1.1.18 which replaces Zwift's cacert.pem.
 
 
 Update to Zwift_1.0.160809:
-  * This update requires Zwift Launcher 1.1.16 which replaces Zwift's cacert.pem. You will need
-    to re-append cert-zwift-com.pem to Zwift's cacert.pem.
+  * This update requires Zwift Launcher 1.1.16 which replaces Zwift's cacert.pem.
 
 
 Update to Zwift_1.0.159921:
-  * This update requires Zwift Launcher 1.1.15 which replaces Zwift's cacert.pem. You will need
-    to re-append cert-zwift-com.pem to Zwift's cacert.pem.
+  * This update requires Zwift Launcher 1.1.15 which replaces Zwift's cacert.pem.
 
 
 Update to Zwift_1.0.150097:
-  * This update requires Zwift Launcher 1.1.14 which replaces Zwift's cacert.pem. You will need
-    to re-append cert-zwift-com.pem to Zwift's cacert.pem.
+  * This update requires Zwift Launcher 1.1.14 which replaces Zwift's cacert.pem.
 
 
 Update to Zwift_1.0.100317:
-  * The Windows client launcher now uses Edge instead of Internet Explorer and the zoffline SSL
-    certificate is no longer accepted. The certificate has been replaced and as a consequence
-    you will need to configure the client again using the new certificate (Step 2 in README.md)
-    after updating zoffline.
+  * The Windows client launcher now uses Edge instead of Internet Explorer.
     See https://github.com/zoffline/zwift-offline/issues/154 for details.
 
 
 Update to Zwift_1.0.100133:
-  * Changes were made to Zwift's cacert.pem. You will need to re-append cert-zwift-com.pem
-    to Zwift's cacert.pem.
+  * Changes were made to Zwift's cacert.pem.
 
 
 Update to Zwift_1.0.60239:
@@ -49,6 +41,5 @@ Update to Zwift_1.0.60239:
 
 
 Update to Zwift_1.0.51959:
-  * Changes were made to Zwift's cacert.pem. You will likely need to re-append
-    cert-zwift-com.pem to Zwift's cacert.pem in a specific way.
+  * Changes were made to Zwift's cacert.pem.
     See https://github.com/zoffline/zwift-offline/issues/62 for details.

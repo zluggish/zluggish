@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import type { ResolvedConfig } from '#src/config/index';
 import type { PlayerProfile } from '#src/protocol/generated/profile_pb';
 import type { PlayerState } from '#src/protocol/generated/udp-node-msgs_pb';
@@ -250,7 +251,7 @@ export class Peloton {
       }
 
       if (this.pacer.recording.length === 0) {
-        throw new Error('Empty pacer route');
+        throw new Error(t('empty_pacer_route'));
       }
 
       // a and b are only read: interpolate() clones before it mutates.

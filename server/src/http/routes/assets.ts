@@ -1,3 +1,4 @@
+import { t } from '#src/i18n/index';
 import { Effect } from 'effect';
 import { effectRoutes } from '#src/http/effect';
 import { fileResponse } from '#src/http/file-response';
@@ -59,8 +60,8 @@ export function launcherAssetRoutes<E extends Env>(app: Hono<E>, runtime: Runtim
   appRoutes.get('/static/web/launcher/embed.html', (c) =>
     gamePage(c, {
       kind: 'message',
-      title: 'Loading Zwift...',
-      message: 'Enjoying Zluggish? Please star us on GitHub: zluggish.com',
+      title: t('loading_zwift_'),
+      message: t('assets_github_star_prompt'),
       csrf: '',
       version: '',
       forms: [],

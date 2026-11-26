@@ -11,7 +11,7 @@ import { test } from 'node:test';
 for (const existing of [false, true]) {
   await test(
     `web setup with ${existing ? 'existing' : 'new'} rider, management, and game login`,
-    { timeout: 40_000 },
+    { timeout: 120_000 },
     async (t) => {
       const f = runtimeFixture(t);
 
@@ -30,7 +30,7 @@ for (const existing of [false, true]) {
       const browser = await chromium.launch();
       t.after(() => browser.close());
       const page = await browser.newPage({ viewport: { width: 360, height: 800 }, reducedMotion: 'reduce' });
-      page.setDefaultTimeout(7000);
+      page.setDefaultTimeout(20_000);
       const errors: Array<string> = [];
       page.on('pageerror', (error) => {
         errors.push(error.message);
@@ -47,12 +47,12 @@ for (const existing of [false, true]) {
 
       if (owner) {
         await page.getByLabel('Use an existing user').check();
-        await page.getByLabel('User', { exact: true }).selectOption(String(owner.player_id));
+        await page.getByLabel('User to make administrator', { exact: true }).selectOption(String(owner.player_id));
         assert.equal(await page.getByLabel('Login name', { exact: true }).count(), 0);
         await page.getByLabel('User’s password', { exact: true }).fill('wrong-password');
         await page.getByRole('button', { name: 'Complete setup' }).click();
         await page.getByRole('alert').waitFor();
-        await page.getByLabel('User', { exact: true }).waitFor();
+        await page.getByLabel('User to make administrator', { exact: true }).waitFor();
         await page.getByLabel('User’s password', { exact: true }).fill('test-password');
       } else {
         assert.equal(await page.getByLabel('Use an existing user').count(), 0);
@@ -64,11 +64,7 @@ for (const existing of [false, true]) {
       }
 
       await page.getByRole('button', { name: 'Complete setup' }).click();
-      await page
-        .getByText('No other users yet. Create a user so that somebody else can ride on this server.', {
-          exact: true,
-        })
-        .waitFor();
+      await page.getByText('No other users yet.', { exact: true }).waitFor();
       assert.equal(await page.locator('main[data-page="manage"]').count(), 1);
       await page.getByRole('button', { name: 'Create user' }).click();
       const create = page.locator('form').filter({ has: page.getByLabel('Confirm password', { exact: true }) });
@@ -81,8 +77,8 @@ for (const existing of [false, true]) {
       await page.getByText('Second Rider can now sign in.', { exact: true }).waitFor();
       assert.match(page.url(), /\/manage\/users\/\d+$/);
 
-      await page.getByRole('button', { name: 'End sessions', exact: true }).click();
-      await page.getByRole('alertdialog', { name: 'End all sessions of Second Rider?' }).waitFor();
+      await page.getByRole('button', { name: 'Sign out everywhere', exact: true }).click();
+      await page.getByRole('alertdialog', { name: 'Sign Second Rider out everywhere?' }).waitFor();
       await page.keyboard.press('Escape');
       assert.equal(await page.getByRole('alertdialog').count(), 0);
 
@@ -90,6 +86,95 @@ for (const existing of [false, true]) {
       await page.getByRole('link', { name: 'Profile', exact: true }).click();
       await page.getByRole('heading', { name: 'Profile' }).waitFor();
       assert.equal(await page.locator('main[data-page="manage"]').count(), 0);
+      if (!existing) {
+        const navigate = async (name: string) => {
+          await page.getByRole('button', { name: 'Menu', exact: true }).click();
+          await page.getByRole('link', { name, exact: true }).click();
+        };
+        const started = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let settingsLoads = 0;
+        await page.route('**/api/me/settings', async (route) => {
+          if (route.request().method() === 'GET') {
+            settingsLoads++;
+            if (settingsLoads === 1) {
+              started.resolve();
+              await release.promise;
+            }
+          }
+          await route.continue();
+        });
+
+        // Menu links stay active during a load. Back must replace the queued
+        // Profile destination with Settings, without adding a history entry.
+        await navigate('Settings');
+        await started.promise;
+        await navigate('Profile');
+        await page.goBack();
+        release.resolve();
+        const ghosts = page.getByRole('checkbox', { name: 'Ride with ghosts' });
+        await ghosts.waitFor();
+        await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('.ghosts input')?.disabled);
+        assert.equal(new URL(page.url()).pathname, '/settings');
+        assert.equal(settingsLoads, 2);
+        await page.unroute('**/api/me/settings');
+
+        const saving = Promise.withResolvers<void>();
+        const saved = Promise.withResolvers<void>();
+        let writes = 0;
+        await page.route('**/api/me/settings', async (route) => {
+          if (route.request().method() === 'PATCH') {
+            writes++;
+            saving.resolve();
+            await saved.promise;
+          }
+          await route.continue();
+        });
+        const wasChecked = await ghosts.isChecked();
+        await ghosts.click();
+        await saving.promise;
+        await navigate('Users');
+        await navigate('Server');
+        saved.resolve();
+        await page.getByRole('button', { name: 'Create backup', exact: true }).waitFor();
+        await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('.sign-out')?.disabled);
+        await page.getByRole('heading', { name: 'Configuration', exact: true }).waitFor();
+        assert.equal(new URL(page.url()).pathname, '/manage/server');
+        assert.equal(writes, 1);
+        // The mutation finishes once, then the final destination loads. Its
+        // success message must not leak into the destination's UI.
+        assert.equal(await page.getByText(/Ghosts turned (on|off)\./).count(), 0);
+        await navigate('Settings');
+        await ghosts.waitFor();
+        await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('.ghosts input')?.disabled);
+        assert.equal(await ghosts.isChecked(), !wasChecked);
+        await page.unroute('**/api/me/settings');
+
+        const failing = Promise.withResolvers<void>();
+        const fail = Promise.withResolvers<void>();
+        await page.route('**/api/me/settings', async (route) => {
+          if (route.request().method() === 'PATCH') {
+            failing.resolve();
+            await fail.promise;
+            await route.fulfill({ status: 503, json: { message: 'Save refused.' } });
+            return;
+          }
+          await route.continue();
+        });
+        await ghosts.click();
+        await failing.promise;
+        await navigate('Profile');
+        fail.resolve();
+        await page.getByLabel('First name', { exact: true }).waitFor();
+        await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('.sign-out')?.disabled);
+        assert.equal(new URL(page.url()).pathname, '/profile');
+        assert.equal(await page.getByRole('alert').count(), 0);
+        await navigate('Settings');
+        await ghosts.waitFor();
+        await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('.ghosts input')?.disabled);
+        assert.equal(await ghosts.isChecked(), !wasChecked);
+        await page.unroute('**/api/me/settings');
+      }
       await page.getByRole('button', { name: 'Menu', exact: true }).click();
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await page.getByLabel('Login name', { exact: true }).fill('owner');

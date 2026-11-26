@@ -1,0 +1,90 @@
+[tools]
+node = '26'
+pnpm = '12.18.0'
+
+[tasks.install]
+description = 'Install all workspace dependencies'
+dir = "{{config_root}}"
+run = 'pnpm install --frozen-lockfile'
+
+[tasks.build]
+description = 'Build server, including its admin CLI'
+dir = "{{config_root}}/server"
+run = 'pnpm build'
+
+[tasks.test]
+description = 'Run server, including its admin CLI tests'
+depends = ['build']
+dir = "{{config_root}}/server"
+run = 'pnpm test'
+
+[tasks.lint]
+description = 'Lint server and web sources'
+dir = "{{config_root}}/server"
+run = 'pnpm lint'
+
+[tasks."lint:fix"]
+description = 'Fix lint problems in server and web sources'
+dir = "{{config_root}}/server"
+run = 'pnpm lint:fix'
+
+[tasks.typecheck]
+description = 'Typecheck server, CLI, and web sources'
+depends = ['build']
+dir = "{{config_root}}/server"
+run = ['pnpm typecheck', 'pnpm check:web']
+
+[tasks.format-fix]
+alias = 'format:fix'
+description = 'Format project files'
+dir = "{{config_root}}/server"
+run = 'pnpm format:fix'
+
+[tasks.format]
+description = 'Check project formatting'
+dir = "{{config_root}}/server"
+run = 'pnpm format'
+
+[tasks.check]
+description = 'Run project lint, typechecks, formatting, translations, and tests'
+depends = ['i18n:check', 'i18n:test', 'lint', 'typecheck', 'format', 'test']
+
+[tasks.dev]
+description = 'Run the full stack at http://localhost:5173 with hot updates'
+depends = ['dev:server', 'dev:web']
+
+[tasks."dev:assets"]
+description = 'Build launcher assets for the development server'
+dir = "{{config_root}}/server"
+run = 'pnpm --dir ../web build:game'
+
+[tasks."dev:server"]
+description = 'Run the local backend with automatic restarts'
+depends = ['dev:assets']
+dir = "{{config_root}}/server"
+run = 'pnpm exec tsx watch --conditions=development --import ./scripts/register-svelte.mjs src/main.ts --config dev/zluggish.config.ts'
+
+[tasks."dev:web"]
+description = 'Run Vite with frontend hot updates'
+dir = "{{config_root}}/server"
+run = 'pnpm --dir ../web exec vite --mode app'
+
+[tasks.server-codegen]
+description = 'Generate TypeScript protobuf codecs'
+dir = "{{config_root}}/server"
+run = 'pnpm codegen'
+
+[tasks.cli]
+description = 'Run CLI from source'
+dir = "{{config_root}}/server"
+run = 'pnpm cli'
+
+[tasks."i18n:check"]
+description = 'Check English catalogs, translation references, and user-facing strings'
+dir = '{{config_root}}'
+run = 'pnpm i18n:check'
+
+[tasks."i18n:test"]
+description = 'Test translation validation and interpolation'
+dir = '{{config_root}}'
+run = 'node --test scripts/i18n.spec.mjs'

@@ -27,7 +27,13 @@ export interface GameForm {
   /** Inputs are not saved settings (such as a sign-in password), so the form never reports unsaved changes. */
   transient?: boolean;
   /** The user-list row: avatar, plus the sign-in email under the name when the user has a real one. */
-  user?: { initials: string; photo: string | null; email: string | null };
+  user?: {
+    initials: string;
+    photo: string | null;
+    email: string | null;
+    /** The rider's workout planned for today, when one is synced. */
+    workout?: { name: string; minutes: number } | null;
+  };
 }
 
 export interface GamePageModel {
