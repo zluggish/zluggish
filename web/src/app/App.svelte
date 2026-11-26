@@ -441,7 +441,7 @@
 
   async function saveZwiftUpdates(allowed: boolean) {
     zwiftUpdates = await api(zwiftUpdatesResponse, '/api/manage/server/zwift-updates', 'PATCH', { allowed });
-    done(allowed ? 'Zwift updates are allowed.' : 'Zwift updates are on hold.');
+    done(allowed ? t('zwift_updates_allowed') : t('zwift_updates_held'));
   }
 
   async function createBackup() {
@@ -1216,30 +1216,33 @@
 
           {#if zwiftUpdates}
             <section class="panel">
-              <h2>Zwift client updates</h2>
+              <h2>{t('zwift_client_updates')}</h2>
               <p>
-                <strong>{zwiftUpdates.allowed && zwiftUpdates.available ? 'Allowed' : 'On hold'}</strong>
-                · Bundled game version {zwiftVersion}
+                <strong
+                  >{zwiftUpdates.allowed && zwiftUpdates.available
+                    ? t('zwift_updates_status_allowed')
+                    : t('zwift_updates_status_held')}</strong
+                >
+                {t('bundled_game_version', { version: zwiftVersion })}
               </p>
-              <p class="muted">Applies to Windows and macOS launchers redirected to this server.</p>
+              <p class="muted">{t('zwift_updates_scope')}</p>
               {#if !zwiftUpdates.available}
-                <p class="muted">The CDN proxy is disabled in the server configuration.</p>
+                <p class="muted">{t('cdn_proxy_disabled_config')}</p>
               {/if}
               {#if zwiftUpdates.allowed}
-                <button disabled={busy} onclick={() => run(() => saveZwiftUpdates(false))}>Hold updates</button>
+                <button disabled={busy} onclick={() => run(() => saveZwiftUpdates(false))}>{t('hold_updates')}</button>
               {:else}
                 <button
                   disabled={busy || !zwiftUpdates.available}
                   onclick={() => {
                     pending = {
-                      title: 'Allow Zwift updates?',
-                      detail:
-                        'Redirected desktop clients can download updates from Zwift. A game or launcher update can break compatibility. Hold updates again when you’re done.',
-                      label: 'Allow updates',
+                      title: t('allow_zwift_updates_title'),
+                      detail: t('allow_zwift_updates_detail'),
+                      label: t('allow_updates'),
                       destructive: false,
                       confirm: () => saveZwiftUpdates(true),
                     };
-                  }}>Allow updates</button
+                  }}>{t('allow_updates')}</button
                 >
               {/if}
             </section>

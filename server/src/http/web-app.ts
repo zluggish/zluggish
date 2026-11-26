@@ -944,7 +944,7 @@ export function createWebApp(runtime: HttpRuntime) {
       const zwiftUpdates = yield* ZwiftUpdatesService;
 
       if (allowed && !available) {
-        throw new ApplicationError({ status: 409, message: 'The CDN proxy is disabled.' });
+        throw new ApplicationError({ status: 409, message: t('cdn_proxy_disabled') });
       }
 
       yield* zwiftUpdates.setAllowed(allowed);
