@@ -70,7 +70,20 @@ export interface ToolchainState {
 
 export type ToolchainProgress = (step: 'runtime' | 'editor', fraction: number | null) => void;
 
-/** Runs a command and resolves with its output, or rejects with its last lines. */
+export class ToolchainProcessError extends Error {
+  readonly #stderr: string;
+
+  constructor(message: string, stderr: string) {
+    super(message);
+    this.#stderr = stderr;
+  }
+
+  get stderr() {
+    return this.#stderr;
+  }
+}
+
+/** Runs a command and keeps stderr for logging if it fails. */
 function execute(command: string, args: ReadonlyArray<string>, options: { cwd?: string; signal?: AbortSignal } = {}) {
   return new Promise<string>((done, fail) => {
     const child = spawn(command, args, {
@@ -81,25 +94,30 @@ function execute(command: string, args: ReadonlyArray<string>, options: { cwd?: 
     });
 
     let output = '';
+    let stderr = '';
 
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString('utf8')).slice(-16_384);
+    const keep = (chunk: string) => {
+      output = (output + chunk).slice(-16_384);
     };
 
-    child.stdout.on('data', keep);
-    child.stderr.on('data', keep);
+    child.stdout.setEncoding('utf8').on('data', keep);
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      stderr += chunk;
+      keep(chunk);
+    });
     child.on('error', fail);
     child.on('close', (code) => {
       if (code === 0) {
         done(output);
       } else {
         fail(
-          new Error(
+          new ToolchainProcessError(
             t('toolchain_process_exit_error', {
               value1: command,
               value2: code,
               value3: output.trim().split('\n').slice(-8).join('\n'),
             }),
+            stderr,
           ),
         );
       }

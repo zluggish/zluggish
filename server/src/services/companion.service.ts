@@ -583,7 +583,7 @@ const make = Effect.gen(function* () {
 
       advance('decode');
       const decoded = resolve(workspace, 'decoded');
-      await editor(['d', '-i', source, '-o', decoded, '-f']);
+      await editor(['d', '-dex-lib', 'jf', '-i', source, '-o', decoded, '-f']);
       advance('patch');
       await apk.patchDecoded(decoded, pem, certificateResource);
       job.info('patched', 'Pointed the decoded app at the server certificate', {
@@ -592,7 +592,7 @@ const make = Effect.gen(function* () {
       });
       advance('build');
       const built = resolve(workspace, 'built.apk');
-      await editor(['b', '-i', decoded, '-o', built, '-f']);
+      await editor(['b', '-dex-lib', 'jf', '-i', decoded, '-o', built, '-f']);
       job.info('rebuilt', 'Rebuilt the app', { bytes: (await apk.size(built)) ?? 0 });
       advance('sign');
       const output = await sign(built, [], pem, workspace);

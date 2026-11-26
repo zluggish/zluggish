@@ -51,7 +51,7 @@ function safe(value: LogValue, seen = new WeakSet<object>(), depth = 0): Seriali
     return {
       type: value.name,
       message: safe(value.message),
-      stack: value.stack === undefined ? undefined : multiline(value.stack),
+      stack: value.stack === undefined ? undefined : multiline(value.stack).slice(0, 10_000),
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       cause: value.cause === undefined ? undefined : safe(value.cause as LogValue, seen, depth + 1),
     };
@@ -88,7 +88,7 @@ function safe(value: LogValue, seen = new WeakSet<object>(), depth = 0): Seriali
 
 function multiline(value: string) {
   // eslint-disable-next-line no-control-regex
-  return value.replaceAll(/[\u{0000}-\u{0008}\u{000B}-\u{001F}\u{007F}]/gu, ' ').slice(0, 10_000);
+  return value.replaceAll(/[\u{0000}-\u{0008}\u{000B}-\u{001F}\u{007F}]/gu, ' ');
 }
 
 function fieldText(value: Serialized, includeStack: boolean, key = ''): string {
@@ -141,7 +141,8 @@ export class LoggingRepository {
 
   info = (event: string, message: string, fields?: Fields) => this.write('INFO', event, message, fields);
 
-  warn = (event: string, message: string, fields?: Fields) => this.write('WARN', event, message, fields);
+  warn = (event: string, message: string, fields?: Fields, diagnostics?: string) =>
+    this.write('WARN', event, message, fields, diagnostics);
 
   error = (event: string, message: string, fields?: Fields) => this.write('ERROR', event, message, fields);
 
@@ -171,7 +172,7 @@ export class LoggingRepository {
     }
   }
 
-  private write(level: Level, event: string, message: string, fields: Fields = {}) {
+  private write(level: Level, event: string, message: string, fields: Fields = {}, diagnostics?: string) {
     if (!this.isLevelEnabled(level)) {
       return;
     }
@@ -188,11 +189,15 @@ export class LoggingRepository {
       // Text logs print each error the way Node does, stack and causes on their own lines.
       const traces = Object.values(all)
         .filter((value) => value instanceof Error)
-        .map((error) => `\n${multiline(inspect(error, { depth: 4 }))}`)
+        .map((error) => `\n${multiline(inspect(error, { depth: 4 })).slice(0, 10_000)}`)
         .join('');
 
       const consoleFields = fieldText(data, false);
-      this.sink(`${consoleFields ? `${prefix} ${consoleFields}` : prefix}${traces}`, level);
+      const details = diagnostics?.trimEnd();
+      this.sink(
+        `${consoleFields ? `${prefix} ${consoleFields}` : prefix}${details ? `\n${multiline(details)}` : ''}${traces}`,
+        level,
+      );
     } catch {
       // Logging must never interrupt a request, network callback, or shutdown.
     }
