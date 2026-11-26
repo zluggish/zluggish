@@ -1,11 +1,15 @@
 ---
 sidebar_position: 4
-description: Install Zwift for Zluggish on Android and send game traffic to your server.
+description: Publish and install Zwift for Zluggish on Android and send game traffic to your server.
 ---
 
 # Android
 
 **Zwift for Zluggish** trusts your server's certificate and installs alongside Zwift from Google Play. It works without root.
+
+Download the patched app from the specific Zluggish server you want to connect to. Each server has its own certificate; an app downloaded from another server will not trust the server you want to use.
+
+Before riders can install it, an administrator must [download Zwift manually, upload it to Zluggish and wait for patching](#publish-zwift-for-android).
 
 ## Install Zwift
 
@@ -19,31 +23,22 @@ When the administrator publishes a new version or [rotates the certificate](../c
 
 ## Point Zwift at Zluggish
 
-Choose one method to point the hostnames on the setup page at your server.
+Use [Virtual Hosts](dns-settings.md#virtual-hosts-android) to redirect the hostnames on a single Android device without root. It uses Android's VPN slot, so use it by itself.
 
-- **Router DNS**. Add the hostnames as local DNS records on a router that supports overrides. Use the router's DNS on the Android device.
-- **Zluggish DNS**. [Enable the optional DNS listener](../../reference/ports.md#optional-dns-with-docker), then set the Android device's Wi-Fi DNS to the Zluggish server's LAN IP.
-- **Cloudflare One Client**. For remote play, use a [Gateway DNS override](../remote-access.md#redirect-the-zwift-names-with-gateway-dns).
-- **Virtual Hosts**. Use the app below for a redirect on a single device.
+For router DNS, Zluggish DNS or remote play with Cloudflare One Client, see [DNS settings](dns-settings.md).
 
 If Android's **Private DNS** setting bypasses your chosen DNS server, turn it off while you use the redirect. The redirect applies to both installed copies of Zwift. Disable it before using the official service.
-
-### Virtual Hosts
-
-[Virtual Hosts](https://github.com/x-falcon/Virtual-Hosts/releases/latest) uses Android's VPN slot. Use it by itself and choose another DNS method if Android cannot install it.
-
-1. Install `app-Github-release.apk` from the release page.
-2. Save the host entries from the Zluggish setup page as `hosts.txt` on the device.
-3. Open Virtual Hosts, select `hosts.txt` and turn it on.
 
 ## Publish Zwift for Android
 
 An administrator does this once per app version.
 
-1. Open **Manage → Android apps → Zwift**.
-2. Select **Download and build** if offered. To upload instead, get the **BUNDLE 1 OBB** variant from [APKMirror](https://www.apkmirror.com/apk/zwift-inc/zwift/) and drop the `.apkm` file on the upload area.
-3. For an upload, keep the page open until it finishes. The server builds the app in the background and shows its progress on the same page.
+1. Manually download the **BUNDLE 1 OBB** variant of Zwift from [APKMirror](https://www.apkmirror.com/apk/zwift-inc/zwift/). You need the `.apkm` file.
+2. On the Zluggish server riders will connect to, open **Manage → Android apps → Zwift** as an administrator.
+3. Use **Upload Zwift** or drop the `.apkm` file on the upload area. Keep the page open until the upload finishes.
+4. Wait for Zluggish to patch and sign the app. The server builds it in the background and shows its progress on the same page.
+5. When the build finishes, open **Apps → Zwift → Android** on the Android device, then [download and install the patched app](#install-zwift) from this server.
 
-The build status shows the recommended free space. The first build may download Java and APKEditor, which the [Companion patcher](../companion-app.md#build-tools-and-backups) also uses. The server keeps the last upload so **Build again** can rebuild it.
+The build status shows the recommended free space. The first build may download Java and APKEditor, which the [Companion patcher](companion-android.md#build-tools-and-backups) also uses. The server keeps the last upload so **Build again** can rebuild it.
 
 The upload, published app and signing key are excluded from [server backups](../../maintenance/backup-and-restore.md). Save `storage/zwift-android/signer.pem` separately if you need to install future builds over existing copies.

@@ -25,7 +25,7 @@ The Zluggish web app is the portal for managing the game, including installing t
 Open **Manage** in the sidebar.
 
 - **Users** lets you create, disable or delete accounts, set passwords, change roles and end sessions.
-- **Android apps** lets you publish [Zwift](../install/clients/android.md#publish-zwift-for-android) and [Companion](../install/companion-app.md) builds for your server.
+- **Android apps** lets you publish [Zwift](../install/clients/android.md#publish-zwift-for-android) and [Companion](../install/clients/companion-android.md#publish-companion) builds for your server.
 - **Server** lets you rotate the [certificate](../install/certificate.md), [start a backup](../maintenance/backup-and-restore.md), read logs and manage bots, events and world settings.
 
 ## Turn off the web app
