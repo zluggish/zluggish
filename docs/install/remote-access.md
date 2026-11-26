@@ -50,7 +50,3 @@ Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traf
    ![Cloudflare Gateway DNS policy scope with Host in matching all four Zwift game hostnames](../../media/screenshots/cloudflare-gateway-dns-hosts.png)
 
 2. Set the action to **Override** and enter the server's private IP in **Override Hostname**.
-3. Scope the policy to your riders, for example with **User Email**. It redirects official Zwift traffic for devices that match it.
-4. If you use a desktop setup script, turn off **Patch hosts file** in **Advanced settings** and remove any old Zluggish entries from the hosts file.
-
-On Android, turn off Virtual Hosts before connecting Cloudflare One Client. If Android **Private DNS** bypasses Gateway, turn it off. Companion uses the public CDN for images, so leave `cdn.zwift.com` out of Companion-only policies.
