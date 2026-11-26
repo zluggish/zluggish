@@ -14,16 +14,15 @@ If you just set up your Zluggish server, you must [download Zwift manually and l
 1. In the [web app](../../usage/web-app.md), open **Apps → Zwift → Android** on the Android device.
 2. Select **Download Zwift**. The page shows the version and download size. If a download is unavailable, ask your administrator to [publish the app](#publish-zwift-for-android).
 3. Open the downloaded file and allow your browser to install it. If Play Protect prompts about the unknown app, select **Install anyway**.
-4. [Point the Zwift names at your server](#point-zwift-at-zluggish).
+4. [Change the DNS settings](#modify-android-dns-settings).
 5. Open **Zwift for Zluggish** and sign in with your Zluggish login name and password. The first launch unpacks the game files.
 
-When the administrator publishes a new version or [rotates the certificate](../certificate.md), install the new download from the same page.
+## Update Zwift
+When there is a new app, the Zluggish administrator has to upload the latest version to Zluggish, and then the patched version needs to be downloaded from there.
 
-## Point Zwift at Zluggish
+## Modify Android DNS settings
 
-Use [Virtual Hosts](dns-settings.md#virtual-hosts-android) to redirect the hostnames on a single Android device without root. It uses Android's VPN slot, so use it by itself.
-
-For router DNS, Zluggish DNS or remote play with Cloudflare One Client, see [DNS settings](dns-settings.md).
+The Android DNS settings need to be manually patched for the app to work. There are several methods documented on the [DNS settings page](dns-settings.md), but the [Virtual Hosts](dns-settings.md#virtual-hosts-android) method is usually the best place to start
 
 If Android's **Private DNS** setting bypasses your chosen DNS server, turn it off while you use the redirect. The redirect applies to both installed copies of Zwift. Disable it before using the official service.
 
