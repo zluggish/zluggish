@@ -5,7 +5,7 @@ description: Use the Zluggish web app to manage rides, accounts and the server.
 
 # Web app
 
-Here are the actions you can take in the webapp.
+The Zluggish web app is the portal for managing the game, including installing the patched client apps and the companion.
 
 ## Rider pages
 

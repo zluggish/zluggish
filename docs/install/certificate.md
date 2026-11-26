@@ -5,7 +5,7 @@ description: Manage the certificate that Zwift uses to connect to Zluggish.
 
 # Server certificate
 
-Zluggish generates a self-signed certificate for `*.zwift.com` on first start. The Zwift API and launcher use it on HTTPS port 443 by default. The management web app listens separately on HTTP. To give that app HTTPS, [use a reverse proxy](../usage/web-app.md#use-a-reverse-proxy).
+Zluggish generates a self-signed certificate for `*.zwift.com` on first start. The Zwift API and launcher use it on HTTPS port 443 by default. The management web app listens separately on HTTP. To give that app HTTPS, follow the [remote access guide](remote-access.md#web-app).
 
 Administrators can see the certificate fingerprint and expiry under **Manage → Server → Zwift certificate**. The managed certificate and key are stored together in `storage/tls/zwift-server.pem` and included in [server backups](../maintenance/backup-and-restore.md). The default lifetime is five years. Set `tls.lifetimeYears` to change the lifetime of the next generated certificate.
 

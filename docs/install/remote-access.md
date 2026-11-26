@@ -26,7 +26,7 @@ Both need a Cloudflare account and a [tunnel with `cloudflared`](https://develop
 4. In `zluggish.config.ts`, set `network.web.publicUrl` to the full HTTPS origin, such as `https://zluggish.example.com`.
 5. Restart Zluggish, then open the HTTPS address and sign in.
 
-Cloudflare provides HTTPS to the browser. Zluggish uses the configured origin to validate changes and mark session cookies secure. See [Web app](../usage/web-app.md#use-a-reverse-proxy).
+Cloudflare provides HTTPS to the browser. Zluggish uses the configured origin to validate changes and mark session cookies secure.
 
 ## Zwift game
 
