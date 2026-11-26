@@ -1,5 +1,7 @@
 import { decodeConfigInput, validateConfig } from '#src/config/index';
+import { BuildLog } from '#src/repositories/build-log.repository';
 import { LoggingRepository } from '#src/repositories/logging.repository';
+import { ToolchainProcessError } from '#src/repositories/toolchain.repository';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -97,6 +99,29 @@ await test('errors keep their message, stack and cause', () => {
   assert.match(trace[0]!, /^Error: outer failure$/);
   assert.match(trace[1]!, /^\s+at /);
   assert.ok(trace.some((frame) => frame.includes('[cause]: TypeError: inner failure')));
+});
+
+await test('tool diagnostics reach the backend log in full', async () => {
+  const lines: Array<string> = [];
+  const log = new LoggingRepository({
+    sink: (line) => {
+      lines.push(line);
+    },
+  });
+  const job = new BuildLog(log, 'companion', 'Zwift Companion');
+  const frames = '\tat example.Decoder.read(Decoder.java:42)\n'.repeat(500);
+  const stderr = `Exception in thread "main" java.lang.OutOfMemoryError: Java heap space\n${frames}\tat example.Main.main(Main.java:1)`;
+  const error = new ToolchainProcessError('java exited with code 1', stderr);
+
+  await assert.rejects(
+    job.tool('APKEditor', ['d'], () => Promise.reject(error)),
+    error,
+  );
+
+  assert.equal(lines.length, 2);
+  assert.match(lines[1]!, /companion\.tool_failed/);
+  assert.ok(lines[1]!.includes(stderr));
+  assert.doesNotMatch(log.recentEntries()[0]!, /OutOfMemoryError/);
 });
 
 await test('children share configuration and retain their own context', () => {

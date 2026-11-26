@@ -1,4 +1,5 @@
 import type { LoggingRepository } from '#src/repositories/logging.repository';
+import { ToolchainProcessError } from '#src/repositories/toolchain.repository';
 import { performance } from 'node:perf_hooks';
 
 /** The last few non-empty lines of a tool's output: enough to see what it did without flooding the log. */
@@ -84,11 +85,12 @@ export class BuildLog {
 
       return output;
     } catch (error) {
-      this.log.warn(`${this.prefix}.tool_failed`, `${name} failed`, {
-        tool: name,
-        durationMs: since(begun),
-        error: error instanceof Error ? error : String(error),
-      });
+      this.log.warn(
+        `${this.prefix}.tool_failed`,
+        `${name} failed`,
+        { tool: name, durationMs: since(begun), error: error instanceof Error ? error : String(error) },
+        error instanceof ToolchainProcessError ? error.stderr : undefined,
+      );
       throw error;
     }
   }
