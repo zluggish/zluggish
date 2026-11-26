@@ -7,6 +7,26 @@ description: Choose how Zwift and Companion resolve your Zluggish server's hostn
 
 Zwift and Companion need to resolve the hostnames shown on the Zluggish setup page to your server's IP address. Choose one of the methods below. You still need to follow your device's client setup guide to install or patch the app and trust the server certificate.
 
+## Manual DNS records
+
+For Zwift, add these four hostnames as local DNS overrides, each pointing to your Zluggish server's IP address:
+
+- `us-or-rly101.zwift.com`
+- `secure.zwift.com`
+- `cdn.zwift.com`
+- `launcher.zwift.com`
+
+On your local network, use the server's LAN IP address. For example, if your server is at `192.168.1.100`, the equivalent hosts-file entries are:
+
+```text
+192.168.1.100 us-or-rly101.zwift.com
+192.168.1.100 secure.zwift.com
+192.168.1.100 cdn.zwift.com
+192.168.1.100 launcher.zwift.com
+```
+
+Replace `192.168.1.100` with your server's actual IP address.
+
 ## Setup script (Windows, macOS and Linux)
 
 Use the setup script in your device's guide by default. It adds the required entries to the computer's hosts file, so you do not need a separate DNS server.
