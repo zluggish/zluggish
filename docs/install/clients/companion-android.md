@@ -5,7 +5,7 @@ description: Publish and install Companion for Zluggish on Android and send Comp
 
 # Companion (Android)
 
-**Companion for Zluggish** trusts your server's certificate and installs alongside Zwift Companion from Google Play. You don't need to root your device.
+**Companion for Zluggish** is a patched Zwift companion app for Zluggish. It can be installed alongside the official Zwift companion app, and you don't need to root your device.
 
 If you just set up your Zluggish server, an administrator must [publish Companion](#publish-companion) before these instructions work.
 
