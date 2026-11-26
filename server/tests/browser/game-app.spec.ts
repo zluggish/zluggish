@@ -379,6 +379,14 @@ await test('web connections keep saved secrets, show Garmin MFA and run workout 
   await page.getByText('Credentials saved.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Sync workouts' }).click();
   await page.getByText('Synced 2 Intervals.icu workouts.', { exact: true }).waitFor();
+
+  const intervalsUpload = page.getByLabel('Upload completed activities', { exact: true });
+  await intervalsUpload.waitFor();
+  assert.equal(await intervalsUpload.isChecked(), true);
+  await intervalsUpload.uncheck();
+  await page.getByText('Upload setting saved.', { exact: true }).waitFor();
+  assert.equal(f.settings.read(rider.player_id)['uploads.intervals.enabled'], false);
+
   await context.close();
 });
 

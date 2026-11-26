@@ -313,6 +313,7 @@
             photo={model.user.photo}
             name={pending ? 'Submitting…' : button.label}
             detail={model.user.email}
+            workout={model.user.workout ?? null}
           />{:else}{pending ? t('submitting') : button.label}{/if}</button
       >
     {/each}

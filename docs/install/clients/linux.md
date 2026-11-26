@@ -8,7 +8,7 @@ description: Connect Zwift for Windows running under Wine or Proton to Zluggish.
 Zluggish supports running the Windows game client on Linux through Wine or Proton.
 
 1. Install Zwift for Windows in Wine, Lutris, Bottles or Steam with Proton. Open Zwift once to finish any updates, then close it before signing in.
-2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → Linux**. 
+2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → Linux**.
 3. Select **Download setup script**. Use the script from the specific Zluggish server you want to connect to, since each server has a unique certificate.
 4. In a terminal, run the command shown on the setup page. Enter your password when `sudo` prompts you.
 5. Restart the Wine or Proton session, then open Zwift and sign in through the Zluggish launcher.

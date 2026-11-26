@@ -82,7 +82,7 @@ export const userSettingsSchema = z.object({
   overrides: z.record(z.string(), z.union([z.boolean(), z.string()])),
   defaults: z.object({
     ghosts: z.object({ enabled: z.boolean() }),
-    uploads: z.object({ strava: z.object({ method: z.string() }) }),
+    uploads: z.object({ intervals: z.object({ enabled: z.boolean() }), strava: z.object({ method: z.string() }) }),
     workouts: z.object({ trainingpeaks: z.object({ bridgeFolder: z.string() }) }),
   }),
 });

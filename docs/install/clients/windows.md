@@ -5,7 +5,7 @@ description: Connect Zwift for Windows to Zluggish.
 
 # Windows
 
-Zluggish supports running the game client on Windows. 
+Zluggish supports running the game client on Windows.
 
 1. Install Zwift normally. Open it once to finish any updates, then exit it from the system tray before signing in.
 2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → Windows**. Use **Other systems** if Windows is hidden.
@@ -13,13 +13,13 @@ Zluggish supports running the game client on Windows.
 4. Open the downloaded `.bat` file and allow it to run as an administrator. If SmartScreen blocks it, select **More info → Run anyway**.
 5. Wait for **Done**, then open Zwift and sign in through the Zluggish launcher.
 
-The script adds the Zluggish certificate in the Local Computer root store and adds it to `data\cacert.pem` in the Zwift folder. By default, the script also updates DNS lookup settings in `C:\Windows\System32\drivers\etc\hosts` with the Zluggish ip adress. 
+The script adds the Zluggish certificate in the Local Computer root store and adds it to `data\cacert.pem` in the Zwift folder. By default, the script also updates DNS lookup settings in `C:\Windows\System32\drivers\etc\hosts` with the Zluggish ip adress.
 
 If you don't want the script to change DNS settings, turn off **Patch hosts file** under **Advanced settings** before downloading the script. You can then manually follow the instructions on the [DNS settings page.](dns-settings.md).
 
 ## Updating
 
-If Zwift updates, there is a risk that it loses its connection to Zluggish. In that case, download the setup script  and rerun.
+If Zwift updates, there is a risk that it loses its connection to Zluggish. In that case, download the setup script and rerun.
 
 ## Manual setup
 

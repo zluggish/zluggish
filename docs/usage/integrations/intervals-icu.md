@@ -14,6 +14,8 @@ description: Get planned workouts from Intervals.icu and TrainingPeaks, and uplo
 
 Cycling workouts show in the launcher. Zluggish can upload completed activities and pair them with their planned workout.
 
+If another service already sends your activities to Intervals.icu, for example Garmin Connect, clear **Upload completed activities** to avoid duplicates. Workout sync continues to work. Zluggish then does not pair completed activities with their planned workouts. You can also set the `uploads.intervals.enabled` preference.
+
 Zluggish gets the workouts again when you sign in to the launcher. The Android game login also does this when it uses saved login tokens. Each automatic update has a time limit of five seconds. If the update fails, Zluggish keeps the cached workouts.
 
 To get the workouts immediately, select **Sync workouts** under **Integrations → Intervals.icu**.

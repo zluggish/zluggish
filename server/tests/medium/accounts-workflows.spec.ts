@@ -7,6 +7,7 @@ import { TcpConfigSchema } from '#src/protocol/generated/per-session-info_pb';
 import { PlayerProfileSchema } from '#src/protocol/generated/profile_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
 import { AccountsService } from '#src/services/auth.service';
+import { AssetFiles } from '#src/repositories/files.repository';
 import { ImportsService } from '#src/services/profile-import.service';
 import { worldTime } from '#src/world/state';
 import { mediumBrowser, mediumFixture } from '#tests/medium/support';
@@ -203,6 +204,57 @@ await test('choosing a rider without a password fails on the rider list', async 
   assert.match(await guessed.text(), /Login failed\./);
   const profile = await client.request('/api/profiles/me');
   assert.equal(profile.status, 401);
+});
+
+await test('the rider picker advertises the workout planned today under each rider', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 12) });
+  const f = await mediumFixture(t);
+
+  // One rider has a synced Intervals.icu workout planned today; the other has no files at all.
+  new AssetFiles().writeDurable(
+    resolve(f.profiles.folder(f.rider.player_id), 'intervals_icu_workout.json'),
+    JSON.stringify({
+      provider: 'intervals-icu',
+      event_id: 42,
+      workout_id: '3f2504e0-4f89-41d3-9a0c-1746aabcdef0',
+      name: 'Intervals Ride',
+      description: 'Two blocks at threshold',
+      start_date_local: '2026-11-13T08:00:00',
+      icu_training_load: '34',
+      filename: '3f2504e0-4f89-41d3-9a0c-1746aabcdef0.zwo',
+      synced_at: '2026-11-13T07:00:00.000Z',
+    }),
+    true,
+  );
+  const cache = resolve(f.config.storageDir, 'tp-workouts/intervalsicu');
+  mkdirSync(cache, { recursive: true });
+  new AssetFiles().writeDurable(
+    resolve(cache, '3f2504e0-4f89-41d3-9a0c-1746aabcdef0.zwo'),
+    '<workout_file><name>Stored Ride</name><sportType>bike</sportType><workout>' +
+      '<Warmup Duration="300" PowerLow="0.5" PowerHigh="0.7"/>' +
+      '<SteadyState Duration="600" Power="0.85"/>' +
+      '<Cooldown Duration="300" PowerLow="0.6" PowerHigh="0.4"/>' +
+      '</workout></workout_file>',
+    true,
+  );
+
+  const pickerResponse = await f.app.request('http://local:8080/login/');
+  const picker = await pickerResponse.text();
+  assert.match(picker, /<title>Who’s riding\?<\/title>/);
+  const props: { forms: Array<{ user?: { workout?: { name: string; minutes: number } | null } }> } = JSON.parse(
+    picker
+      .match(/<script type="application\/json" id="launcher-props">([\s\S]*?)<\/script>/)?.[1]
+      ?.replaceAll(String.raw`\u003c`, '<')
+      .replaceAll(String.raw`\u003e`, '>')
+      .replaceAll(String.raw`\u0026`, '&') ?? 'null',
+  );
+  const workouts = props.forms.map((form) => form.user?.workout);
+
+  assert.deepEqual(
+    workouts,
+    [{ name: 'Intervals Ride', minutes: 20 }, null],
+    'the rider with today workout gets the badge, the rider without files gets null',
+  );
 });
 
 await test('distinct riders launch and refresh independently; password change revokes existing tokens', async (t) => {

@@ -160,6 +160,43 @@ await test('finished activities without completion records upload, while unfinis
   assert.equal(sends.mock.callCount(), 1);
 });
 
+await test('uploads.intervals.enabled off keeps the connection but stops finished activity uploads', async (t) => {
+  const f = await mediumFixture(t);
+  const player = f.rider.player_id;
+  const saveConnection = () =>
+    f.effects.runSync(ConnectionsService.use((service) => service.save(player, 'intervals', ['i123', 'key'])));
+
+  f.settings.save(player, { 'uploads.intervals.enabled': false });
+  saveConnection();
+  await completed(f);
+  const sends = t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+  await f.effects.runPromise(JobsService.use((service) => service.drain()));
+
+  assert.equal(
+    f.accounts.db.prepare("SELECT COUNT(*) AS count FROM activity_upload WHERE provider='intervals'").get()?.count,
+    0,
+  );
+  assert.equal(sends.mock.callCount(), 0);
+
+  const configured = () => f.effects.runSync(UploadsService.use((service) => service.configured(player)));
+  assert.equal(configured().includes('intervals'), false);
+  assert.equal(f.accounts.repositories.connectionsRepository.has(player, 'intervals'), true);
+
+  f.settings.save(player, {});
+  assert.ok(configured().includes('intervals'));
+
+  const id = await completed(f);
+  f.accounts.repositories.uploadsRepository.insert(id, 'intervals');
+  f.accounts.db.prepare("UPDATE activity_upload SET state='pending' WHERE provider='intervals'").run();
+  f.settings.save(player, { 'uploads.intervals.enabled': false });
+  f.effects.runSync(UploadsService.use((service) => service.revoke(player)));
+  assert.equal(
+    f.effects.runSync(UploadsService.use((service) => service.status(player))).find((row) => row.activity_id === id)
+      ?.state,
+    'cancelled',
+  );
+});
+
 await test('a partial Zwift delivery keeps its remote activity and a retry uploads to it', async (t) => {
   const f = await mediumFixture(t);
   f.effects.runSync(ConnectionsService.use((service) => service.save(f.rider.player_id, 'zwift', ['user', 'pass'])));

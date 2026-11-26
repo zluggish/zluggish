@@ -103,7 +103,7 @@ const make = Effect.gen(function* () {
       providers.push('runalyze');
     }
 
-    if (repositories.connectionsRepository.has(player, 'intervals')) {
+    if (settings.uploads.intervals.enabled && repositories.connectionsRepository.has(player, 'intervals')) {
       providers.push('intervals');
     }
 

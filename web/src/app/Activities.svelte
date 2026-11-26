@@ -2,6 +2,7 @@
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
   import ActivityChart from './ActivityChart.svelte';
+  import TodayWorkout from './TodayWorkout.svelte';
   import { tick } from 'svelte';
   import { slide } from 'svelte/transition';
   import { ignored } from '../lib/api';
@@ -654,6 +655,8 @@
 
 {#if failure}<p class="notice failed" role="alert">{failure}</p>{/if}
 <p class="visually-hidden" role="status">{announcement}</p>
+
+<TodayWorkout {api} />
 
 {#if activities === null}
   {#if !failure}<SlowLoading />{/if}

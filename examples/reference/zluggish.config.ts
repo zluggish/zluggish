@@ -168,6 +168,8 @@ export default defineConfig({
   riderDefaults: {
     ghosts: { enabled: true },
     uploads: {
+      // Upload finished activities to Intervals.icu when it is connected.
+      intervals: { enabled: true },
       // Upload finished activities to Zwift.
       zwift: { enabled: false },
       // Strava upload method: 'paid' or 'free'.

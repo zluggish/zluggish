@@ -18,6 +18,7 @@ These commands need an existing local rider, identified by a numeric `--user ID`
 | Key                                   | JSON value                       |
 | ------------------------------------- | -------------------------------- |
 | `ghosts.enabled`                      | `true` or `false`                |
+| `uploads.intervals.enabled`           | `true` or `false`                |
 | `uploads.zwift.enabled`               | `true` or `false`                |
 | `uploads.strava.method`               | `"paid"` or `"free"`             |
 | `devices.zwiftClick.enabled`          | `true` or `false`                |

@@ -281,6 +281,19 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
       return c.json({ valid });
     }),
   );
+  appRoutes.get('/api/me/workouts/today', (c) =>
+    Effect.gen(function* () {
+      const webSessionsService = yield* WebSessionsService;
+
+      const workoutsService = yield* WorkoutsService;
+
+      const player = (yield* webSessionsService.require(c.get('sessionId'))).player_id;
+
+      c.header('Cache-Control', 'private, no-store');
+
+      return c.json(yield* workoutsService.today(player));
+    }),
+  );
   appRoutes.post('/api/me/workouts/sync', (c) =>
     Effect.gen(function* () {
       const webSessionsService = yield* WebSessionsService;

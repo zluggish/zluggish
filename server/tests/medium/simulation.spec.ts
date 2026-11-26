@@ -366,3 +366,45 @@ await test('replay bot weights follow changes to the owner’s weight privacy', 
   f.profiles.save(rider.player_id, owner);
   assert.equal(f.profiles.get(botId).weightInGrams, 95_000);
 });
+
+await test('.blob keeps four slots and refuses a fifth without saving it', async (t) => {
+  const f = runtimeFixture(t);
+  const riders = await Promise.all(
+    ['Rider One', 'Rider Two', 'Rider Three', 'Rider Four', 'Rider Five'].map((name) =>
+      f.accounts.create(name, 'test-password'),
+    ),
+  );
+  const ids = riders.map((rider) => BigInt(rider.player_id));
+  const simulation = new Simulation(f, () => 100);
+  t.after(() => simulation.close());
+  await simulation.ready;
+
+  for (const id of ids.slice(0, 4)) {
+    assert.equal(simulation.command(id, 'blob 6'), 'Blob settings saved.');
+  }
+  assert.equal(simulation.blobs.size, 4);
+  assert.equal(
+    new Set(simulation.blobs.values().map((blob) => blob.index)).size,
+    4,
+    'the four blobs have distinct slot indexes',
+  );
+
+  const fifth = ids[4]!;
+  assert.equal(
+    simulation.command(fifth, 'blob 6'),
+    'All four blob slots are taken. Another rider has to stop theirs with .blob off first.',
+  );
+  assert.equal(simulation.blobs.size, 4);
+  assert.notEqual(f.settings.world(`blob:${fifth}`).enabled, true);
+
+  f.settings.saveWorld(`blob:${fifth}`, { enabled: true, riders: 6 });
+  await simulation.reload();
+  assert.equal(simulation.blobs.size, 4);
+  for (const id of ids.slice(0, 4)) {
+    assert.ok(simulation.blobs.has(id));
+  }
+
+  assert.equal(simulation.command(ids[0]!, 'blob off'), 'Blob off.');
+  assert.equal(simulation.command(fifth, 'blob 6'), 'Blob settings saved.');
+  assert.ok(simulation.blobs.has(fifth));
+});

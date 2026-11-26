@@ -9,15 +9,17 @@
   let {
     api,
     stravaMethod = $bindable(),
+    intervalsUpload = $bindable(),
     bridgeFolder = $bindable(),
     saved,
     save,
   }: {
     api: Api;
     stravaMethod: string;
+    intervalsUpload: boolean;
     bridgeFolder: string;
     /** The settings the server holds, so a tile does not change before its choice is saved. */
-    saved: { stravaMethod: string; bridgeFolder: string };
+    saved: { stravaMethod: string; intervalsUpload: boolean; bridgeFolder: string };
     save: () => Promise<void>;
   } = $props();
 
@@ -273,6 +275,19 @@
       }
 
       message = t('upload_method_saved');
+    });
+  }
+
+  function saveIntervalsUpload() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        intervalsUpload = saved.intervalsUpload;
+        throw error;
+      }
+
+      message = t('intervals_upload_saved');
     });
   }
 
@@ -618,6 +633,10 @@
       {:else if open === 'intervals'}
         <p class="muted">{t('connections_intervals_credentials_hint')}</p>
         {@render credentials('intervals')}
+        <label class="check"
+          ><input type="checkbox" bind:checked={intervalsUpload} disabled={busy} onchange={saveIntervalsUpload} />
+          {t('intervals_upload_activities')}</label
+        >
         <div class="actions">
           <button disabled={busy || !connections.intervals.saved} onclick={() => sync('intervals')}
             >{t('sync_workouts')}</button

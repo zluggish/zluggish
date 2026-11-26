@@ -36,7 +36,14 @@ const gameForm: z.ZodType<GameForm> = z.object({
   confirmation: z.string().optional(),
   primary: z.boolean().optional(),
   transient: z.boolean().optional(),
-  user: z.object({ initials: z.string(), photo: z.string().nullable(), email: z.string().nullable() }).optional(),
+  user: z
+    .object({
+      initials: z.string(),
+      photo: z.string().nullable(),
+      email: z.string().nullable(),
+      workout: z.object({ name: z.string(), minutes: z.number() }).nullable().optional(),
+    })
+    .optional(),
 });
 
 /** A launcher page, as the server renders it and as a saved form returns it. */

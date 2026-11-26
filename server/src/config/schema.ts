@@ -81,6 +81,7 @@ const text = (value: string) => Text.pipe(withDefault(value));
 export const riderSettingsSchema = section({
   ghosts: section({ enabled: flag(true) }),
   uploads: section({
+    intervals: section({ enabled: flag(true) }),
     zwift: section({ enabled: flag(false) }),
     strava: section({ method: Schema.Enum(StravaMethod).pipe(withDefault('paid')) }),
   }),

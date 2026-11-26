@@ -248,6 +248,20 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
                   : null,
                 // Riders created without an email get a placeholder username that means nothing to people.
                 email: user.username.endsWith('@local.invalid') ? null : user.username,
+                workout: (() => {
+                  try {
+                    const [planned] = runtime.effects.runSync(
+                      WorkoutsService.use((service) => service.today(user.player_id)),
+                    ).workouts;
+
+                    return planned
+                      ? { name: planned.name, minutes: Math.round(planned.summary.durationSeconds / 60) }
+                      : null;
+                  } catch {
+                    // A broken workout store must never hide the rider list.
+                    return null;
+                  }
+                })(),
               },
             },
           ),
