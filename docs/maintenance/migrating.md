@@ -38,7 +38,7 @@ You can also migrate offline with the CLI. Stop the server first.
 - To migrate the legacy settings, use [`config migrate`](../reference/cli/configuration.md).
 - To migrate the legacy accounts, use [`accounts migrate`](../reference/cli/accounts.md#migrate-legacy-accounts).
 
-If a migration stops before it is complete, run the same command with the same destination again. Keep `.config-migration.json`, and do not edit the config that the migration has written. JSONC-only installations must make the operator settings again manually.
+If a migration stops before it is complete, run the same command with the same destination again. Keep `.config-migration.json`, and do not edit the config that the migration has written. 
 
 ## Roll back
 

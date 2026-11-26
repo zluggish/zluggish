@@ -5,7 +5,7 @@ description: Migrate legacy accounts and recover a local account.
 
 # Account commands
 
-Account commands run offline on the selected storage. If `--storage-dir` points to the correct storage, they do not need an operator config.
+Account commands run offline on the selected storage. If `--storage-dir` points to the storage directory, they do not need a config file.
 
 ## Migrate legacy accounts
 

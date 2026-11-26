@@ -201,7 +201,7 @@ export async function run(argv: Array<string>, output: (message: string) => void
       }
 
       case 'typecheck': {
-        // The runtime image includes TypeScript for offline operator config checks.
+        // The runtime image includes TypeScript for offline config checks.
         const ts = await import('typescript');
 
         const program = ts.createProgram([selected], {

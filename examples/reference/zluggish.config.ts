@@ -1,4 +1,4 @@
-// Every operator setting, set to its default value. Copy only the lines you want to change into your own
+// Every zluggish setting, showing its default value. Copy only the lines you want to change into your own
 // zluggish.config.ts (the file must have that name): anything left out keeps
 // its default. Unknown keys and invalid values stop the server at startup. The file is read once; restart after
 // editing. Relative paths resolve against the folder that holds this file.
