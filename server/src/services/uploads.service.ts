@@ -397,7 +397,7 @@ const make = Effect.gen(function* () {
       }
 
       case 'garmin': {
-        return garmin(player, activity, attempt);
+        return garmin(player, activity, attempt, garminPhotos(player, attempt.activity));
       }
 
       case 'intervals': {
@@ -408,6 +408,18 @@ const make = Effect.gen(function* () {
         return ({ strava, runalyze } as const)[attempt.provider](player, activity);
       }
     }
+  }
+
+  /** Whether this rider let Garmin Connect receive the photos of a ride. */
+  function sendsGarminPhotos(player: number): boolean {
+    const settings = SettingsService.resolveRiderSettings(context.config.riderDefaults, context.settings.read(player));
+
+    return settings.uploads.garmin.photos.enabled;
+  }
+
+  /** Ride photos are opt-in: with `uploads.garmin.photos.enabled` off, Garmin gets only the FIT file. */
+  function garminPhotos(player: number, activity: number) {
+    return sendsGarminPhotos(player) ? photosNow(player, activity) : [];
   }
 
   /** Ready photos and videos only: a reserved row may have no complete file yet. */
@@ -503,19 +515,36 @@ const make = Effect.gen(function* () {
     );
   }
 
-  async function garmin(player: number, activity: Activity, attempt?: Attempt) {
+  async function garmin(player: number, activity: Activity, attempt?: Attempt, photos: ReadonlyArray<string> = []) {
     if (!repositories.riderDocuments.has(player, 'garth/oauth1_token.json')) {
       throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
     }
 
+    const store = repositories.garminRepository.tokenStore(repositories.riderDocuments, player);
+    const domain = context.config.integrations.garmin.domain;
+
     const id = await repositories.garminRepository.uploadGarmin(
-      repositories.garminRepository.tokenStore(repositories.riderDocuments, player),
-      context.config.integrations.garmin.domain,
+      store,
+      domain,
       activity.fitFilename,
       forGarmin(player, activity.fit),
     );
 
     rememberRemote(attempt, id);
+
+    const images = photos.filter((photo) => photo.endsWith('.jpg'));
+
+    if (id === null || images.length === 0) {
+      return;
+    }
+
+    try {
+      await repositories.garminRepository.postActivityImages(store, domain, id, images);
+    } catch (error) {
+      context.world.lifecycle.log.warn('upload.garmin_photos', 'The photos could not be added to the Garmin activity', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async function runalyze(player: number, activity: Activity) {
@@ -740,8 +769,14 @@ const make = Effect.gen(function* () {
       return yield* Effect.promise(() => freeStrava(player, activity, photos));
     }),
 
-    garmin: Effect.fn('UploadsService.garmin')(function* (player: number, activity: Activity) {
-      return yield* Effect.promise(() => garmin(player, activity));
+    garmin: Effect.fn('UploadsService.garmin')(function* (
+      player: number,
+      activity: Activity,
+      photos: ReadonlyArray<string> = [],
+    ) {
+      const paths = sendsGarminPhotos(player) ? photos : [];
+
+      return yield* Effect.promise(() => garmin(player, activity, undefined, paths));
     }),
 
     runalyze: Effect.fn('UploadsService.runalyze')(function* (player: number, activity: Activity) {

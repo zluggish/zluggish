@@ -5,6 +5,8 @@ import { SessionRepository } from '#src/repositories/session.repository';
 import { decodeGarminImport, garminActivityId } from '#src/dtos/remote-ids.dto';
 import type { OAuth1Token, TokenStore, Tokens } from 'garminconnect-js';
 import { Garmin, GarminAuthError, GarminClient, GarminHttpError, MemoryTokenStore } from 'garminconnect-js';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { Option, Schema } from 'effect';
 
 const oauth1 = Schema.Struct({
@@ -138,6 +140,23 @@ export class GarminRepository {
         throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
       }
       throw error;
+    }
+  }
+
+  /** The photos of a ride, one request each, added to an activity Garmin already imported. */
+  async postActivityImages(store: TokenStore, domain: string, activityId: string, photos: ReadonlyArray<string>) {
+    const client = this.garminClient(store, domain);
+
+    if (!(await client.loadTokens())) {
+      throw new DeliveryRefusedError({ code: 'garmin_unauthorized' });
+    }
+
+    for (const photo of photos) {
+      await client.upload(
+        new Blob([readFileSync(photo)], { type: 'image/jpeg' }),
+        basename(photo),
+        `/activity-service/activity/${activityId}/image`,
+      );
     }
   }
 }

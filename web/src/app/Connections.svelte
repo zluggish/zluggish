@@ -9,6 +9,7 @@
   let {
     api,
     stravaMethod = $bindable(),
+    garminPhotos = $bindable(),
     garminDevice = $bindable(),
     intervalsUpload = $bindable(),
     bridgeFolder = $bindable(),
@@ -17,11 +18,18 @@
   }: {
     api: Api;
     stravaMethod: string;
+    garminPhotos: boolean;
     garminDevice: boolean;
     intervalsUpload: boolean;
     bridgeFolder: string;
     /** The settings the server holds, so a tile does not change before its choice is saved. */
-    saved: { stravaMethod: string; garminDevice: boolean; intervalsUpload: boolean; bridgeFolder: string };
+    saved: {
+      stravaMethod: string;
+      garminPhotos: boolean;
+      garminDevice: boolean;
+      intervalsUpload: boolean;
+      bridgeFolder: string;
+    };
     save: () => Promise<void>;
   } = $props();
 
@@ -362,6 +370,19 @@
     });
   }
 
+  function savePhotos() {
+    void run(async () => {
+      try {
+        await save();
+      } catch (error) {
+        garminPhotos = saved.garminPhotos;
+        throw error;
+      }
+
+      message = t('garmin_photos_setting_saved');
+    });
+  }
+
   function authorize(name: Provider) {
     void run(async () => {
       const result = await api(
@@ -693,6 +714,12 @@
         {/if}
         {@render storedList('strava')}
       {:else if open === 'garmin'}
+        <p class="muted">{t('garmin_photos_upload')}</p>
+        <label class="check"
+          ><input type="checkbox" bind:checked={garminPhotos} disabled={busy} onchange={savePhotos} />
+          {t('garmin_photos_enable')}</label
+        >
+        <p class="muted">{t('garmin_photos_default')}</p>
         {@render credentials('garmin')}
         {#if mfa}<TextField id="garmin-code" label={t('verification_code')} bind:value={code} maxlength={32} />{/if}
         <div class="actions">

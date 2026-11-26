@@ -174,8 +174,8 @@ export default defineConfig({
       zwift: { enabled: false },
       // Strava upload method: 'paid' or 'free'.
       strava: { method: 'paid' },
-      // Send Garmin Connect the FIT file as recorded on the Garmin Edge you chose. Off means the file of the game.
-      garmin: { device: { enabled: false } },
+      // Garmin device identity and activity photos are independently opt-in.
+      garmin: { device: { enabled: false }, photos: { enabled: false } },
     },
     // Pair a Zwift Click controller.
     devices: { zwiftClick: { enabled: false } },

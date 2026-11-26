@@ -85,7 +85,7 @@ export const userSettingsSchema = z.object({
     uploads: z.object({
       intervals: z.object({ enabled: z.boolean() }),
       strava: z.object({ method: z.string() }),
-      garmin: z.object({ device: z.object({ enabled: z.boolean() }) }),
+      garmin: z.object({ device: z.object({ enabled: z.boolean() }), photos: z.object({ enabled: z.boolean() }) }),
     }),
     workouts: z.object({ trainingpeaks: z.object({ bridgeFolder: z.string() }) }),
   }),
