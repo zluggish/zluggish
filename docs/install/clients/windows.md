@@ -17,10 +17,15 @@ The script adds the Zluggish certificate in the Local Computer root store and ad
 
 If you don't want the script to change DNS settings, turn off **Patch hosts file** under **Advanced settings** before downloading the script. You can then manually follow the instructions on the [DNS settings page.](dns-settings.md).
 
+## Updating
+
+If Zwift updates, there is a risk that it loses its connection to Zluggish. In that case, download the setup script  and rerun.
 
 ## Manual setup
 
-1. Open **Apps → Zwift → Manual setup** and download the `.cer` and `.crt` files.
+If you want to patch Zwift manually, perform these steps:
+
+1. Open **Apps → Zwift → Manual setup** in the webapp and download the `.cer` and `.crt` files.
 2. Open an administrator Command Prompt. Import the certificate using the filename you downloaded.
 
    ```bat
@@ -30,8 +35,6 @@ If you don't want the script to change DNS settings, turn off **Patch hosts file
 3. Append the contents of the `.crt` file to `data\cacert.pem` in the Zwift installation directory.
 4. With administrator rights, add the hosts line from **Manual setup** to `C:\Windows\System32\drivers\etc\hosts`. Use the server's IP address, or `127.0.0.1` if Zwift and Zluggish run on the same computer.
 
-Run setup again when the [server certificate changes](../certificate.md) or if a [Zwift update](../../troubleshooting/client-updates.md) overwrites the client files.
-
 ## Uninstall
 
-To switch back to the official service and remove the Zluggish certificate, follow the [uninstall instructions](../../maintenance/uninstall.md).
+To remove the Zluggish patches, follow the [uninstall instructions](../../maintenance/uninstall.md).

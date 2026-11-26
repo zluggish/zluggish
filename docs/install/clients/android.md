@@ -5,11 +5,9 @@ description: Publish and install Zwift for Zluggish on Android and send game tra
 
 # Android
 
-**Zwift for Zluggish** trusts your server's certificate and installs alongside Zwift from Google Play. It works without root.
+**Zwift for Zluggish** trusts your server's certificate and installs alongside Zwift from Google Play. You don't need to root your device.
 
-Download the patched app from the specific Zluggish server you want to connect to. Each server has its own certificate; an app downloaded from another server will not trust the server you want to use.
-
-Before riders can install it, an administrator must [download Zwift manually, upload it to Zluggish and wait for patching](#publish-zwift-for-android).
+If you just set up your Zluggish server, you must [download Zwift manually and let Zluggish patch it](#publish-zwift-for-android) before these instructions work..
 
 ## Install Zwift
 
