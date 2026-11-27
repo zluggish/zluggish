@@ -53,6 +53,13 @@ export const mutationRequest = Strict({
   role: Schema.optional(Schema.Literals(['rider', 'administrator'])),
 });
 
+/** The administrator types the login name: deleting cannot be undone. */
+export const deleteUserRequest = Strict({
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  operation: Schema.String.check(Schema.isUUID()),
+  username: Schema.String,
+});
+
 export const editUserRequest = Strict({
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
   operation: Schema.String.check(Schema.isUUID()),

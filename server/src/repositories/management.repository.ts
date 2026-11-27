@@ -52,6 +52,70 @@ export class ManagementRepository {
     }
   }
 
+  /** What deleting a rider removes, for the confirmation the administrator reads first. */
+  footprint(player: number) {
+    const row = this.executor.get(
+      query
+        .selectFrom('activity')
+        .select((eb) => [
+          eb.fn.countAll<number>().as('activities'),
+          eb.fn.coalesce(eb.fn.sum<number>('distanceInMeters'), eb.lit(0)).as('distance'),
+          eb.fn.coalesce(eb.fn.sum<number>('movingTimeInMs'), eb.lit(0)).as('moving'),
+          eb.fn.min<string | null>('start_date').as('first'),
+          eb.fn.max<string | null>('start_date').as('last'),
+        ])
+        .where('player_id', '=', player),
+    );
+
+    return {
+      activities: row?.activities ?? 0,
+      distance: row?.distance ?? 0,
+      moving: row?.moving ?? 0,
+      first: row?.first || null,
+      last: row?.last || null,
+    };
+  }
+
+  /** Every row that belongs to a rider. Documents, bookmarks and access group membership
+  follow the account through their foreign keys. The rider folder is removed by a job.
+  */
+  removeRider(player: number) {
+    const activities = query.selectFrom('activity').select('id').where('player_id', '=', player);
+
+    for (const table of [
+      'activity_file',
+      'activity_image',
+      'activity_media',
+      'activity_upload',
+      'activity_completion',
+    ] as const) {
+      this.executor.run(query.deleteFrom(table).where('activity_id', 'in', activities));
+    }
+
+    for (const table of [
+      'activity',
+      'activity_image',
+      'activity_media',
+      'activity_completion',
+      'segment_result',
+      'route_result',
+      'goal',
+      'goal_metrics',
+      'playback',
+      'power_curve',
+      'zfile',
+      'notification',
+      'rider_settings',
+      'rider_import',
+    ] as const) {
+      this.executor.run(query.deleteFrom(table).where('player_id', '=', player));
+    }
+
+    this.executor.run(query.deleteFrom('management_operation').where('actor_player_id', '=', player));
+    this.db.prepare("DELETE FROM web_session WHERE identity LIKE ? || ':%'").run(String(player));
+    this.executor.run(query.deleteFrom('user').where('player_id', '=', player));
+  }
+
   operation(actor: number, id: string) {
     return this.executor.get(
       query

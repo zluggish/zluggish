@@ -566,6 +566,36 @@ await test('riders delete their own activities in the web app, but not a ride th
   assert.deepEqual(list.activities.map((a) => a.id).sort(), [kept, riding].sort());
 });
 
+await test('riders delete a ride in the web app once the game has saved it for the last time', async (t) => {
+  const f = await mediumFixture(t);
+  const web = mediumWeb(f, f.rider);
+  f.world.login(BigInt(f.rider.player_id), new Uint8Array(16));
+
+  const data = {
+    playerId: BigInt(f.rider.player_id),
+    courseId: 6n,
+    name: 'Finished',
+    startDate: new Date().toISOString(),
+    distanceInMeters: 3000,
+    fitFilename: 'ride.fit',
+    fit: readFileSync(new URL('../fixtures/ride.fit', import.meta.url)),
+  };
+  const base = `/api/profiles/${f.rider.player_id}/activities`;
+  const posted = await f.request(base, { method: 'POST', ...binary(ActivitySchema, data) });
+  const { id } = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.Finite }))(await posted.json());
+
+  assert.equal(await responseStatus(web.request(`/api/me/activities/${id}`, 'DELETE')), 409);
+
+  const saved = await f.request(`${base}/${id}?upload-to-strava=true`, {
+    method: 'PUT',
+    ...binary(ActivitySchema, { ...data, id: BigInt(id) }),
+  });
+  assert.equal(saved.status, 200);
+  await f.effects.runPromise(JobsService.use((service) => service.drain()));
+
+  assert.equal(await responseStatus(web.request(`/api/me/activities/${id}`, 'DELETE')), 200);
+});
+
 await test('web app lists the climb portals a rider has ridden with the best time and latest ride', async (t) => {
   const f = await mediumFixture(t);
   const web = createWebApp(f);

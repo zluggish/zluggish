@@ -80,6 +80,25 @@ await test('a stopped process does not lose its job; a new claim runs it after t
   assert.equal(jobs.list()[0]?.state, 'done');
 });
 
+await test('a lease that expires while the result commits still finishes the job', async (t) => {
+  const f = await mediumFixture(t);
+  let now = 1_000_000;
+  const jobs = new JobsRepository(f.accounts.db, () => now);
+  jobs.enqueue('retention', {});
+  const claim = jobs.claim('retention', 30_000);
+  assert.ok(claim);
+  assert.equal(
+    jobs.finish(claim, () => {
+      now += 31_000;
+    }),
+    true,
+  );
+  const [job] = jobs.list();
+  assert.equal(job?.state, 'done');
+  assert.equal(job?.lease_expires_at, null);
+  assert.equal(jobs.claim('retention', 30_000), null, 'a finished job cannot be claimed again');
+});
+
 await test('an old handler after lease expiry and a new claim cannot commit or publish', async (t) => {
   const f = await mediumFixture(t);
   let now = 1_000_000;
