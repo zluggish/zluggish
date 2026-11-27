@@ -108,7 +108,7 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/zluggish
         run: |
           args=(--verify-tag --title "$TAG" --generate-notes)
-          # The upstream zoffline tags have no releases, so the notes start at the previous Zluggish release.
+          # Notes cover the pull requests merged since the previous release.
           previous="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')"
           if [[ -n "$previous" ]]; then
             args+=(--notes-start-tag "$previous")
