@@ -118,7 +118,7 @@ function fieldText(value: Serialized, key = ''): string {
 }
 
 // Only these details accompany the message in the console. The admin viewer can inspect the full entry.
-const consoleDetails: Record<string, string> = {
+const consoleDetails = {
   playerId: 'rider #{}',
   activityId: 'activity #{}',
   jobId: 'job #{}',
@@ -138,7 +138,7 @@ const consoleDetails: Record<string, string> = {
   count: '{} total',
   notAfter: 'expires {}',
   error: '{}',
-};
+} satisfies Record<string, string>;
 
 function consoleMessage(event: string, message: string, fields: Record<string, Serialized>) {
   const { host, port, method, route, status, durationMs } = fields;
