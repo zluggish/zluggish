@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
   import type { z } from 'zod';
@@ -45,16 +46,6 @@
       ? [`${status.serverAddress} us-or-rly101.zwift.com`, `${status.serverAddress} secure.zwift.com`].join('\n')
       : '',
   );
-
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the lines are there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-  let copied = $state(false);
-
-  async function copyHosts() {
-    await navigator.clipboard.writeText(hosts);
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
-  }
 
   function go(event: MouseEvent, to: string) {
     event.preventDefault();
@@ -136,11 +127,7 @@
         </p>
         <div class="command">
           <code>{hosts}</code>
-          {#if canCopy}
-            <button type="button" class="copy" onclick={copyHosts} aria-live="polite"
-              >{copied ? t('copied') : t('copy')}</button
-            >
-          {/if}
+          <CopyButton text={hosts} />
         </div>
         <p class="hint">
           {t('turn_off')} <strong>{t('private_dns')}</strong>
@@ -285,7 +272,7 @@
       monospace;
     user-select: all;
   }
-  button.copy {
+  .command :global(button.copy) {
     flex: none;
     margin: 0 0 0 auto;
     padding: 0.35rem 0.8rem;

@@ -52,9 +52,18 @@ const make = Effect.gen(function* () {
       if (fresh.length === 0 || newest === undefined) {
         continue;
       }
+      // Set before the write so an overlapping checkpoint does not append the same samples.
       written.set(id, newest);
       appends.push(
         recordings.append(Number(id), fresh).catch(() => {
+          // The next checkpoint writes these samples again, unless a newer one has already moved on.
+          if (written.get(id) === newest) {
+            if (last < 0n) {
+              written.delete(id);
+            } else {
+              written.set(id, last);
+            }
+          }
           context.world.lifecycle.log.warn('ride.recovery_failed', 'Ride recovery checkpoint failed', {
             playerId: id,
           });
@@ -134,9 +143,11 @@ const make = Effect.gen(function* () {
     }
   }
 
+  /** The ride ended: its history must not reach a later checkpoint and recreate the recording. */
   function discard(id: bigint) {
     pendingResumes.delete(id);
     written.delete(id);
+    context.world.histories.delete(id);
     void recordings.remove(Number(id));
   }
 

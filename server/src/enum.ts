@@ -232,6 +232,7 @@ export const JobType = {
   Chart: 'chart',
   Delivery: 'delivery',
   ArtifactCleanup: 'artifact_cleanup',
+  RiderCleanup: 'rider_cleanup',
   Retention: 'retention',
   StorageBackup: 'storage_backup',
   CompletionDeliveries: 'completion_deliveries',

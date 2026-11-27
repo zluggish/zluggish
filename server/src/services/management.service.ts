@@ -13,6 +13,7 @@ import {
   newUser,
   setupRequest,
   mutationRequest,
+  deleteUserRequest,
   serverRequest,
 } from '#src/dtos/management.dto';
 import { UploadsService } from '#src/services/uploads.service';
@@ -71,6 +72,12 @@ function recorded(prior: { result: string | null }) {
   }
 
   return JSON.parse(prior.result);
+}
+
+/** The answer to a delete, recorded so a retried request gets it again. */
+interface DeletedUser {
+  player_id: number;
+  username: string;
 }
 
 const make = Effect.gen(function* () {
@@ -171,6 +178,7 @@ const make = Effect.gen(function* () {
         .readdirSync(context.accounts.storage)
         .filter((v) => /^\d+$/.test(v))
         .map(Number),
+      repositories.systemFlagsRepository.retiredPlayerId(),
     ];
 
     const id = Math.max(0, ...occupied) + 1;
@@ -463,6 +471,80 @@ const make = Effect.gen(function* () {
 
     // Like a new user's, a reset one-time password is in this response only, never in the recorded result.
     return committed && code ? { ...result, one_time_password: code } : result;
+  }
+
+  /** What the confirmation lists before an administrator deletes a rider. */
+  function footprint(id: string, player: number) {
+    Effect.runSync(sessions.require(id, true));
+    const target = account(player);
+    const rides = store.footprint(player);
+
+    return {
+      player_id: player,
+      revision: target.revision,
+      connected: context.world.active(player),
+      activities: rides.activities,
+      distance_m: rides.distance,
+      moving_ms: rides.moving,
+      first_ride: rides.first,
+      last_ride: rides.last,
+    };
+  }
+
+  /** Removes the account and everything the rider made, then a job removes the rider folder.
+  A deleted player ID is never given to a new rider.
+  */
+  function remove(id: string, targetId: number, raw: unknown) {
+    const input = Schema.decodeUnknownSync(deleteUserRequest)(raw);
+    let removed = false;
+
+    const result = store.transaction((): DeletedUser => {
+      const actor = Effect.runSync(sessions.require(id, true));
+      const fingerprint = fingerprintNow({ action: 'delete', targetId, input });
+      const prior = store.operation(actor.player_id, input.operation);
+
+      if (prior) {
+        if (prior.action !== 'delete' || prior.fingerprint !== fingerprint) {
+          throw new ApplicationError({ status: 409, message: t('operation_changed') });
+        }
+
+        return recorded(prior);
+      }
+
+      if (actor.player_id === targetId) {
+        throw new ApplicationError({ status: 403, message: t('management_own_delete_blocked') });
+      }
+      const target = account(targetId);
+
+      if (target.revision !== input.revision) {
+        throw new ApplicationError({ status: 409, message: t('management_user_conflict') });
+      }
+
+      if (input.username.trim().toLowerCase() !== target.username.toLowerCase()) {
+        throw new ApplicationError({ status: 400, message: t('management_delete_name_mismatch') });
+      }
+
+      if (context.world.active(targetId)) {
+        throw new ApplicationError({ status: 409, message: t('management_active_user_delete_blocked') });
+      }
+
+      store.removeRider(targetId);
+      repositories.systemFlagsRepository.retirePlayerId(targetId);
+      repositories.jobsRepository.enqueue('rider_cleanup', { playerId: targetId });
+      const after = { player_id: targetId, username: target.username };
+      store.record(actor.player_id, input.operation, 'delete', targetId, fingerprint, after);
+      removed = true;
+
+      return after;
+    });
+
+    if (removed) {
+      Effect.runSync(completion.cancel(targetId));
+      context.profiles.invalidate(targetId);
+      context.settings.forget(targetId);
+    }
+
+    return result;
   }
 
   function edit(id: string, player: number, raw: unknown) {
@@ -917,6 +999,14 @@ const make = Effect.gen(function* () {
       raw: unknown,
     ) {
       return yield* Effect.promise(() => mutate(id, targetId, action, raw));
+    }),
+
+    footprint: Effect.fn('ManagementService.footprint')(function* (id: string, player: number) {
+      return footprint(id, player);
+    }),
+
+    remove: Effect.fn('ManagementService.remove')(function* (id: string, targetId: number, raw: unknown) {
+      return remove(id, targetId, raw);
     }),
 
     edit: Effect.fn('ManagementService.edit')(function* (id: string, player: number, raw: unknown) {

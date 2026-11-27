@@ -898,6 +898,32 @@ export function createWebApp(runtime: HttpRuntime) {
     }),
   );
 
+  appRoutes.get('/api/manage/users/:id/deletion', (c) =>
+    Effect.gen(function* () {
+      const managementService = yield* ManagementService;
+
+      return c.json(
+        yield* managementService.footprint(
+          c.get('sessionId'),
+          Schema.decodeUnknownSync(NumberFromInput.check(Schema.isInt(), Schema.isGreaterThan(0)))(c.req.param('id')),
+        ),
+      );
+    }),
+  );
+  appRoutes.delete('/api/manage/users/:id', (c) =>
+    Effect.gen(function* () {
+      const managementService = yield* ManagementService;
+
+      return c.json(
+        yield* managementService.remove(
+          c.get('sessionId'),
+          Schema.decodeUnknownSync(NumberFromInput.check(Schema.isInt(), Schema.isGreaterThan(0)))(c.req.param('id')),
+          yield* Effect.promise(() => c.req.json()),
+        ),
+      );
+    }),
+  );
+
   for (const action of ['password', 'one-time-password', 'disable', 'enable', 'revoke-sessions', 'role']) {
     appRoutes.on(action === 'role' ? 'PUT' : 'POST', `/api/manage/users/:id/${action}`, (c) =>
       Effect.gen(function* () {

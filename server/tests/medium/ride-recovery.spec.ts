@@ -63,6 +63,25 @@ await test('checkpoints append only new samples; a cut last record is ignored', 
   assert.equal(cut?.states.length, 14);
 });
 
+await test('a failed checkpoint writes its samples at the next one', async (t) => {
+  const { f, id } = await riding(t);
+  const { recordings } = f.effects.runSync(RideRecoveryService);
+  ride(f.world, id, 0, 5);
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  ride(f.world, id, 5, 10);
+  const failing = t.mock.method(recordings, 'append', () => Promise.reject(new Error('disk full')));
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  assert.equal(failing.mock.callCount(), 1);
+  failing.mock.restore();
+  ride(f.world, id, 10, 12);
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  const recorded = await recordings.read(f.rider.player_id);
+  assert.deepEqual(
+    recorded?.states.map((state) => state.distance),
+    Array.from({ length: 12 }, (_, index) => index * 30),
+  );
+});
+
 await test('a restarted server resumes a recent ride on the same course and its ghost keeps every sample', async (t) => {
   const { f, id } = await riding(t);
   f.settings.save(f.rider.player_id, { 'ghosts.enabled': true });
@@ -163,5 +182,10 @@ await test('a connection end neither completes nor uploads a ride, and keeps the
   await new Promise((resolve) => {
     setTimeout(resolve, 20);
   });
+  assert.equal(existsSync(path), false);
+
+  // The next checkpoint does not record the finished ride again.
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  await f.effects.runSync(RideRecoveryService).recordings.idle();
   assert.equal(existsSync(path), false);
 });

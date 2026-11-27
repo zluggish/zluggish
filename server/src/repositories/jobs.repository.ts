@@ -210,9 +210,21 @@ export class JobsRepository {
         return false;
       }
       commit();
-      this.executor.run(
-        this.current(claim).set({ state: 'done', finished_at: this.now(), lease_expires_at: null, last_error: null }),
+
+      // The write lock has been held since the check: no other claim can take the job,
+      // even if the lease runs out while `commit` runs.
+      const finished = this.executor.run(
+        query
+          .updateTable('job')
+          .where('id', '=', claim.id)
+          .where('claim_token', '=', claim.token)
+          .where('state', '=', 'running')
+          .set({ state: 'done', finished_at: this.now(), lease_expires_at: null, last_error: null }),
       );
+
+      if (finished.changes === 0) {
+        throw new JobError({ code: 'stale_claim', retry: true });
+      }
 
       return true;
     });
