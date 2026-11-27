@@ -73,6 +73,7 @@ function open(storage: string) {
           .readdirSync(storage)
           .filter((name) => /^\d+$/.test(name))
           .map(Number),
+        repositories.systemFlagsRepository.retiredPlayerId(),
       ];
 
       const id = Math.max(0, ...occupied) + 1;

@@ -23,6 +23,7 @@
   import AndroidAppsManage from './AndroidAppsManage.svelte';
   import ServerCertificate from './ServerCertificate.svelte';
   import LauncherAccess from './LauncherAccess.svelte';
+  import DeleteUser from './DeleteUser.svelte';
   import { accessOverview, groupsOf } from './access';
   import type { AccessOverview } from './access';
   import { tlsStatus } from './tls';
@@ -32,6 +33,8 @@
   import {
     avatarResponse,
     backupResponse,
+    deletedUserResponse,
+    deletionFootprint,
     eventsResponse,
     outcomeResponse,
     profileResponse,
@@ -46,7 +49,15 @@
     usersResponse,
     zwiftUpdatesResponse,
   } from './schemas';
-  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting, ZwiftUpdates } from './schemas';
+  import type {
+    DeletionFootprint,
+    ManagedEvent,
+    SetupUser,
+    User,
+    UserSettings,
+    WorldSetting,
+    ZwiftUpdates,
+  } from './schemas';
   import type { TlsStatus } from './tls';
 
   type Pending = { title: string; detail: string; label: string; destructive: boolean; confirm: () => Promise<void> };
@@ -79,6 +90,8 @@
   let fieldErrors = $state<Record<string, Array<string>>>({});
   let conflict = $state<User | null>(null);
   let pending = $state<Pending | null>(null);
+  /** Set while the delete confirmation for the selected user is open. */
+  let removing = $state<DeletionFootprint | null>(null);
   let operation = randomUUID();
 
   let mode = $state<'new' | 'existing'>('new');
@@ -640,6 +653,34 @@
     targetPassword = '';
     targetConfirm = '';
     conflict = null;
+    removing = null;
+  }
+
+  async function openDelete() {
+    if (!selected) {
+      return;
+    }
+    removing = await api(deletionFootprint, `/api/manage/users/${selected.player_id}/deletion`);
+  }
+
+  async function removeUser(username: string) {
+    if (!selected || !removing) {
+      return;
+    }
+    const target = selected;
+
+    await api(deletedUserResponse, `/api/manage/users/${target.player_id}`, 'DELETE', {
+      revision: removing.revision,
+      operation,
+      username,
+    });
+
+    removing = null;
+    users = users.filter((r) => r.player_id !== target.player_id);
+    go('/manage');
+    await loadUsers();
+    page = Math.min(page, Math.max(0, pages - 1));
+    done(t('user_deleted_notice', { value1: label(target) }));
   }
 
   async function openUser(target: User) {
@@ -1088,6 +1129,7 @@
     if (e.key !== 'Escape' || busy) return;
 
     if (pending) pending = null;
+    else if (removing) removing = null;
     else if (changing) closePassword();
     else if (regenerating) closeRegenerate();
   }}
@@ -1182,7 +1224,9 @@
         {/if}
       </aside>
     {/if}
-    {#if message && !changing}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>{message}</p>{/if}
+    {#if message && !changing && !removing}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>
+        {message}
+      </p>{/if}
 
     {#if loading}<span class="loading-status" role="status">{t('loading')}</span>
     {:else if !user}
@@ -1903,6 +1947,18 @@
                 </ul>
               </section>
             </div>
+
+            {#if selected.player_id !== user.player_id}
+              <section class="panel delete-user" aria-labelledby="delete-user-heading">
+                <div>
+                  <h2 id="delete-user-heading">{t('user_delete_heading')}</h2>
+                  <p class="muted">{t('user_delete_hint')}</p>
+                </div>
+                <button class="danger" disabled={busy} onclick={() => run(openDelete, 'delete')}
+                  >{t('user_delete_action')}</button
+                >
+              </section>
+            {/if}
           {:else if !busy}
             <p class="empty">{t('user_not_found')} {@render link('/manage', 'Show all users', false)}</p>
           {/if}
@@ -2241,6 +2297,27 @@
         >
       </div>
     </div>
+  </div>
+{/if}
+
+{#if removing && selected}
+  {@const target = selected}
+  <div class="scrim">
+    <DeleteUser
+      who={target}
+      name={label(target)}
+      initials={initials(target)}
+      photo={target.avatar !== null ? `/api/manage/users/${target.player_id}/avatar?v=${target.avatar}` : null}
+      footprint={removing}
+      {busy}
+      error={failed && errorScope === 'delete' ? message : ''}
+      onconfirm={(username) => run(() => removeUser(username), 'delete')}
+      oncancel={() => (removing = null)}
+      ondisable={() => {
+        removing = null;
+        ask('disable');
+      }}
+    />
   </div>
 {/if}
 
@@ -2811,6 +2888,29 @@
   }
   .access button {
     margin: 0;
+  }
+  /* Set apart from access: the account goes, not just the way in. */
+  .delete-user {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem 1.5rem;
+  }
+  .delete-user h2 {
+    margin-bottom: 0.35rem;
+  }
+  .delete-user p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+  .delete-user button {
+    margin: 0;
+  }
+  @media (max-width: 500px) {
+    .delete-user {
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
   }
 
   /* Status uses text and color together, never color alone. */

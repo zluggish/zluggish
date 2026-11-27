@@ -143,6 +143,11 @@ export class SettingsStore {
     return { ...overrides };
   }
 
+  /** Drops the cached overrides of a deleted rider; the row goes with the account. */
+  forget(playerId: number) {
+    this.riders.delete(playerId);
+  }
+
   revision(playerId: number) {
     return (
       this.executor.get(query.selectFrom('rider_settings').select('revision').where('player_id', '=', playerId))
