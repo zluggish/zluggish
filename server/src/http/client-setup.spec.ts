@@ -19,14 +19,7 @@ const certificate = {
   notAfter: facts.notAfter.toISOString(),
 };
 
-const script = {
-  pem: material.cert,
-  gatewayPem: '',
-  certificate,
-  address: '192.168.1.20',
-  version: '1.2.3',
-  now: new Date(),
-};
+const script = { pem: material.cert, certificate, address: '192.168.1.20', version: '1.2.3', now: new Date() };
 const legacyBody = 'MIIEQTCCAymgAwIBAgIUVPfyk0BzcKB2eYhXZ+W9WZRY5HEwDQYJKoZIhvcNAQEL';
 // Only the first line is needed to simulate an old entry in Zwift's PEM bundle.
 const legacyPem = `${material.key}-----BEGIN CERTIFICATE-----
@@ -35,8 +28,6 @@ OLD
 -----END CERTIFICATE-----
 `;
 const thumbprint = (pem: string) => crypto.certificateFacts(pem).thumbprint;
-// Stands in for the Cloudflare Gateway inspection root.
-const gateway = await new CertificateRepository().create({ serverId: 'cafecafecafe', years: 5, now: new Date() });
 
 await test('the Windows script is plain ASCII with CRLF line ends and names the certificate it installs', () => {
   const text = windowsSetupScript(script);
@@ -50,17 +41,6 @@ await test('the Windows script is plain ASCII with CRLF line ends and names the 
   assert.ok(text.includes(material.cert.trim().replaceAll('\n', '\r\n')));
   assert.equal(setupFileName(certificate, 'bat'), `zluggish-zwift-${facts.thumbprint.slice(0, 8).toLowerCase()}.bat`);
   assert.ok(!windowsSetupScript({ ...script, address: '' }).includes('3. Points the Zwift host names'));
-  assert.ok(text.includes("$GatewayPem = ''"));
-});
-
-await test('the Windows script adds the Gateway certificate to the Zluggish block in Zwift only', () => {
-  const text = windowsSetupScript({ ...script, gatewayPem: gateway.cert });
-
-  assert.ok(/^[ -~\r\n]*$/.test(text), 'ASCII only');
-  assert.ok(text.includes(`$GatewayPem = (@'\r\n${gateway.cert.trim().replaceAll('\n', '\r\n')}\r\n'@)`));
-  assert.ok(text.includes('if ($GatewayPem) { $block += '));
-  // The Windows certificate store only gets the server certificate.
-  assert.equal(text.split('$store.Add(').length, 2);
 });
 
 await test(
@@ -107,21 +87,6 @@ await test(
     assert.equal(twice.split(material.cert.trim()).length, 2);
     assert.ok(twice.includes(`# BEGIN Zluggish server certificate ${facts.thumbprint}`));
     assert.ok(existsSync(`${bundle}.zluggish-backup`));
-
-    // With a Gateway certificate it joins the Zluggish block, once, and leaves again when it is unset.
-    writeFileSync(file, linuxSetupScript({ ...script, gatewayPem: gateway.cert, address: '' }));
-    execFileSync('/bin/sh', ['-n', file]);
-    run();
-    run();
-    const withGateway = readFileSync(bundle, 'utf8');
-    const block = /# BEGIN Zluggish[\s\S]*# END Zluggish server certificate\n$/.exec(withGateway)?.[0] ?? '';
-    assert.equal(block.split(gateway.cert.trim()).length, 2);
-    assert.equal(withGateway.split(gateway.cert.trim()).length, 2);
-    assert.ok(block.includes(material.cert.trim()));
-
-    writeFileSync(file, linuxSetupScript({ ...script, address: '' }));
-    run();
-    assert.equal(readFileSync(bundle, 'utf8'), once);
   },
 );
 

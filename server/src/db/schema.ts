@@ -262,10 +262,4 @@ export interface Database {
   access_group_email: { group_id: Integer; email: string };
   access_group_rider: { group_id: Integer; player_id: Integer };
   access_seen: { email: string; last_seen: Integer };
-  access_gateway: {
-    id: Integer;
-    secret_digest: string | null;
-    secret_created_at: NullableInteger;
-    certificate: string | null;
-  };
 }

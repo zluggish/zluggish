@@ -15,7 +15,6 @@ import { browserJson, gameRedirect } from '#src/http/game/results';
 import { readClimbs } from '#src/http/climbs';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { User } from '#src/repositories/accounts.repository';
-import type { GamePageModel } from '#src/dtos/game-app.dto';
 import { REMEMBER_SECONDS, SessionsService } from '#src/services/browser-session.service';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context, Hono, Next } from 'hono';
@@ -106,15 +105,11 @@ export async function csrf(c: Context<RuntimeEnv>, runtime: Runtime): Promise<Fo
 /** The launcher's Cloudflare Access sign-in, kept for the picker only. */
 const ACCESS_COOKIE = 'zluggish_access';
 
-/** Who Cloudflare says is signed in: from the headers a Gateway HTTP policy overwrites, or else from an
-earlier Cloudflare Access sign-in on this launcher. Only the launcher picker uses it. The values are never logged.
+/** Who signed in to Cloudflare Access on this launcher, from its device cookie. Only the launcher picker uses
+it. The cookie and the email are never logged.
 */
 export function launcherIdentity(c: Context<RuntimeEnv>, runtime: Runtime): LauncherIdentity {
-  return runtime.effects.runSync(AccessGroupsService).identify({
-    gateway: c.req.header('X-Zluggish-Gateway'),
-    email: c.req.header('X-Zluggish-Identity'),
-    device: getCookie(c, ACCESS_COOKIE),
-  });
+  return runtime.effects.runSync(AccessGroupsService).identify(getCookie(c, ACCESS_COOKIE));
 }
 
 export function peerAddress(c: Context) {
@@ -245,46 +240,29 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     return identity === 'off' ? accounts.list().filter((user) => user.enabled) : access.riders(identity.email);
   }
 
-  /** The Cloudflare One Client check, the Access sign-in, or both, as configured. */
-  function connectActions() {
-    const actions: Pick<GamePageModel, 'retry' | 'signIn'> = {};
+  const signIn = { href: '/login/access', label: t('access_sign_in') };
 
-    if (access.gatewayConfigured()) {
-      actions.retry = { href: '/login/', label: t('access_check_again') };
-    }
-
-    if (access.signInConfigured()) {
-      actions.signIn = { href: '/login/access', label: t('access_sign_in') };
-    }
-
-    return actions;
-  }
-
-  // Shown instead of the picker when Cloudflare did not say who is signed in, whatever the reason.
+  // Shown instead of the picker until this launcher has signed in through Cloudflare Access.
   function connectPage(c: Context<RuntimeEnv>, error = '') {
-    let message = t('access_connect_message');
-
-    if (access.signInConfigured()) {
-      message = access.gatewayConfigured() ? t('access_connect_message_both') : t('access_connect_message_sign_in');
-    }
-
     return model(c, 'message', t('access_connect_title'), [], {
-      message: error || message,
+      message: error || t('access_connect_message'),
       failed: !!error,
-      ...connectActions(),
+      signIn,
     });
   }
 
+  // Signed in, but no group lists the email yet: check again once an administrator adds one, or use another email.
   function noRidersPage(c: Context<RuntimeEnv>, email: string) {
     return model(c, 'message', t('access_no_riders_title', { value1: email }), [], {
       message: t('access_no_riders_message'),
-      ...connectActions(),
+      retry: { href: '/login/', label: t('access_check_again') },
+      signIn,
     });
   }
 
   // The Access sign-in leaves the launcher for the web app, whose Access application asks who is riding.
   app.get('/login/access', (c) => {
-    if (!access.signInConfigured()) {
+    if (!access.configured()) {
       throw new HTTPException(404);
     }
     const state = access.newState();
@@ -343,7 +321,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const ticket = c.req.method === 'GET' ? c.req.query('ticket') : undefined;
 
     // Back from the web app: the ticket is good once, for the session that started the sign-in.
-    if (ticket !== undefined && access.signInConfigured()) {
+    if (ticket !== undefined && access.configured()) {
       const browser = c.get('browser');
       const email = access.redeemTicket(ticket, browser.accessState);
       browser.accessState = undefined;

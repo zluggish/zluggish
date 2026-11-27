@@ -4,7 +4,7 @@ import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
 import {
   accessGroupSQL,
-  accessGatewaySQL,
+  dropAccessGatewaySQL,
   administratorSchemaSQL,
   completionSchemaSQL,
   createSchemaSQL,
@@ -38,7 +38,9 @@ const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: strin
   { version: 10, up: (db) => db.exec(webSessionSQL) },
   { version: 11, up: migrateActivityFolders, backup: true },
   { version: 12, up: (db) => db.exec(accessGroupSQL) },
-  { version: 13, up: (db) => db.exec(accessGatewaySQL) },
+  // 13 made a table for Cloudflare Gateway headers, which the Windows launcher cannot use; 14 removes it again.
+  { version: 13, up: () => {} },
+  { version: 14, up: (db) => db.exec(dropAccessGatewaySQL) },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;

@@ -1,5 +1,5 @@
 import { AccessGroupsService } from '#src/services/access-groups.service';
-import { GATEWAY_SECRET, storeGatewaySecret } from '#tests/support/gateway';
+import { ACCESS_PUBLIC_URL, ACCESS_WEB } from '#tests/support/access';
 import { mediumFixture } from '#tests/medium/support';
 import { inputValue } from '#tests/support/html';
 import { t as translate } from '#src/i18n/index';
@@ -10,12 +10,8 @@ import { test } from 'node:test';
 
 const ANNA = 'anna@example.com';
 
-async function fixture(t: TestContext, gateway = true) {
-  const f = await mediumFixture(t);
-
-  if (gateway) {
-    storeGatewaySecret(f);
-  }
+async function fixture(t: TestContext, access = true) {
+  const f = await mediumFixture(t, access ? ACCESS_PUBLIC_URL : null, true, {}, access ? ACCESS_WEB : {});
   const lines: Array<string> = [];
   f.accounts.repositories.loggingRepository.configure({
     level: 'VERBOSE',
@@ -28,22 +24,14 @@ async function fixture(t: TestContext, gateway = true) {
   f.effects.runSync(service.addEmail(group, ANNA));
   f.effects.runSync(service.addRider(group, f.rider.player_id));
 
-  /** Launcher requests as Gateway would forward them; `null` leaves a header out. */
-  const launcher = (secret: string | null = GATEWAY_SECRET, email: string | null = ANNA) => {
+  /** A launcher signed in through Access as `email`, or with the given device token; `null` for none. */
+  const launcher = (email: string | null = ANNA, token = email === null ? null : service.deviceToken(email)) => {
     let cookie = '';
     let csrf = '';
 
     const headers = (init: HeadersInit = {}) => {
       const result = new Headers(init);
-
-      if (secret !== null) {
-        result.set('X-Zluggish-Gateway', secret);
-      }
-
-      if (email !== null) {
-        result.set('X-Zluggish-Identity', email);
-      }
-      result.set('Cookie', cookie);
+      result.set('Cookie', [cookie, token === null ? '' : `zluggish_access=${token}`].filter(Boolean).join('; '));
 
       return result;
     };
@@ -110,9 +98,9 @@ function riderIds(html: string) {
   );
 }
 
-await test('without the gateway configured the picker ignores the headers and lists every rider', async (t) => {
+await test('without Access sign-in configured the picker lists every rider', async (t) => {
   const f = await fixture(t, false);
-  const page = await text(f.launcher(GATEWAY_SECRET, 'nobody@example.com').request('/login/'));
+  const page = await text(f.launcher(null).request('/login/'));
 
   assert.deepEqual(
     riderIds(page).toSorted((a, b) => a - b),
@@ -121,29 +109,36 @@ await test('without the gateway configured the picker ignores the headers and li
   assert.doesNotMatch(page, /Cloudflare/);
 });
 
-for (const [name, secret, email] of [
-  ['a missing secret', null, ANNA],
-  ['a wrong secret', 'wrong-secret-wrong-secret-wrong-secret-0', ANNA],
-  ['a missing email', GATEWAY_SECRET, null],
-  ['an unresolved email', GATEWAY_SECRET, 'cf-unresolved'],
-  ['an empty email', GATEWAY_SECRET, ''],
+for (const [name, token] of [
+  ['no sign-in', null],
+  ['a forged sign-in', `access-device-v1:${Buffer.from(ANNA).toString('base64url')}:9999999999999|00`],
+  ['a sign-in for another purpose', 'access-ticket-v1:x:y:9999999999999|00'],
+  ['an empty sign-in', ''],
 ] as const) {
-  await test(`${name} shows the Cloudflare page and lists no riders`, async (t) => {
+  await test(`${name} shows the sign-in page and lists no riders`, async (t) => {
     const f = await fixture(t);
-    const response = await f.launcher(secret, email).request('/login/');
+    const response = await f.launcher(ANNA, token).request('/login/');
     const page = await response.text();
 
     assert.equal(response.status, 200);
-    assert.match(page, /Connect through Cloudflare to choose a rider/);
+    assert.match(page, /Sign in to choose a rider/);
     assert.deepEqual(riderIds(page), []);
     assert.doesNotMatch(page, /Medium Rider|Other Rider/);
     assert.equal(f.accounts.repositories.accessGroupsRepository.seen().length, 0);
   });
 }
 
+await test('an expired sign-in shows the sign-in page', async (t) => {
+  const f = await fixture(t);
+  const token = f.service.deviceToken(ANNA);
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() + 31 * 86_400_000 });
+
+  assert.deepEqual(riderIds(await text(f.launcher(ANNA, token).request('/login/'))), []);
+});
+
 await test('a signed-in email sees only its riders and who Cloudflare says is signed in', async (t) => {
   const f = await fixture(t);
-  const page = await text(f.launcher(GATEWAY_SECRET, 'Anna@Example.com').request('/login/'));
+  const page = await text(f.launcher('Anna@Example.com').request('/login/'));
 
   assert.deepEqual(riderIds(page), [f.rider.player_id]);
   assert.doesNotMatch(page, /Other Rider/);
@@ -152,7 +147,7 @@ await test('a signed-in email sees only its riders and who Cloudflare says is si
 
 await test('an email without riders is told so and recorded for the administrator', async (t) => {
   const f = await fixture(t);
-  const page = await text(f.launcher(GATEWAY_SECRET, 'lisa@example.com').request('/login/'));
+  const page = await text(f.launcher('lisa@example.com').request('/login/'));
 
   assert.match(page, /No riders for lisa@example\.com yet/);
   assert.deepEqual(riderIds(page), []);
@@ -192,7 +187,7 @@ await test('an unidentified POST gets 401 and signs nobody in', async (t) => {
   const f = await fixture(t);
   const identified = f.launcher();
   await identified.request('/login/');
-  const anonymous = f.launcher(null, null);
+  const anonymous = f.launcher(null);
   anonymous.setCookie(identified.cookie());
 
   const response = await anonymous.choose(
@@ -205,33 +200,17 @@ await test('an unidentified POST gets 401 and signs nobody in', async (t) => {
   assert.equal(response.headers.get('Location'), null);
 });
 
-await test('the gateway headers never reach the logs', async (t) => {
+await test('the sign-in cookie and the email never reach the logs', async (t) => {
   const f = await fixture(t);
-  await f.launcher().request('/login/');
-  await f.launcher('wrong-secret-wrong-secret-wrong-secret-0', 'mallory@example.com').request('/login/');
-  await f.launcher(GATEWAY_SECRET, 'lisa@example.com').request('/login/');
+  const token = f.service.deviceToken(ANNA);
+  await f.launcher(ANNA, token).request('/login/');
+  await f.launcher('mallory@example.com', 'forged-token-forged-token').request('/login/');
+  await f.launcher('lisa@example.com').request('/login/');
 
   const logged = [...f.lines, ...f.world.lifecycle.log.recentEntries()].join('\n');
   assert.match(logged, /auth\.launcher_identity/);
-  assert.match(logged, /bad-secret/);
-  assert.doesNotMatch(logged, new RegExp(GATEWAY_SECRET));
-  assert.doesNotMatch(logged, /wrong-secret/);
+  assert.match(logged, /invalid/);
+  assert.ok(!logged.includes(token));
+  assert.doesNotMatch(logged, /forged-token/);
   assert.doesNotMatch(logged, /anna@example\.com|mallory@example\.com|lisa@example\.com/);
-});
-
-await test('removing the secret turns the Gateway check off, and a new secret replaces the old one', async (t) => {
-  const f = await fixture(t);
-  f.effects.runSync(f.service.removeGatewaySecret(f.rider.player_id));
-
-  const off = await text(f.launcher(null, null).request('/login/'));
-  assert.equal(riderIds(off).length, 2);
-
-  const { secret } = f.effects.runSync(f.service.generateGatewaySecret(f.rider.player_id));
-  assert.match(secret, /^[\da-f]{64}$/);
-  assert.deepEqual(riderIds(await text(f.launcher(secret).request('/login/'))), [f.rider.player_id]);
-  // The old secret stops working, and only the digest is stored.
-  assert.deepEqual(riderIds(await text(f.launcher(GATEWAY_SECRET).request('/login/'))), []);
-  const stored = f.accounts.db.prepare('SELECT secret_digest FROM access_gateway').get()?.secret_digest;
-  assert.notEqual(stored, secret);
-  assert.doesNotMatch([...f.lines, ...f.world.lifecycle.log.recentEntries()].join('\n'), new RegExp(secret));
 });

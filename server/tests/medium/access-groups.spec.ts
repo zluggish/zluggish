@@ -1,13 +1,12 @@
 import { AccessGroupsService } from '#src/services/access-groups.service';
+import { ACCESS_PUBLIC_URL, ACCESS_WEB } from '#tests/support/access';
 import { runtimeFixture } from '#tests/support/runtime';
-import { storeGatewaySecret } from '#tests/support/gateway';
 import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
 import { test } from 'node:test';
 
 async function fixture(t: TestContext) {
-  const f = runtimeFixture(t);
-  storeGatewaySecret(f);
+  const f = runtimeFixture(t, ACCESS_PUBLIC_URL, true, {}, ACCESS_WEB);
   const service = f.effects.runSync(AccessGroupsService);
   const anna = await f.accounts.create('Anna Berg', 'test-password', 'anna@example.com');
   const olle = await f.accounts.create('Olle Berg', 'test-password');
@@ -121,12 +120,12 @@ await test('only the 50 most recent unmatched emails are kept', async (t) => {
   assert.equal(seen.at(-1)?.email, 'rider5@example.com');
 });
 
-await test('the Cloudflare gateway is off until an administrator makes a secret', (t) => {
-  const f = runtimeFixture(t);
-  const service = f.effects.runSync(AccessGroupsService);
-  assert.equal(service.identify({ gateway: 'anything', email: 'anna@example.com' }), 'off');
+await test('launcher identity is off until Access sign-in is configured', async (t) => {
+  const off = runtimeFixture(t);
+  assert.equal(off.config.network.web.cloudflareAccess, null);
+  assert.equal(off.effects.runSync(AccessGroupsService).identify(undefined), 'off');
 
-  const { secret } = f.effects.runSync(service.generateGatewaySecret(1));
-  assert.deepEqual(service.identify({ gateway: secret, email: 'anna@example.com' }), { email: 'anna@example.com' });
-  assert.equal(service.identify({ gateway: 'anything', email: 'anna@example.com' }), 'unidentified');
+  const f = await fixture(t);
+  assert.equal(f.service.identify(undefined), 'unidentified');
+  assert.deepEqual(f.service.identify(f.service.deviceToken('Anna@Example.com')), { email: 'anna@example.com' });
 });

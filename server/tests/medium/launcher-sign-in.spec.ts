@@ -2,7 +2,12 @@ import { validateConfig } from '#src/config/index';
 import { createWebApp } from '#src/http/web-app';
 import { AccessGroupsService } from '#src/services/access-groups.service';
 import { mediumFixture } from '#tests/medium/support';
-import { GATEWAY_SECRET, storeGatewaySecret } from '#tests/support/gateway';
+import {
+  ACCESS_AUDIENCE as AUDIENCE,
+  ACCESS_PUBLIC_URL as PUBLIC_URL,
+  ACCESS_TEAM as TEAM,
+  ACCESS_WEB,
+} from '#tests/support/access';
 import { t as translate } from '#src/i18n/index';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
@@ -11,9 +16,6 @@ import type { TestContext } from 'node:test';
 import { test } from 'node:test';
 import { Schema } from 'effect';
 
-const TEAM = 'berg.cloudflareaccess.com';
-const AUDIENCE = 'a'.repeat(64);
-const PUBLIC_URL = 'https://zluggish.example.com';
 const ANNA = 'anna@example.com';
 
 const signer = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -51,18 +53,8 @@ function token(
   return `${head}.${body}.${sign('sha256', Buffer.from(`${head}.${body}`), key).toString('base64url')}`;
 }
 
-async function fixture(t: TestContext, gateway = false) {
-  const f = await mediumFixture(
-    t,
-    PUBLIC_URL,
-    true,
-    {},
-    { cloudflareAccess: { teamDomain: TEAM, audience: AUDIENCE } },
-  );
-
-  if (gateway) {
-    storeGatewaySecret(f);
-  }
+async function fixture(t: TestContext) {
+  const f = await mediumFixture(t, PUBLIC_URL, true, {}, ACCESS_WEB);
   const keys = t.mock.method(f.accounts.repositories.cloudflareAccessRepository, 'keys', () =>
     Promise.resolve([jwk(signer.publicKey, 'one')]),
   );
@@ -159,9 +151,8 @@ await test('a launcher signs in through Access once and then lists only its ride
 
   const before = await props(await launcher.request('/login/'));
   assert.equal(before.kind, 'message');
-  assert.equal(before.message, translate('access_connect_message_sign_in'));
+  assert.equal(before.message, translate('access_connect_message'));
   assert.deepEqual(before.signIn, { href: '/login/access', label: translate('access_sign_in') });
-  // Without a Gateway there is no Cloudflare One Client to check again.
   assert.equal(before.retry, undefined);
 
   const state = await launcher.start();
@@ -265,21 +256,20 @@ await test('a forged device cookie is ignored', async (t) => {
   assert.deepEqual(riderIds(page), []);
 });
 
-await test('with both set up, the Gateway headers win and the page offers both ways in', async (t) => {
-  const f = await fixture(t, true);
+await test('an email without riders can check again or sign in with another email', async (t) => {
+  const f = await fixture(t);
   const launcher = f.launcher();
+  await launcher.request(ticketPath(await f.link(await launcher.start(), token({ email: 'lisa@example.com' }))));
 
-  const connect = await props(await launcher.request('/login/'));
-  assert.equal(connect.message, translate('access_connect_message_both'));
-  assert.equal(connect.retry?.href, '/login/');
-  assert.equal(connect.signIn?.href, '/login/access');
+  const page = await props(await launcher.request('/login/'));
+  assert.equal(page.title, translate('access_no_riders_title', { value1: 'lisa@example.com' }));
+  assert.equal(page.retry?.href, '/login/');
+  assert.equal(page.signIn?.href, '/login/access');
+  assert.equal(f.accounts.repositories.accessGroupsRepository.seen()[0]?.email, 'lisa@example.com');
 
+  // Signing in again replaces the email this launcher is signed in with.
   await launcher.request(ticketPath(await f.link(await launcher.start())));
-  const gateway = { 'X-Zluggish-Gateway': GATEWAY_SECRET, 'X-Zluggish-Identity': 'other@example.com' };
-  // The Access cookie names Anna, but the Gateway says someone else is at this computer.
-  const page = await props(await launcher.request('/login/', gateway));
-  assert.equal(page.title, translate('access_no_riders_title', { value1: 'other@example.com' }));
-  assert.equal(f.accounts.repositories.accessGroupsRepository.seen()[0]?.email, 'other@example.com');
+  assert.deepEqual(riderIds(await props(await launcher.request('/login/'))), [f.rider.player_id]);
 });
 
 await test('Access sign-in needs an https public URL', () => {

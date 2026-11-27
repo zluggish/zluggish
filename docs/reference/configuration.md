@@ -54,7 +54,6 @@ export default defineConfig({
       // Let launchers sign in through the Cloudflare Access application in front of publicUrl, which must be https.
       // Such as { teamDomain: 'example.cloudflareaccess.com', audience: '<the application's AUD tag>' }.
       // The launcher then lists only the riders of the email that signed in. null turns the sign-in off.
-      // The Cloudflare Gateway check has no setting here: it is turned on in Manage > Launcher access.
       cloudflareAccess: null,
     },
     // Zwift CDN: bundled game assets and the asset proxy.
@@ -410,17 +409,17 @@ Set the log level under `logging`. See [Logging](../troubleshooting/logging.md).
 
 Most features have their settings on their own page:
 
-| Setting                           | Page                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `tls`                             | [Server certificate](../install/certificate.md)                                        |
-| `dns.enabled`                     | [Android](../install/clients/android.md)                                               |
-| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                                             |
-| `network.web.cloudflareAccess`    | [Remote access](../install/remote-access.md#sign-in-without-the-cloudflare-one-client) |
-| `bots`                            | [Bots](../usage/features/bots.md)                                                      |
-| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                                              |
-| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md)                             |
-| `equipment`                       | [Entitlements](../usage/features/entitlements.md)                                      |
-| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                                            |
-| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)                                      |
-| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)                                     |
-| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)                                       |
+| Setting                           | Page                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `tls`                             | [Server certificate](../install/certificate.md)                                      |
+| `dns.enabled`                     | [Android](../install/clients/android.md)                                             |
+| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                                           |
+| `network.web.cloudflareAccess`    | [Remote access](../install/remote-access.md#show-each-household-only-its-own-riders) |
+| `bots`                            | [Bots](../usage/features/bots.md)                                                    |
+| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                                            |
+| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md)                           |
+| `equipment`                       | [Entitlements](../usage/features/entitlements.md)                                    |
+| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                                          |
+| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)                                    |
+| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)                                   |
+| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)                                     |

@@ -5,7 +5,7 @@
   import SlowLoading from '../components/SlowLoading.svelte';
   import type { Api } from '../lib/api';
   import type { User } from './schemas';
-  import { accessOverview, createdGroup, gatewaySecret } from './access';
+  import { accessOverview, createdGroup } from './access';
   import type { AccessOverview } from './access';
 
   type Confirmation = {
@@ -38,9 +38,6 @@
   let renameValue = $state('');
   let emailDrafts = $state<Record<number, string>>({});
   let riderDrafts = $state<Record<number, string>>({});
-  /** A secret just made, shown until the administrator is done with it. Never fetched again. */
-  let revealed = $state<string | null>(null);
-  let copied = $state(false);
   /** The group picked beside an unmatched email or an unreachable rider, keyed by that row. */
   let targets = $state<Record<string, string>>({});
 
@@ -150,90 +147,6 @@
     });
   }
 
-  async function makeSecret() {
-    let secret = '';
-
-    if (
-      await change(async () => {
-        const made = await api(gatewaySecret, '/api/manage/access/gateway-secret', 'POST', {});
-        secret = made.secret;
-
-        return made;
-      })
-    ) {
-      revealed = secret;
-      copied = false;
-    }
-  }
-
-  function replaceSecret() {
-    confirm({
-      title: t('access_secret_replace_title'),
-      detail: t('access_secret_replace_detail'),
-      label: t('access_secret_replace'),
-      destructive: true,
-      confirm: makeSecret,
-    });
-  }
-
-  function removeSecret() {
-    confirm({
-      title: t('access_secret_remove_title'),
-      detail: t('access_secret_remove_detail'),
-      label: t('access_secret_remove'),
-      destructive: true,
-      confirm: async () => {
-        revealed = null;
-        await change(
-          () => api(accessOverview, '/api/manage/access/gateway-secret', 'DELETE'),
-          t('access_secret_removed'),
-        );
-      },
-    });
-  }
-
-  async function copySecret(field: HTMLInputElement | undefined) {
-    field?.select();
-
-    try {
-      await navigator.clipboard.writeText(revealed ?? '');
-      copied = true;
-    } catch {
-      // Without clipboard access the field stays selected, ready for the keyboard shortcut.
-      copied = false;
-    }
-  }
-
-  let secretField = $state<HTMLInputElement>();
-  let certificateField = $state<HTMLInputElement>();
-
-  /** Send the chosen certificate file as base64, whether Cloudflare gave PEM or DER. */
-  async function uploadCertificate(field: HTMLInputElement) {
-    const file = field.files?.[0];
-    field.value = '';
-
-    if (!file) {
-      return;
-    }
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let binary = '';
-
-    for (const byte of bytes) {
-      binary += String.fromCodePoint(byte);
-    }
-
-    await change(
-      () => api(accessOverview, '/api/manage/access/gateway-certificate', 'PUT', { certificate: btoa(binary) }),
-      t('access_certificate_saved'),
-    );
-  }
-
-  const removeCertificate = () =>
-    change(
-      () => api(accessOverview, '/api/manage/access/gateway-certificate', 'DELETE'),
-      t('access_certificate_removed'),
-    );
-
   onMount(async () => {
     try {
       overview = await api(accessOverview, '/api/manage/access');
@@ -277,92 +190,6 @@
     {#if !failure}<SlowLoading />{/if}
   {:else}
     {#if !overview.configured}<p class="note">{t('access_not_configured')}</p>{/if}
-
-    <section class="panel gateway" aria-labelledby="access-gateway">
-      <h2 id="access-gateway">{t('access_gateway_title')}</h2>
-
-      {#if revealed}
-        <div class="revealed">
-          <p>{t('access_secret_reveal_hint')}</p>
-          <div class="inline">
-            <input
-              class="secret-value"
-              readonly
-              aria-label={t('access_secret_label')}
-              value={revealed}
-              bind:this={secretField}
-              onfocus={(event) => event.currentTarget.select()}
-            />
-            <button type="button" onclick={() => copySecret(secretField)}
-              >{copied ? t('access_secret_copied') : t('access_secret_copy')}</button
-            >
-            <button
-              type="button"
-              onclick={() => {
-                revealed = null;
-              }}>{t('access_secret_done')}</button
-            >
-          </div>
-        </div>
-      {/if}
-
-      <ul class="rows settings">
-        <li>
-          <div class="setting">
-            <h3>{t('access_secret_title')}</h3>
-            <p class="hint">
-              {overview.gateway.secretCreatedAt === null
-                ? t('access_secret_none')
-                : t('access_secret_made', { value1: ago(overview.gateway.secretCreatedAt) })}
-            </p>
-          </div>
-          <div class="tools">
-            {#if overview.gateway.secretCreatedAt === null}
-              <button type="button" disabled={saving} onclick={makeSecret}>{t('access_secret_make')}</button>
-            {:else}
-              <button type="button" disabled={saving} onclick={replaceSecret}>{t('access_secret_replace')}</button>
-              <button type="button" disabled={saving} onclick={removeSecret}>{t('access_secret_remove')}</button>
-            {/if}
-          </div>
-        </li>
-        {#if overview.gateway.enabled || overview.gateway.certificate}
-          <li>
-            <div class="setting">
-              <h3>{t('access_certificate_title')}</h3>
-              <p class="hint">
-                {overview.gateway.certificate
-                  ? t('access_certificate_detail', {
-                      value1: overview.gateway.certificate.subject,
-                      value2: overview.gateway.certificate.notAfter.slice(0, 10),
-                    })
-                  : t('access_certificate_none')}
-              </p>
-            </div>
-            <div class="tools">
-              <input
-                class="visually-hidden"
-                type="file"
-                accept=".pem,.crt,.cer,.der,application/x-pem-file,application/x-x509-ca-cert"
-                aria-label={t('access_certificate_file_label')}
-                tabindex="-1"
-                bind:this={certificateField}
-                onchange={(event) => uploadCertificate(event.currentTarget)}
-              />
-              <button type="button" disabled={saving} onclick={() => certificateField?.click()}
-                >{overview.gateway.certificate
-                  ? t('access_certificate_replace')
-                  : t('access_certificate_upload')}</button
-              >
-              {#if overview.gateway.certificate}
-                <button type="button" disabled={saving} onclick={removeCertificate}
-                  >{t('access_certificate_remove')}</button
-                >
-              {/if}
-            </div>
-          </li>
-        {/if}
-      </ul>
-    </section>
 
     {#if overview.unreachable.length}
       <section class="unreachable" aria-labelledby="access-unreachable">
@@ -746,55 +573,6 @@
   }
   .quiet {
     margin: 0 0 1.5rem;
-  }
-  .gateway h2 {
-    margin-bottom: 0.25rem;
-  }
-  .settings {
-    margin: 0.5rem 0 0;
-  }
-  .settings h3 {
-    margin: 0;
-    color: var(--text);
-    font-size: 0.9375rem;
-  }
-  .settings .hint {
-    margin: 0.15rem 0 0;
-  }
-  .setting {
-    flex: 1 1 18rem;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .settings .tools {
-    flex-wrap: wrap;
-  }
-  /* A secret on screen is the one moment on this page that cannot be repeated: an orange edge marks it. */
-  .revealed {
-    margin: 0.75rem 0 0.25rem;
-    padding: 0.85rem 1rem 1rem;
-    border-left: 4px solid var(--orange);
-    border-radius: 0 10px 10px 0;
-    background: rgb(255 255 255 / 0.05);
-  }
-  .revealed p {
-    margin: 0 0 0.6rem;
-  }
-  .revealed .secret-value {
-    flex: 1 1 100%;
-  }
-  .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  /* The one place a machine value is shown: monospace, so 0/O and 1/l cannot be confused while copying. */
-  .secret-value {
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 0.8125rem;
   }
   @media (max-width: 30rem) {
     .panel,

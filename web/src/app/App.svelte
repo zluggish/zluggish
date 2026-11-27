@@ -203,7 +203,7 @@
     ),
   );
 
-  // Asked once per sign-in: administrators always see Launcher access, where the Gateway is turned on.
+  // Asked once per sign-in, so the menu can offer Launcher access.
   let accessRequested = false;
 
   $effect(() => {
@@ -1049,7 +1049,7 @@
           'Users',
           manage && path !== '/manage/server' && path !== '/manage/access' && !androidApps.includes(path),
         )}
-        {#if access}
+        {#if access?.configured}
           {@render link('/manage/access', t('launcher_access'), path === '/manage/access')}
         {/if}
         {@render link('/manage/android', t('android_apps'), androidApps.includes(path))}

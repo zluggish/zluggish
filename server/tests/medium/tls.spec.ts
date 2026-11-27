@@ -1,5 +1,3 @@
-import { AccessGroupsService } from '#src/services/access-groups.service';
-import { GATEWAY_CA } from '#tests/support/gateway';
 import { validateConfig } from '#src/config/index';
 import { packageRoot } from '#src/config/load';
 import { readArchivedFile } from '#src/migrations/backup-archive';
@@ -197,9 +195,4 @@ await test('riders download the certificate and setup scripts, and only administ
   assert.ok(mac.includes('# Zluggish client setup for macOS'));
   assert.ok(mac.includes(`THUMBPRINT='${next.certificate.thumbprint}'`));
   assert.equal(await responseStatus(web.request('/api/tls/setup/android')), 400);
-
-  // An uploaded Gateway certificate joins Zwift's own list through client setup.
-  f.effects.runSync(f.effects.runSync(AccessGroupsService).setGatewayCertificate(Buffer.from(GATEWAY_CA)));
-  const withGateway = await text(web.request('/api/tls/setup/linux'));
-  assert.ok(withGateway.includes(GATEWAY_CA.trim()));
 });

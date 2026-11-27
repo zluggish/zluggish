@@ -399,7 +399,7 @@ await test('version 12 adds launcher access groups to an existing database witho
   const created = openDatabase(f.storage);
   created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
     DROP TABLE access_seen; DROP TABLE access_group_rider; DROP TABLE access_group_email; DROP TABLE access_group;
-    DROP TABLE access_gateway; UPDATE version SET version=11;`);
+    UPDATE version SET version=11;`);
   created.close();
 
   const db = openDatabase(f.storage);
@@ -420,16 +420,19 @@ await test('version 12 adds launcher access groups to an existing database witho
   assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_email').get()?.n, 0);
 });
 
-await test('version 13 adds the Gateway settings table, which holds one row', (t) => {
+await test('version 14 removes the Cloudflare Gateway table that version 13 made', (t) => {
   const f = fixture(t);
   const created = openDatabase(f.storage);
-  created.exec('DROP TABLE access_gateway; UPDATE version SET version=12;');
+  created.exec(`CREATE TABLE access_gateway (
+    id INTEGER PRIMARY KEY CHECK (id = 1), secret_digest TEXT, secret_created_at INTEGER, certificate TEXT
+  );
+  INSERT INTO access_gateway (id, secret_digest) VALUES (1, 'digest');
+  UPDATE version SET version=13;`);
   created.close();
 
   const db = openDatabase(f.storage);
   f.onCleanup(() => db.close());
-  assert.equal(SCHEMA_VERSION, 13);
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 13);
-  db.exec("INSERT INTO access_gateway (id, secret_digest) VALUES (1, 'digest')");
-  assert.throws(() => db.exec('INSERT INTO access_gateway (id) VALUES (2)'), /CHECK/);
+  assert.equal(SCHEMA_VERSION, 14);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 14);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='access_gateway'").get()?.n, 0);
 });

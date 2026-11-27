@@ -270,17 +270,6 @@ export class CryptoRepository {
     return sign('sha256', data, createPrivateKey(privateKeyPem));
   }
 
-  /** A CA certificate (PEM or DER) as PEM, or null when the bytes are not a CA certificate. */
-  caCertificatePem(bytes: Uint8Array): string | null {
-    try {
-      const certificate = new X509Certificate(bytes);
-
-      return certificate.ca ? certificate.toString().trim() + '\n' : null;
-    } catch {
-      return null;
-    }
-  }
-
   certificateFacts(pem: string): CertificateFacts {
     const certificate = new X509Certificate(pem);
     const details = certificate.publicKey.asymmetricKeyDetails;

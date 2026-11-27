@@ -33,7 +33,6 @@ export default defineConfig({
       // Let launchers sign in through the Cloudflare Access application in front of publicUrl, which must be https.
       // Such as { teamDomain: 'example.cloudflareaccess.com', audience: '<the application's AUD tag>' }.
       // The launcher then lists only the riders of the email that signed in. null turns the sign-in off.
-      // The Cloudflare Gateway check has no setting here: it is turned on in Manage > Launcher access.
       cloudflareAccess: null,
     },
     // Zwift CDN: bundled game assets and the asset proxy.

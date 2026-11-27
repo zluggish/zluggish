@@ -142,12 +142,7 @@ CREATE TABLE access_seen (
 );
 `;
 
-/** Cloudflare Gateway settings. The secret is shown once and only its SHA-256 digest is kept; a digest turns the
-Gateway check on. The certificate is Gateway's inspection root, for Zwift's own certificate list.
-*/
-export const accessGatewaySQL = `
-CREATE TABLE access_gateway (
- id INTEGER PRIMARY KEY CHECK (id = 1),
- secret_digest TEXT, secret_created_at INTEGER, certificate TEXT
-);
+/** Version 13 made this table for Cloudflare Gateway headers, which the Windows launcher cannot use. */
+export const dropAccessGatewaySQL = `
+DROP TABLE IF EXISTS access_gateway;
 `;

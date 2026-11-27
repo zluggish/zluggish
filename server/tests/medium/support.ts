@@ -125,7 +125,7 @@ export function mediumWeb(f: ReturnType<typeof runtimeFixture>, rider: User) {
   ) => {
     const headers = new Headers({
       Cookie: `zluggish_web_session=${id}`,
-      Origin: 'http://local:8080',
+      Origin: f.config.network.web.publicUrl ?? 'http://local:8080',
       'X-CSRF-Token': csrf,
     });
 

@@ -7,11 +7,8 @@ import type { User } from '#src/repositories/accounts.repository';
 import type { PublicKey } from '#src/repositories/crypto.repository';
 import { Context, Effect, Layer, Schema } from 'effect';
 
-/** Who a launcher request says is signed in to Cloudflare. `off`: the feature is not configured. */
+/** Who signed in to Cloudflare Access on a launcher. `off`: Access sign-in is not configured. */
 export type LauncherIdentity = 'off' | 'unidentified' | { email: string };
-
-/** Why a request carried no usable identity. Logged, never shown: every reason gets the same page. */
-type Unidentified = 'missing' | 'bad-secret' | 'unresolved';
 
 /** How long the ticket from the web app to the launcher stays valid. */
 const TICKET_MS = 60_000;
@@ -61,9 +58,7 @@ const make = Effect.gen(function* () {
   const signIn = context.config.network.web.cloudflareAccess;
   const { publicUrl } = context.config.network.web;
   const apiPort = context.config.network.api.port;
-  // A stored secret digest turns the Gateway check on; the web app makes and removes it.
-  const gatewayDigest = () => store.gateway().secret_digest;
-  const configured = () => gatewayDigest() !== null || signIn !== null;
+  const configured = () => signIn !== null;
 
   const log = () => context.world.lifecycle.log;
 
@@ -81,46 +76,16 @@ const make = Effect.gen(function* () {
     return isEmail(email) ? email : null;
   }
 
-  function identify(headers: {
-    gateway: string | undefined;
-    email: string | undefined;
-    device?: string | undefined;
-  }): LauncherIdentity {
-    const digest = gatewayDigest();
-
-    if (digest === null && !signIn) {
+  /** Who a launcher's Access device token says signed in. Neither the token nor the email is logged. */
+  function identify(device: string | undefined): LauncherIdentity {
+    if (!signIn) {
       return 'off';
     }
+    const email = deviceEmail(device);
+    const outcome = email ? 'access' : device === undefined ? 'missing' : 'invalid';
+    log().info('auth.launcher_identity', 'Launcher identity from the Cloudflare Access sign-in', { outcome });
 
-    let reason: Unidentified | null = null;
-    const email = normalizeEmail(headers.email ?? '');
-
-    // Only the secret's digest is stored. Comparing digests also takes the same time whatever the supplied length.
-    if (digest === null || headers.gateway === undefined) {
-      reason = 'missing';
-    } else if (
-      !crypto.timingSafeEqual(Buffer.from(crypto.sha256(headers.gateway), 'hex'), Buffer.from(digest, 'hex'))
-    ) {
-      reason = 'bad-secret';
-    } else if (!isEmail(email)) {
-      reason = 'unresolved';
-    }
-
-    if (!reason) {
-      log().info('auth.launcher_identity', 'Launcher request with a Cloudflare identity', { outcome: 'ok' });
-
-      return { email };
-    }
-    const device = deviceEmail(headers.device);
-
-    if (device) {
-      log().info('auth.launcher_identity', 'Launcher request with a Cloudflare Access sign-in', { outcome: 'access' });
-
-      return { email: device };
-    }
-    log().info('auth.launcher_identity', 'Launcher request without a Cloudflare identity', { outcome: reason });
-
-    return 'unidentified';
+    return email ? { email } : 'unidentified';
   }
 
   let keys = new Map<string, PublicKey>();
@@ -199,17 +164,6 @@ const make = Effect.gen(function* () {
     return found;
   }
 
-  function gatewayStatus() {
-    const row = store.gateway();
-    const facts = row.certificate ? crypto.certificateFacts(row.certificate) : null;
-
-    return {
-      enabled: row.secret_digest !== null,
-      secretCreatedAt: row.secret_created_at,
-      certificate: facts && { subject: facts.subject, notAfter: facts.notAfter.toISOString() },
-    };
-  }
-
   function overview() {
     const emails = store.emails();
     const members = store.members();
@@ -218,7 +172,6 @@ const make = Effect.gen(function* () {
 
     return {
       configured: configured(),
-      gateway: gatewayStatus(),
       groups: store.groups().map((found) => ({
         id: found.id,
         name: found.name,
@@ -243,10 +196,6 @@ const make = Effect.gen(function* () {
 
   return {
     configured,
-    gatewayConfigured: () => gatewayDigest() !== null,
-    /** Gateway's inspection root as PEM, for Zwift's own certificate list, or ''. */
-    gatewayCertificate: () => store.gateway().certificate ?? '',
-    signInConfigured: () => signIn !== null,
     identify,
     /** A fresh value that ties a sign-in to the launcher session that started it. */
     newState: () => crypto.randomBytes(32).toString('base64url'),
@@ -276,39 +225,6 @@ const make = Effect.gen(function* () {
     isState: (value: string) => STATE.test(value),
     riders,
     overview: Effect.fn('AccessGroupsService.overview')(function* () {
-      return overview();
-    }),
-    /** Make a new Gateway secret, which turns the Gateway check on or replaces the earlier secret. It is returned
-    this once; only its digest is kept. */
-    generateGatewaySecret: Effect.fn('AccessGroupsService.generateGatewaySecret')(function* (by: number) {
-      const replaced = gatewayDigest() !== null;
-      const secret = crypto.randomBytes(32).toString('hex');
-      store.updateGateway({ secret_digest: crypto.sha256(secret), secret_created_at: Date.now() });
-      log().info('access.gateway_secret_created', 'An administrator made a new Cloudflare Gateway secret', {
-        playerId: by,
-        replaced,
-      });
-
-      return { secret, ...overview() };
-    }),
-    /** Remove the secret, which turns the Gateway check off. */
-    removeGatewaySecret: Effect.fn('AccessGroupsService.removeGatewaySecret')(function* (by: number) {
-      store.updateGateway({ secret_digest: null, secret_created_at: null });
-      log().info('access.gateway_secret_removed', 'An administrator removed the Cloudflare Gateway secret', {
-        playerId: by,
-      });
-
-      return overview();
-    }),
-    /** Keep Gateway's inspection root certificate (PEM or DER) for client setup, or remove it with null. */
-    setGatewayCertificate: Effect.fn('AccessGroupsService.setGatewayCertificate')(function* (bytes: Uint8Array | null) {
-      const pem = bytes ? crypto.caCertificatePem(bytes) : null;
-
-      if (bytes && !pem) {
-        throw new ApplicationError({ status: 400, message: t('access_certificate_invalid') });
-      }
-      store.updateGateway({ certificate: pem });
-
       return overview();
     }),
     recordSeen: Effect.fn('AccessGroupsService.recordSeen')(function* (email: string) {

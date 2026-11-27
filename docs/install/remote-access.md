@@ -55,69 +55,13 @@ Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traf
 
 ## Show each household only its own riders
 
-When riders reach the game through the Cloudflare One Client, the launcher can list only the riders that belong to the person signed in to Cloudflare. A Cloudflare Gateway HTTP policy adds that person's email to each launcher request. Zluggish then shows the riders in that email's groups, and the rider whose login name is that email.
+The launcher can list only the riders that belong to the person using it. The rider selects **Sign in with Cloudflare** in the launcher and signs in to the Cloudflare Access application of the [web app](#web-app). Zluggish then lists the riders in that email's groups, and the rider whose login name is that email. The launcher stays signed in for 30 days.
+
+This works on any device that reaches the game, including one that cannot run your Cloudflare One Client, such as a work laptop that must run its employer's.
 
 The filter decides who appears in the rider list. It does not replace passwords: a rider whose password this computer does not remember still enters it. The web app and the Android apps are not filtered.
 
-### Turn on TLS decryption
-
-Gateway can only change request headers when it [decrypts HTTPS](https://developers.cloudflare.com/cloudflare-one/traffic-controls/http-policies/tls-decryption/). Turn on TLS decryption, and [let the Cloudflare One Client install the Cloudflare certificate](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/user-side-certificates/automated-deployment/) on each Zwift device with **Install CA to system certificate store**. That works on Windows, macOS and Debian-based Linux. On other devices, install the certificate by hand.
-
-Gateway only sees traffic that enters the Cloudflare One Client. Keep the Split Tunnels in **Include** mode with only the server's private IP, as in [Zwift game](#zwift-game), and everything else on the device goes straight to the internet: it is neither routed through Cloudflare nor decrypted.
-
-The server IP must be in the Include list even for devices on the same network as the server. Without it they reach Zluggish directly, Gateway never sees the request, and the launcher asks them to connect through Cloudflare.
-
-With decryption on, Zwift devices see a Cloudflare certificate for `secure.zwift.com` instead of the Zluggish one. Browsers and the launcher trust it through the system certificate store, but the game itself only trusts its own list, `data/cacert.pem` in the Zwift folder. To add the Cloudflare certificate to that list:
-
-1. In Cloudflare One, open the inspection certificates under **Traffic policies** > **Traffic settings** and download the one that is **In-use**.
-2. In the Zluggish web app, open **Manage** > **Launcher access** and select **Upload certificate** under **Cloudflare Gateway**. Both `.pem` and `.crt` files work.
-3. Download and run the client setup again on each desktop Zwift device. It adds the Cloudflare certificate to Zwift's list next to the Zluggish one.
-
-The patched Android apps may trust only the Zluggish certificate. If they stop connecting, add a Do Not Inspect policy for those devices.
-
-### Make a secret
-
-Gateway sends a secret with each request so Zluggish knows the email came from Cloudflare. In the web app, open **Manage** > **Launcher access** and select **Make secret** under **Cloudflare Gateway**. Copy the secret into the policy in the next step.
-
-The web app shows the secret only once and keeps only a hash of it. If the policy's copy is lost, select **Replace secret** and paste the new one into the policy. Launchers that come through Gateway ask riders to connect through Cloudflare until the policy has the new secret.
-
-Making the secret turns the Gateway check on. **Remove secret** turns it off again, and every launcher lists every rider, unless [Access sign-in](#sign-in-without-the-cloudflare-one-client) is set up.
-
-### Add the Gateway HTTP policy
-
-[Create an HTTP policy](https://developers.cloudflare.com/cloudflare-one/traffic-controls/http-policies/tenant-control/) that adds the headers to launcher requests:
-
-| Field                        | Value                                                               |
-| ---------------------------- | ------------------------------------------------------------------- |
-| Selector                     | **Host** **in** `secure.zwift.com`                                  |
-| Action                       | **Allow**                                                           |
-| Untrusted certificate action | **Pass through**. The Zluggish certificate is self-signed.          |
-| Modify request headers       | **Overwrite** `X-Zluggish-Identity` with `@{identity.email}`        |
-|                              | **Overwrite** `X-Zluggish-Gateway` with the secret from the web app |
-
-Use **Overwrite**, not **Add**. Overwrite replaces any value the device sent, so nobody can claim another email.
-
-### Choose who sees which riders
-
-In the web app, open **Manage** > **Launcher access**. The groups take effect once the Gateway secret or [Access sign-in](#sign-in-without-the-cloudflare-one-client) is set up.
-
-- Each group lists emails and riders. Everyone signed in to Cloudflare with one of the emails sees all of the group's riders.
-- An email can be in several groups, and a rider can be in several groups.
-- A rider whose login name is an email is visible to that email without any group.
-- **Riders no launcher can pick** lists riders in no group whose login name is not an email. Add each one to a group.
-- **Waiting for a group** lists emails that opened the launcher but matched no rider, so you can add them without typing.
-
-Changes take effect the next time the launcher loads its rider list.
-
-### What riders see
-
-- Signed in to Cloudflare with an email that has riders: only those riders, and a line naming the email.
-- Signed in with an email that has no riders: a page asking them to contact an administrator.
-- Not connected through the Cloudflare One Client, or Cloudflare could not tell who is signed in: a page asking them to connect and check again. This includes riders on the home network who do not use the Cloudflare One Client. With [Access sign-in](#sign-in-without-the-cloudflare-one-client) set up, the page also offers **Sign in with Cloudflare**.
-
-## Sign in without the Cloudflare One Client
-
-Some devices cannot run your Cloudflare One Client, such as a work laptop that must run its employer's. Their launchers can sign in through the Cloudflare Access application of the [web app](#web-app) instead. The same groups then decide which riders they see.
+### Turn on the sign-in
 
 1. In Cloudflare One, open the web app's Access application and copy its **Application Audience (AUD) Tag**.
 2. Note your team domain, such as `example.cloudflareaccess.com`. It is under **Settings** in Cloudflare One.
@@ -134,6 +78,26 @@ Some devices cannot run your Cloudflare One Client, such as a work laptop that m
 
 4. Restart Zluggish.
 
-In the launcher, the rider selects **Sign in with Cloudflare** and signs in to your Access application. The launcher then returns to the rider list and stays signed in for 30 days. Who may sign in is up to the Access application's policies, and which riders they see is up to the groups.
+Who may sign in is up to the Access application's policies. To spare riders on your Cloudflare One Client the login prompt, let the Access application accept the client's identity: Cloudflare calls this WARP authentication identity.
 
-Access sign-in works alone or together with the Gateway headers. When a request carries both, the Gateway email wins.
+### Do not decrypt the Zwift names
+
+Leave Gateway TLS decryption off, or add a **Do Not Inspect** HTTP policy for `secure.zwift.com`, `launcher.zwift.com`, `cdn.zwift.com` and `us-or-rly101.zwift.com`. The Zwift launcher on Windows checks whether a certificate was revoked. The certificates Gateway makes when it decrypts say nowhere how to check, so the launcher refuses them with "Could not establish trust relationship for the SSL/TLS secure channel".
+
+### Choose who sees which riders
+
+In the web app, open **Manage** > **Launcher access**. The page appears once the sign-in is turned on.
+
+- Each group lists emails and riders. Everyone signed in to Cloudflare with one of the emails sees all of the group's riders.
+- An email can be in several groups, and a rider can be in several groups.
+- A rider whose login name is an email is visible to that email without any group.
+- **Riders no launcher can pick** lists riders in no group whose login name is not an email. Add each one to a group.
+- **Waiting for a group** lists emails that signed in but matched no rider, so you can add them without typing.
+
+Changes take effect the next time the launcher loads its rider list.
+
+### What riders see
+
+- Not signed in yet, or the sign-in is older than 30 days: a page with **Sign in with Cloudflare**.
+- Signed in with an email that has riders: only those riders, and a line naming the email.
+- Signed in with an email that has no riders: a page asking them to contact an administrator, with **Check again** and **Sign in with Cloudflare** to use another email.
