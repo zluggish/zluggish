@@ -31,4 +31,18 @@ If Zwift runs on another device, set `server.advertisedIp` to the server's LAN I
 
 Set up Zwift on [Windows](clients/windows.md), [macOS](clients/macos.md), [Linux](clients/linux.md) or [Android](clients/android.md).
 
+## Choose an image tag
+
+The Compose file uses `ghcr.io/zluggish/zluggish:latest`, which is the newest release. To control when the server
+updates, set `image:` in `docker-compose.yml` to one of these tags:
+
+| Tag      | Image                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------ |
+| `latest` | The newest release.                                                                                    |
+| `0.0`    | The newest `0.0.x` release. Use this to stay on one release series.                                    |
+| `0.0.1`  | Exactly that release. It never changes.                                                                |
+| `main`   | The latest development build from the `main` branch. It is untested and can break or change your data. |
+
+The [releases page](https://github.com/zluggish/zluggish/releases) lists every version.
+
 To work on Zluggish from source, see the [development guide](../development.md).

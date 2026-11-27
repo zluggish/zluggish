@@ -115,9 +115,9 @@ Releases use [semantic versioning](https://semver.org/). The version lives in `s
    ```
 
 The `release` workflow checks that the tag matches `server/package.json` and points to a commit on `main`. It then
-publishes `ghcr.io/zluggish/zluggish:0.0.1` and `:0.0` for amd64 and arm64 and creates the GitHub release with notes
-generated from the merged pull requests. A tag with a suffix, such as `v0.1.0-rc.1`, becomes a prerelease and gets only
-its full version tag. The `latest` image tag keeps following `main`.
+publishes `ghcr.io/zluggish/zluggish:0.0.1`, `:0.0` and `:latest` for amd64 and arm64 and creates the GitHub release
+with notes generated from the merged pull requests. A tag with a suffix, such as `v0.1.0-rc.1`, becomes a prerelease and
+gets only its full version tag. Every push to `main` publishes the `main` image tag.
 
 ## Edit interface text
 
