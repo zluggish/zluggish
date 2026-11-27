@@ -5,6 +5,10 @@ export const SystemFlag = {
   /** Set by restore; stops every automatic delivery until an operator clears it. */
   UploadPause: 'uploads.paused',
   ZwiftUpdatesAllowed: 'zwift.updates_allowed',
+  /** The highest player ID ever deleted. New riders are numbered above it, so a deleted
+  rider's ID, folder and cached state never pass to someone else.
+  */
+  RetiredPlayerId: 'accounts.retired_player_id',
 } as const;
 
 export type SystemFlag = (typeof SystemFlag)[keyof typeof SystemFlag];
@@ -27,6 +31,15 @@ export class SystemFlagsRepository {
         .values({ name, value })
         .onConflict((conflict) => conflict.column('name').doUpdateSet({ value })),
     );
+  }
+
+  /** The highest deleted player ID, or 0. */
+  retiredPlayerId() {
+    return Number(this.get(SystemFlag.RetiredPlayerId) ?? 0);
+  }
+
+  retirePlayerId(player: number) {
+    this.set(SystemFlag.RetiredPlayerId, String(Math.max(this.retiredPlayerId(), player)));
   }
 
   clear(name: SystemFlag) {
