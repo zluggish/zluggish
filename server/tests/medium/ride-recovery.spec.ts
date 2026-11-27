@@ -164,4 +164,9 @@ await test('a connection end neither completes nor uploads a ride, and keeps the
     setTimeout(resolve, 20);
   });
   assert.equal(existsSync(path), false);
+
+  // The next checkpoint does not record the finished ride again.
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  await f.effects.runSync(RideRecoveryService).recordings.idle();
+  assert.equal(existsSync(path), false);
 });

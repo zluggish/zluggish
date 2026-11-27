@@ -134,9 +134,11 @@ const make = Effect.gen(function* () {
     }
   }
 
+  /** The ride ended: its history must not reach a later checkpoint and recreate the recording. */
   function discard(id: bigint) {
     pendingResumes.delete(id);
     written.delete(id);
+    context.world.histories.delete(id);
     void recordings.remove(Number(id));
   }
 
