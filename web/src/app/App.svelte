@@ -22,6 +22,9 @@
   import ZwiftAndroidManage from './ZwiftAndroidManage.svelte';
   import AndroidAppsManage from './AndroidAppsManage.svelte';
   import ServerCertificate from './ServerCertificate.svelte';
+  import LauncherAccess from './LauncherAccess.svelte';
+  import { accessOverview, groupsOf } from './access';
+  import type { AccessOverview } from './access';
   import { tlsStatus } from './tls';
   import { decode, ignored, responseFields } from '../lib/api';
   import type { ApiPayload } from '../lib/api';
@@ -138,6 +141,8 @@
   let event = $state<ManagedEvent | null>(null);
   let eventDescription = $state('');
   let eventStart = $state('');
+  /** Launcher access groups; null until loaded, and for riders who are not administrators. */
+  let access = $state<AccessOverview | null>(null);
   let botUser = $state<number | null>(null);
   let botCommand = $state<(typeof botCommands)[number][0]>('group');
   let botArgument = $state('');
@@ -198,6 +203,23 @@
     ),
   );
 
+  // Asked once per sign-in, so the menu can offer Launcher access.
+  let accessRequested = false;
+
+  $effect(() => {
+    if (!user || user.role !== 'administrator') {
+      accessRequested = false;
+      access = null;
+
+      return;
+    }
+
+    if (!accessRequested) {
+      accessRequested = true;
+      void loadAccess();
+    }
+  });
+
   // Asked once per sign-in; the Server page reports later changes.
   let certificateRequested = false;
 
@@ -236,35 +258,37 @@
           : t('first_administrator')
         : path === '/manage/server'
           ? t('server')
-          : path === '/manage/android'
-            ? t('android_apps')
-            : path === '/manage/companion'
-              ? t('companion_for_android')
-              : path === '/manage/zwift-android'
-                ? t('zwift_for_android')
-                : path === '/manage/users/new'
-                  ? t('create_user')
-                  : selected
-                    ? label(selected)
-                    : manage
-                      ? t('users')
-                      : path === '/' || path === '/activities' || path.startsWith('/activities/')
-                        ? t('activities')
-                        : path === '/profile-data/local'
-                          ? t('import_local_files')
-                          : path === '/profile-data'
-                            ? 'Import / Export'
-                            : path === '/zwift'
-                              ? t('zwift_connection')
-                              : path === '/integrations'
-                                ? t('integrations')
-                                : path === '/settings'
-                                  ? t('settings')
-                                  : path === '/climbs'
-                                    ? t('climbs')
-                                    : apps
-                                      ? t('apps')
-                                      : (setup ?? t('profile')),
+          : path === '/manage/access'
+            ? t('launcher_access')
+            : path === '/manage/android'
+              ? t('android_apps')
+              : path === '/manage/companion'
+                ? t('companion_for_android')
+                : path === '/manage/zwift-android'
+                  ? t('zwift_for_android')
+                  : path === '/manage/users/new'
+                    ? t('create_user')
+                    : selected
+                      ? label(selected)
+                      : manage
+                        ? t('users')
+                        : path === '/' || path === '/activities' || path.startsWith('/activities/')
+                          ? t('activities')
+                          : path === '/profile-data/local'
+                            ? t('import_local_files')
+                            : path === '/profile-data'
+                              ? 'Import / Export'
+                              : path === '/zwift'
+                                ? t('zwift_connection')
+                                : path === '/integrations'
+                                  ? t('integrations')
+                                  : path === '/settings'
+                                    ? t('settings')
+                                    : path === '/climbs'
+                                      ? t('climbs')
+                                      : apps
+                                        ? t('apps')
+                                        : (setup ?? t('profile')),
   );
 
   const initials = (r: User) => `${r.first_name.charAt(0)}${r.last_name.charAt(0)}`.toUpperCase();
@@ -424,6 +448,16 @@
 
     if (selected) {
       select();
+      await loadAccess();
+    }
+  }
+
+  /** Whether the launcher access page exists, and each rider's groups for their page. */
+  async function loadAccess() {
+    try {
+      access = await api(accessOverview, '/api/manage/access');
+    } catch {
+      access = null;
     }
   }
 
@@ -1010,7 +1044,14 @@
       {@render link('/apps', 'Apps', apps || installing || companion)}
       {#if administrator}
         <p class="group">{t('manage')}</p>
-        {@render link('/manage', 'Users', manage && path !== '/manage/server' && !androidApps.includes(path))}
+        {@render link(
+          '/manage',
+          'Users',
+          manage && path !== '/manage/server' && path !== '/manage/access' && !androidApps.includes(path),
+        )}
+        {#if access?.configured}
+          {@render link('/manage/access', t('launcher_access'), path === '/manage/access')}
+        {/if}
         {@render link('/manage/android', t('android_apps'), androidApps.includes(path))}
         {@render link('/manage/server', 'Server', path === '/manage/server')}
       {/if}
@@ -1200,7 +1241,19 @@
       {/if}
     {:else if manage && administrator}
       <div>
-        {#if path === '/manage/android'}
+        {#if path === '/manage/access'}
+          <LauncherAccess
+            {api}
+            {users}
+            {done}
+            confirm={(confirmation) => {
+              pending = confirmation;
+            }}
+            onoverview={(overview) => {
+              access = overview;
+            }}
+          />
+        {:else if path === '/manage/android'}
           <AndroidAppsManage {api} {navigate} />
         {:else if path === '/manage/companion'}
           <CompanionManage {api} {navigate} csrf={() => csrf} />
@@ -1545,6 +1598,21 @@
                   <span class="chip muted num">{t('player_id', { value1: selected.player_id })}</span>
                   {@render chips(selected)}
                 </p>
+                {#if access?.configured}
+                  {@const groups = groupsOf(access, selected.player_id)}
+                  {@const own = access.ownEmail.find((row) => row.playerId === selected.player_id)}
+                  <p class="muted">
+                    {@render link(
+                      '/manage/access',
+                      groups.length
+                        ? t('access_rider_groups', { value1: groups.join(', ') })
+                        : own
+                          ? t('access_rider_own_email', { value1: own.email })
+                          : t('access_rider_unreachable'),
+                      false,
+                    )}
+                  </p>
+                {/if}
                 {#if selected.completion_deadline}
                   <p class="muted">
                     {t('user_ride_save_deadline')}

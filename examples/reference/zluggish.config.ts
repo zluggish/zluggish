@@ -30,6 +30,10 @@ export default defineConfig({
       // Requests are then accepted only from this exact origin, and an https address marks sign-in cookies Secure.
       // No path allowed. null accepts any origin with the request's host and sets Secure only on direct https.
       publicUrl: null,
+      // Let launchers sign in through the Cloudflare Access application in front of publicUrl, which must be https.
+      // Such as { teamDomain: 'example.cloudflareaccess.com', audience: '<the application's AUD tag>' }.
+      // The launcher then lists only the riders of the email that signed in. null turns the sign-in off.
+      cloudflareAccess: null,
     },
     // Zwift CDN: bundled game assets and the asset proxy.
     cdn: { host: null, port: 80 },

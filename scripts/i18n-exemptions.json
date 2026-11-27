@@ -528,5 +528,10 @@
     "file": "server/src/world/fit-device.ts",
     "value": "Edge 820",
     "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/services/access-groups.service.ts",
+    "value": "{value1}/launcher/link?state={value2}",
+    "reason": "URL of the web app's launcher sign-in route, not shown to people."
   }
 ]

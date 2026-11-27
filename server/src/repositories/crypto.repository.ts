@@ -7,16 +7,22 @@ import {
   createCipheriv,
   createDecipheriv,
   createPrivateKey,
+  createPublicKey,
   generateKeyPair,
   randomBytes,
   randomInt,
   randomUUID,
   sign,
   timingSafeEqual,
+  verify,
   X509Certificate,
 } from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
 import { promisify } from 'node:util';
 import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
+
+/** A public key that verifies signatures, such as a Cloudflare Access signing key. */
+export type PublicKey = KeyObject;
 
 const generateKeyPairAsync = promisify(generateKeyPair);
 
@@ -89,6 +95,22 @@ export class CryptoRepository {
     } catch {
       return false;
     }
+  }
+
+  /** An RSA public key from a JSON Web Key, as Cloudflare Access publishes its signing keys. */
+  rsaPublicKey(jwk: { kty: string; n: string; e: string }): KeyObject {
+    const key = createPublicKey({ key: jwk, format: 'jwk' });
+
+    if (key.asymmetricKeyType !== 'rsa') {
+      throw new Error(t('crypto_rsa_key_required'));
+    }
+
+    return key;
+  }
+
+  /** Whether `signature` is an RS256 (RSA PKCS #1 v1.5 with SHA-256) signature of `data` by `key`. */
+  verifyRs256(data: string, signature: Uint8Array, key: KeyObject) {
+    return verify('sha256', Buffer.from(data, 'utf8'), key, signature);
   }
 
   signIdentity(identity: string, secret: Uint8Array) {

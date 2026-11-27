@@ -52,3 +52,63 @@ Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traf
 2. Set the action to **Override** and enter the server's private IP in **Override destination**. Replace the example `192.168.1.100` below with your server's private IP.
 
    ![Cloudflare Gateway DNS policy with the Override action and an example override destination of 192.168.1.100](../../media/screenshots/cloudflare-gateway-dns-override.png)
+
+## Show each household only its own riders
+
+The launcher can list only the riders that belong to the person using it. The rider selects **Sign in with Cloudflare** in the launcher and signs in to the Cloudflare Access application of the [web app](#web-app). Zluggish then lists the riders in that email's groups, and the rider whose login name is that email. The launcher stays signed in for 30 days.
+
+This works on any device that reaches the game, including one that cannot run your Cloudflare One Client, such as a work laptop that must run its employer's.
+
+The filter decides who appears in the rider list. It does not replace passwords: a rider whose password this computer does not remember still enters it. The web app and the Android apps are not filtered.
+
+### Turn on the sign-in
+
+1. In Cloudflare One, open the web app's Access application and copy its **Application Audience (AUD) Tag**.
+2. Note your team domain, such as `example.cloudflareaccess.com`. It is under **Settings** in Cloudflare One.
+3. Set both in `zluggish.config.ts`. `network.web.publicUrl` must be the web app's https address, and the Access application must cover the whole hostname:
+
+   ```ts
+   network: {
+     web: {
+       publicUrl: 'https://zluggish.example.com',
+       cloudflareAccess: { teamDomain: 'example.cloudflareaccess.com', audience: '<AUD tag>' },
+     },
+   },
+   ```
+
+4. Restart Zluggish.
+
+Who may sign in is up to the Access application's policies.
+
+### Skip the login prompt on your Cloudflare One Client
+
+Riders whose device runs your Cloudflare One Client can sign in without the Access login page. Access then uses the identity the client enrolled with. Cloudflare calls this [Authenticate with Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/client-sessions/).
+
+1. In Cloudflare One, open **Access controls** > **Access settings**.
+2. Turn on **Authenticate with Cloudflare One Client** and choose a **Session duration** of up to 90 days.
+3. Select **Apply to all Access applications**, or turn it on only in the web app's Access application. Then select **Save**.
+4. In the device profile's **Split Tunnels** Include list, add the web app's hostname, such as `zluggish.example.com`, and your team domain, such as `example.cloudflareaccess.com`. Access only sees the client's identity on requests that go through the client, and Include mode otherwise sends only the server's IP through it. Reconnect the client afterwards.
+
+It only works if the Access application uses Allow or Block policies and has **Binding Cookie** turned off. A device sends one user's identity, the person who enrolled the client. Devices without your client, such as a work laptop on its employer's client, still get the normal Access login.
+
+### Do not decrypt the Zwift names
+
+Leave Gateway TLS decryption off, or add a **Do Not Inspect** HTTP policy for `secure.zwift.com`, `launcher.zwift.com`, `cdn.zwift.com` and `us-or-rly101.zwift.com`. The Zwift launcher on Windows checks whether a certificate was revoked. The certificates Gateway makes when it decrypts say nowhere how to check, so the launcher refuses them with "Could not establish trust relationship for the SSL/TLS secure channel".
+
+### Choose who sees which riders
+
+In the web app, open **Manage** > **Launcher access**. The page appears once the sign-in is turned on.
+
+- Each group lists emails and riders. Everyone signed in to Cloudflare with one of the emails sees all of the group's riders.
+- An email can be in several groups, and a rider can be in several groups.
+- A rider whose login name is an email is visible to that email without any group.
+- **Riders no launcher can pick** lists riders in no group whose login name is not an email. Add each one to a group.
+- **Waiting for a group** lists emails that signed in but matched no rider, so you can add them without typing.
+
+Changes take effect the next time the launcher loads its rider list.
+
+### What riders see
+
+- Not signed in yet, or the sign-in is older than 30 days: a page with **Sign in with Cloudflare**.
+- Signed in with an email that has riders: only those riders, and a line naming the email.
+- Signed in with an email that has no riders: a page asking them to contact an administrator, with **Check again** and **Sign in with Cloudflare** to use another email.

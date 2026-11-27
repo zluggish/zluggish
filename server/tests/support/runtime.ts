@@ -1,5 +1,6 @@
 import { makeAppRuntime } from '#src/layers';
 import { validateConfig } from '#src/config/index';
+import type { ConfigInput } from '#src/config/index';
 import { packageRoot } from '#src/config/load';
 import { createGameApp } from '#src/http/app';
 import { AccountsService } from '#src/services/auth.service';
@@ -11,7 +12,9 @@ import { resolve } from 'node:path';
 import type { TestContext } from 'node:test';
 import { Schema } from 'effect';
 
-export function runtimeFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true) {
+type WebInput = NonNullable<NonNullable<ConfigInput['network']>['web']>;
+
+export function runtimeFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true, web: WebInput = {}) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-accounts-'));
   const storage = resolve(root, 'storage');
   const accounts = AccountsService.open(storage);
@@ -19,7 +22,10 @@ export function runtimeFixture(t: TestContext, publicUrl: string | null = null, 
   const profiles = accounts.repositories.profileRepository;
   const settings = accounts.repositories.settingsRepository;
   const world = new World();
-  const config = validateConfig({ storageDir: storage, network: { web: { publicUrl, enabled: webEnabled } } });
+  const config = validateConfig({
+    storageDir: storage,
+    network: { web: { ...web, publicUrl, enabled: webEnabled } },
+  });
   const assets = resolve(packageRoot(), '../assets');
 
   const tokens = Schema.decodeUnknownSync(

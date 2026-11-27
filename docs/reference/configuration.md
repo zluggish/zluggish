@@ -51,6 +51,10 @@ export default defineConfig({
       // Requests are then accepted only from this exact origin, and an https address marks sign-in cookies Secure.
       // No path allowed. null accepts any origin with the request's host and sets Secure only on direct https.
       publicUrl: null,
+      // Let launchers sign in through the Cloudflare Access application in front of publicUrl, which must be https.
+      // Such as { teamDomain: 'example.cloudflareaccess.com', audience: '<the application's AUD tag>' }.
+      // The launcher then lists only the riders of the email that signed in. null turns the sign-in off.
+      cloudflareAccess: null,
     },
     // Zwift CDN: bundled game assets and the asset proxy.
     cdn: { host: null, port: 80 },
@@ -405,16 +409,17 @@ Set the log level under `logging`. See [Logging](../troubleshooting/logging.md).
 
 Most features have their settings on their own page:
 
-| Setting                           | Page                                                       |
-| --------------------------------- | ---------------------------------------------------------- |
-| `tls`                             | [Server certificate](../install/certificate.md)            |
-| `dns.enabled`                     | [Android](../install/clients/android.md)                   |
-| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                 |
-| `bots`                            | [Bots](../usage/features/bots.md)                          |
-| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                  |
-| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md) |
-| `equipment`                       | [Entitlements](../usage/features/entitlements.md)          |
-| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                |
-| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)          |
-| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)         |
-| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)           |
+| Setting                           | Page                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `tls`                             | [Server certificate](../install/certificate.md)                                      |
+| `dns.enabled`                     | [Android](../install/clients/android.md)                                             |
+| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                                           |
+| `network.web.cloudflareAccess`    | [Remote access](../install/remote-access.md#show-each-household-only-its-own-riders) |
+| `bots`                            | [Bots](../usage/features/bots.md)                                                    |
+| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                                            |
+| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md)                           |
+| `equipment`                       | [Entitlements](../usage/features/entitlements.md)                                    |
+| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                                          |
+| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)                                    |
+| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)                                   |
+| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)                                     |

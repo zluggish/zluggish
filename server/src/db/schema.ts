@@ -258,4 +258,8 @@ export interface Database {
     finished_at: Generated<NullableInteger>;
   };
   system_flag: { name: string; value: string };
+  access_group: { id: Generated<Integer>; name: string };
+  access_group_email: { group_id: Integer; email: string };
+  access_group_rider: { group_id: Integer; player_id: Integer };
+  access_seen: { email: string; last_seen: Integer };
 }

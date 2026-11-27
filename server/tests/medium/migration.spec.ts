@@ -3,6 +3,7 @@ import { run } from '#src/cli/cli';
 import { validateConfig } from '#src/config/index';
 import { loadConfig, packageRoot } from '#src/config/load';
 import { migrateConfig, migrationCandidate } from '#src/config/migrate';
+import { openDatabase, SCHEMA_VERSION } from '#src/db/open';
 import { LockRepository } from '#src/repositories/lock.repository';
 import { SettingsStore } from '#src/repositories/settings.repository';
 import { AccountsService } from '#src/services/auth.service';
@@ -30,10 +31,14 @@ function fixture(t: TestContext) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-migrate-'));
   const storage = resolve(root, 'storage');
   const stores: Array<SettingsStore> = [];
+  const cleanups: Array<() => void> = [];
   mkdirSync(storage);
   t.after(() => {
     for (const store of stores) {
       store.close();
+    }
+    for (const cleanup of cleanups) {
+      cleanup();
     }
     rmSync(root, { recursive: true, force: true });
   });
@@ -42,6 +47,9 @@ function fixture(t: TestContext) {
     root,
     storage,
     output: resolve(root, 'external/zluggish.config.ts'),
+    onCleanup(cleanup: () => void) {
+      cleanups.push(cleanup);
+    },
     openSettings(readOnly = false) {
       const store = SettingsStore.legacy(storage, readOnly);
       stores.push(store);
@@ -384,4 +392,47 @@ await test('account migration uses the selected config storage', async (t) => {
   assert.equal(migrated.get(user.player_id)?.first_name, 'Legacy');
   migrated.close();
   assert.equal(existsSync(resolve(f.storage, 'zluggish.db')), false);
+});
+
+await test('version 12 adds launcher access groups to an existing database without touching riders', (t) => {
+  const f = fixture(t);
+  const created = openDatabase(f.storage);
+  created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
+    DROP TABLE access_seen; DROP TABLE access_group_rider; DROP TABLE access_group_email; DROP TABLE access_group;
+    UPDATE version SET version=11;`);
+  created.close();
+
+  const db = openDatabase(f.storage);
+  f.onCleanup(() => db.close());
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
+  assert.equal(db.prepare('SELECT username FROM user WHERE player_id=7').get()?.username, 'anna@example.com');
+  // A schema-only migration takes no backup.
+  assert.equal(existsSync(resolve(f.storage, 'backups')), false);
+
+  db.exec(`INSERT INTO access_group (id, name) VALUES (1, 'Berg family');
+    INSERT INTO access_group_email VALUES (1, 'Anna@Example.com');
+    INSERT INTO access_group_rider VALUES (1, 7);`);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM access_group_email WHERE email='anna@example.com'").get()?.n, 1);
+  assert.throws(() => db.exec('INSERT INTO access_group_rider VALUES (1, 99)'), /FOREIGN KEY/);
+  db.exec('DELETE FROM user WHERE player_id=7');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_rider').get()?.n, 0);
+  db.exec('DELETE FROM access_group');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_email').get()?.n, 0);
+});
+
+await test('version 14 removes the Cloudflare Gateway table that version 13 made', (t) => {
+  const f = fixture(t);
+  const created = openDatabase(f.storage);
+  created.exec(`CREATE TABLE access_gateway (
+    id INTEGER PRIMARY KEY CHECK (id = 1), secret_digest TEXT, secret_created_at INTEGER, certificate TEXT
+  );
+  INSERT INTO access_gateway (id, secret_digest) VALUES (1, 'digest');
+  UPDATE version SET version=13;`);
+  created.close();
+
+  const db = openDatabase(f.storage);
+  f.onCleanup(() => db.close());
+  assert.equal(SCHEMA_VERSION, 14);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 14);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='access_gateway'").get()?.n, 0);
 });

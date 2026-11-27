@@ -10,6 +10,8 @@ export interface BrowserSession {
   identity: string | null;
   selected: boolean;
   touched: number;
+  /** Set while this launcher signs in through Cloudflare Access; the returning ticket must name it. */
+  accessState?: string | undefined;
 }
 
 type BrowserEvent = { type: 'login'; identity: string } | { type: 'clear-selection' };
