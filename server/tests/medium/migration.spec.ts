@@ -36,7 +36,7 @@ function fixture(t: TestContext) {
     for (const store of stores) {
       store.close();
     }
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   return {
