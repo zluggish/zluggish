@@ -15,6 +15,9 @@ export const userSchema = z.object({
   avatar: z.number().nullable(),
   /** Set when disabling a rider leaves the current ride time to be saved. */
   completion_deadline: z.number().nullable().optional(),
+  /** Epoch milliseconds. Only the user list sends these; null means never. */
+  last_login: z.number().nullable().optional(),
+  last_ride: z.number().nullable().optional(),
 });
 
 export type User = z.infer<typeof userSchema>;

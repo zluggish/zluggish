@@ -27,6 +27,7 @@ On a local network, open the web app at `http://<server-address>:8080` using the
 Open **Manage** in the sidebar.
 
 - **Users** lets you create, disable or delete accounts, set passwords, change roles and end sessions.
+- The **Users** list shows when each user last rode and last signed in to the game or the web app. Hover over a time to see the exact date. A user who is riding shows **Riding now** in place of the last ride.
 - **Users → Create user** gives a new user a one-time password by default. Give the user this password. The password shows only once, on the new user's page. At first sign-in to the web app, the user chooses their own password. Until then, the user cannot ride Zwift. To choose the password yourself, select **Set a password**.
 - On a user's page, **Reset to one-time password** replaces the user's password with a new one-time password from the server and signs the user out everywhere. The password shows only once. If it is lost, reset it again.
 - **Users → a user → Delete user** removes the account and everything in it: activities, FIT files, photos, segment and route results, goals, bookmarks, settings and service connections. The confirmation shows how many activities the user has. Type the user's login name to delete. You cannot delete your own account or a user who is riding. Deleting cannot be undone, so disable the account instead to keep its history. A deleted user's player ID is not given to a new user.

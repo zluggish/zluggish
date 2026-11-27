@@ -221,6 +221,7 @@ export function createWebApp(runtime: HttpRuntime) {
 
   function login(c: Context<WebEnv>, user: NonNullable<ReturnType<typeof accounts.get>>, confirmed = false) {
     runtime.effects.runSync(sessions.end(c.get('sessionId')));
+    accounts.recordLogin(user.player_id);
 
     const fresh = runtime.effects.runSync(
       sessions.create(accounts.identityOf(user), confirmed ? Date.now() + 900_000 : 0),
@@ -790,7 +791,18 @@ export function createWebApp(runtime: HttpRuntime) {
     Effect.gen(function* () {
       const managementService = yield* ManagementService;
 
-      return c.json({ users: yield* Effect.forEach(accounts.list(), (user) => managementService.publicUser(user)) });
+      const recency = managementService.store.recency();
+
+      return c.json({
+        users: yield* Effect.forEach(accounts.list(), (user) =>
+          managementService.publicUser(user).pipe(
+            Effect.map((listed) => ({
+              ...listed,
+              ...(recency.get(user.player_id) ?? { last_login: null, last_ride: null }),
+            })),
+          ),
+        ),
+      });
     }),
   );
   appRoutes.post('/api/manage/users', (c) =>
