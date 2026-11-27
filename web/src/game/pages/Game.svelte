@@ -121,7 +121,12 @@
       </Form>
     </div>
   {/each}
-  {#if current.retry}<a class="retry" href={current.retry.href}>{current.retry.label}</a>{/if}
+  {#if current.signIn || current.retry}<div class="actions">
+      {#if current.signIn}<a class="retry" href={current.signIn.href}>{current.signIn.label}</a>{/if}
+      {#if current.retry}<a class={['retry', current.signIn && 'secondary']} href={current.retry.href}
+          >{current.retry.label}</a
+        >{/if}
+    </div>{/if}
   {#if current.kind === 'login' && current.accessEmail}<p class="signed-in">
       {t('access_signed_in_as', { value1: current.accessEmail })}
     </p>{/if}
@@ -159,11 +164,17 @@
     outline: 2px solid var(--orange);
     outline-offset: 2px;
   }
-  /* The one action on a message page: the primary button's look, as a link that loads the page again. */
+  /* A message page's actions: links with the primary button's look. With two, the second is quieter. */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
   .retry {
     display: inline-block;
-    margin-top: 1rem;
     padding: 0.65rem 1.4rem;
+    border: 1.5px solid transparent;
     border-radius: 10px;
     background: var(--orange);
     box-shadow: 0 3px 0 var(--orange-deep);
@@ -177,6 +188,18 @@
   .retry:active {
     transform: translateY(2px);
     box-shadow: 0 1px 0 var(--orange-deep);
+  }
+  .retry.secondary {
+    border-color: rgb(255 255 255 / 0.35);
+    background: transparent;
+    box-shadow: none;
+  }
+  .retry.secondary:hover {
+    border-color: var(--orange);
+    background: rgb(255 255 255 / 0.08);
+  }
+  .retry.secondary:active {
+    box-shadow: none;
   }
   /* Who Cloudflare says is signed in: a quiet line under the riders, across the whole list. */
   .signed-in {

@@ -399,13 +399,12 @@ await test('version 12 adds launcher access groups to an existing database witho
   const created = openDatabase(f.storage);
   created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
     DROP TABLE access_seen; DROP TABLE access_group_rider; DROP TABLE access_group_email; DROP TABLE access_group;
-    UPDATE version SET version=11;`);
+    DROP TABLE access_gateway; UPDATE version SET version=11;`);
   created.close();
 
   const db = openDatabase(f.storage);
   f.onCleanup(() => db.close());
-  assert.equal(SCHEMA_VERSION, 12);
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 12);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
   assert.equal(db.prepare('SELECT username FROM user WHERE player_id=7').get()?.username, 'anna@example.com');
   // A schema-only migration takes no backup.
   assert.equal(existsSync(resolve(f.storage, 'backups')), false);
@@ -419,4 +418,18 @@ await test('version 12 adds launcher access groups to an existing database witho
   assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_rider').get()?.n, 0);
   db.exec('DELETE FROM access_group');
   assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_email').get()?.n, 0);
+});
+
+await test('version 13 adds the Gateway settings table, which holds one row', (t) => {
+  const f = fixture(t);
+  const created = openDatabase(f.storage);
+  created.exec('DROP TABLE access_gateway; UPDATE version SET version=12;');
+  created.close();
+
+  const db = openDatabase(f.storage);
+  f.onCleanup(() => db.close());
+  assert.equal(SCHEMA_VERSION, 13);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 13);
+  db.exec("INSERT INTO access_gateway (id, secret_digest) VALUES (1, 'digest')");
+  assert.throws(() => db.exec('INSERT INTO access_gateway (id) VALUES (2)'), /CHECK/);
 });

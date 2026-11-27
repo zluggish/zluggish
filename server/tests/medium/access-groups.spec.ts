@@ -1,16 +1,13 @@
-import { loadConfig } from '#src/config/load';
 import { AccessGroupsService } from '#src/services/access-groups.service';
-import { GATEWAY_SECRET, gatewaySecretFile } from '#tests/support/gateway';
 import { runtimeFixture } from '#tests/support/runtime';
+import { storeGatewaySecret } from '#tests/support/gateway';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
 import type { TestContext } from 'node:test';
 import { test } from 'node:test';
 
 async function fixture(t: TestContext) {
-  const f = runtimeFixture(t, null, true, { cloudflareGateway: { secretFile: gatewaySecretFile(t) } });
+  const f = runtimeFixture(t);
+  storeGatewaySecret(f);
   const service = f.effects.runSync(AccessGroupsService);
   const anna = await f.accounts.create('Anna Berg', 'test-password', 'anna@example.com');
   const olle = await f.accounts.create('Olle Berg', 'test-password');
@@ -124,27 +121,12 @@ await test('only the 50 most recent unmatched emails are kept', async (t) => {
   assert.equal(seen.at(-1)?.email, 'rider5@example.com');
 });
 
-await test('the Cloudflare gateway is off by default', (t) => {
+await test('the Cloudflare gateway is off until an administrator makes a secret', (t) => {
   const f = runtimeFixture(t);
-  assert.equal(f.config.network.api.cloudflareGateway, null);
-  assert.equal(
-    f.effects.runSync(AccessGroupsService).identify({ gateway: 'anything', email: 'anna@example.com' }),
-    'off',
-  );
-});
+  const service = f.effects.runSync(AccessGroupsService);
+  assert.equal(service.identify({ gateway: 'anything', email: 'anna@example.com' }), 'off');
 
-await test('config loading rejects a missing or short gateway secret and resolves the path', async (t) => {
-  const root = mkdtempSync(resolve(tmpdir(), 'zluggish-gateway-config-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const path = resolve(root, 'zluggish.config.ts');
-  writeFileSync(path, "export default { network: { api: { cloudflareGateway: { secretFile: './secret.txt' } } } };");
-
-  await assert.rejects(loadConfig({ path }), /network\.api\.cloudflareGateway\.secretFile/);
-
-  writeFileSync(resolve(root, 'secret.txt'), 'too-short\n');
-  await assert.rejects(loadConfig({ path }), /at least 32 characters/);
-
-  writeFileSync(resolve(root, 'secret.txt'), `${GATEWAY_SECRET}\n`);
-  const loaded = await loadConfig({ path });
-  assert.deepEqual(loaded.config.network.api.cloudflareGateway, { secretFile: resolve(root, 'secret.txt') });
+  const { secret } = f.effects.runSync(service.generateGatewaySecret(1));
+  assert.deepEqual(service.identify({ gateway: secret, email: 'anna@example.com' }), { email: 'anna@example.com' });
+  assert.equal(service.identify({ gateway: 'anything', email: 'anna@example.com' }), 'unidentified');
 });

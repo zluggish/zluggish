@@ -201,7 +201,7 @@
   },
   {
     "file": "server/src/http/client-setup.ts",
-    "value": "  $text = $text.TrimEnd() + \"`n`n# BEGIN Zluggish server certificate $Thumbprint`n$($CertificatePem.Trim())`n# END Zluggish server certificate`n\"",
+    "value": "  $text = $text.TrimEnd() + \"`n`n# BEGIN Zluggish server certificate $Thumbprint`n$block# END Zluggish server certificate`n\"",
     "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
   },
   {
@@ -528,5 +528,15 @@
     "file": "server/src/world/fit-device.ts",
     "value": "Edge 820",
     "reason": "Garmin product model name."
+  },
+  {
+    "file": "server/src/http/client-setup.ts",
+    "value": "# The Cloudflare Gateway inspection root, for the Zwift lists only.",
+    "reason": "Generated shell/PowerShell syntax or certificate marker. Output messages use t()."
+  },
+  {
+    "file": "server/src/services/access-groups.service.ts",
+    "value": "{value1}/launcher/link?state={value2}",
+    "reason": "URL of the web app's launcher sign-in route, not shown to people."
   }
 ]

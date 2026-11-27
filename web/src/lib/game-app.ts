@@ -57,6 +57,7 @@ export const gamePageModel: z.ZodType<GamePageModel> = z.object({
   forms: z.array(gameForm),
   back: z.object({ href: z.string(), label: z.string() }).optional(),
   retry: z.object({ href: z.string(), label: z.string() }).optional(),
+  signIn: z.object({ href: z.string(), label: z.string() }).optional(),
   accessEmail: z.string().nullable().optional(),
   message: z.string().optional(),
   failed: z.boolean().optional(),

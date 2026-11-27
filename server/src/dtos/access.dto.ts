@@ -26,3 +26,12 @@ export const accessGroupName = normalized(
 );
 
 export const accessGroupInput = Strict({ name: accessGroupName });
+
+/** A certificate file as base64: Cloudflare offers PEM and DER. Small enough for the JSON body limit. */
+export const gatewayCertificateInput = Strict({
+  certificate: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(32_768),
+    Schema.isPattern(/^[\d+/A-Za-z]+=*$/),
+  ),
+});

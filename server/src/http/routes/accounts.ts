@@ -1,7 +1,7 @@
 import { t } from '#src/i18n/index';
 import { PasswordLimits } from '#src/http/password-limits';
 import { AccountsService } from '#src/services/auth.service';
-import { AccessGroupsService } from '#src/services/access-groups.service';
+import { ACCESS_DEVICE_SECONDS, AccessGroupsService } from '#src/services/access-groups.service';
 import type { LauncherIdentity } from '#src/services/access-groups.service';
 import { WorkoutsService } from '#src/services/workout.service';
 import { FilesService } from '#src/services/files.service';
@@ -15,6 +15,7 @@ import { browserJson, gameRedirect } from '#src/http/game/results';
 import { readClimbs } from '#src/http/climbs';
 import type { HttpRuntime as Runtime, RuntimeEnv } from '#src/http/runtime';
 import type { User } from '#src/repositories/accounts.repository';
+import type { GamePageModel } from '#src/dtos/game-app.dto';
 import { REMEMBER_SECONDS, SessionsService } from '#src/services/browser-session.service';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context, Hono, Next } from 'hono';
@@ -102,13 +103,18 @@ export async function csrf(c: Context<RuntimeEnv>, runtime: Runtime): Promise<Fo
   )(form);
 }
 
-/** Who Cloudflare Gateway says is signed in, from the headers its HTTP policy overwrites. Only the
-launcher picker uses it. The header values are never logged.
+/** The launcher's Cloudflare Access sign-in, kept for the picker only. */
+const ACCESS_COOKIE = 'zluggish_access';
+
+/** Who Cloudflare says is signed in: from the headers a Gateway HTTP policy overwrites, or else from an
+earlier Cloudflare Access sign-in on this launcher. Only the launcher picker uses it. The values are never logged.
 */
 export function launcherIdentity(c: Context<RuntimeEnv>, runtime: Runtime): LauncherIdentity {
-  return runtime.effects
-    .runSync(AccessGroupsService)
-    .identify({ gateway: c.req.header('X-Zluggish-Gateway'), email: c.req.header('X-Zluggish-Identity') });
+  return runtime.effects.runSync(AccessGroupsService).identify({
+    gateway: c.req.header('X-Zluggish-Gateway'),
+    email: c.req.header('X-Zluggish-Identity'),
+    device: getCookie(c, ACCESS_COOKIE),
+  });
 }
 
 export function peerAddress(c: Context) {
@@ -239,20 +245,53 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     return identity === 'off' ? accounts.list().filter((user) => user.enabled) : access.riders(identity.email);
   }
 
+  /** The Cloudflare One Client check, the Access sign-in, or both, as configured. */
+  function connectActions() {
+    const actions: Pick<GamePageModel, 'retry' | 'signIn'> = {};
+
+    if (access.gatewayConfigured()) {
+      actions.retry = { href: '/login/', label: t('access_check_again') };
+    }
+
+    if (access.signInConfigured()) {
+      actions.signIn = { href: '/login/access', label: t('access_sign_in') };
+    }
+
+    return actions;
+  }
+
   // Shown instead of the picker when Cloudflare did not say who is signed in, whatever the reason.
-  function connectPage(c: Context<RuntimeEnv>) {
+  function connectPage(c: Context<RuntimeEnv>, error = '') {
+    let message = t('access_connect_message');
+
+    if (access.signInConfigured()) {
+      message = access.gatewayConfigured() ? t('access_connect_message_both') : t('access_connect_message_sign_in');
+    }
+
     return model(c, 'message', t('access_connect_title'), [], {
-      message: t('access_connect_message'),
-      retry: { href: '/login/', label: t('access_check_again') },
+      message: error || message,
+      failed: !!error,
+      ...connectActions(),
     });
   }
 
   function noRidersPage(c: Context<RuntimeEnv>, email: string) {
     return model(c, 'message', t('access_no_riders_title', { value1: email }), [], {
       message: t('access_no_riders_message'),
-      retry: { href: '/login/', label: t('access_check_again') },
+      ...connectActions(),
     });
   }
+
+  // The Access sign-in leaves the launcher for the web app, whose Access application asks who is riding.
+  app.get('/login/access', (c) => {
+    if (!access.signInConfigured()) {
+      throw new HTTPException(404);
+    }
+    const state = access.newState();
+    c.get('browser').accessState = state;
+
+    return c.redirect(access.signInUrl(state), 302);
+  });
 
   function loginPage(c: Context<RuntimeEnv>, identity: Exclude<LauncherIdentity, 'unidentified'>, error = '') {
     const riders = pickable(identity);
@@ -301,6 +340,31 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
   }
 
   app.on(['GET', 'POST'], '/login/', async (c) => {
+    const ticket = c.req.method === 'GET' ? c.req.query('ticket') : undefined;
+
+    // Back from the web app: the ticket is good once, for the session that started the sign-in.
+    if (ticket !== undefined && access.signInConfigured()) {
+      const browser = c.get('browser');
+      const email = access.redeemTicket(ticket, browser.accessState);
+      browser.accessState = undefined;
+
+      if (!email) {
+        runtime.world.lifecycle.log.warn('auth.access_ticket_refused', 'Cloudflare Access sign-in ticket refused', {});
+
+        return runtime.effects.runPromise(gamePage(c, connectPage(c, t('access_link_expired'))));
+      }
+      setCookie(c, ACCESS_COOKIE, access.deviceToken(email), {
+        httpOnly: true,
+        // The sign-in returns from another site, so the cookie must survive that redirect chain.
+        sameSite: 'Lax',
+        secure: c.req.url.startsWith('https:'),
+        path: '/login/',
+        maxAge: ACCESS_DEVICE_SECONDS,
+      });
+      runtime.world.lifecycle.log.info('auth.access_signed_in', 'Launcher signed in through Cloudflare Access', {});
+
+      return c.redirect('/login/', 302);
+    }
     const identity = launcherIdentity(c, runtime);
 
     if (identity === 'unidentified') {

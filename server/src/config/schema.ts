@@ -210,6 +210,15 @@ export const configSchema = Schema.Struct({
           }),
         ),
       ).pipe(withDefault(null)),
+      /** Let launchers sign in through the Cloudflare Access app in front of `publicUrl`. Null turns it off. */
+      cloudflareAccess: Schema.NullOr(
+        Schema.Struct({
+          /** The team domain that issues Access tokens, such as `example.cloudflareaccess.com`. */
+          teamDomain: Schema.String.check(Schema.isPattern(/^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z]{2,}$/i)),
+          /** The Access application's Audience (AUD) tag. */
+          audience: Schema.String.check(Schema.isPattern(/^[\da-f]{64}$/i)),
+        }),
+      ).pipe(withDefault(null)),
     }),
     cdn: section({ host: optionalHost, port: port.pipe(withDefault(80)) }),
     tcp: section({ host: optionalHost, port: port.pipe(withDefault(3025)) }),
@@ -218,13 +227,6 @@ export const configSchema = Schema.Struct({
       host: optionalHost,
       port: port.pipe(withDefault(443)),
       useCert: Schema.Literal(true).pipe(withDefault(true)),
-      /** Trust the Cloudflare email that a Gateway HTTP policy adds to launcher requests. Null turns it off. */
-      cloudflareGateway: Schema.NullOr(
-        Schema.Struct({
-          /** Holds the value Gateway sends in X-Zluggish-Gateway. */
-          secretFile: NonBlank,
-        }),
-      ).pipe(withDefault(null)),
     }),
   }),
   riderDefaults: riderSettingsSchema,

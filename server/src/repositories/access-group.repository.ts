@@ -11,6 +11,14 @@ const rider = Schema.Struct({ group_id: Schema.Int, player_id: Schema.Int });
 
 const seen = Schema.Struct({ email: Schema.String, last_seen: Schema.Int });
 
+const gateway = Schema.Struct({
+  secret_digest: Schema.NullOr(Schema.String),
+  secret_created_at: Schema.NullOr(Schema.Int),
+  certificate: Schema.NullOr(Schema.String),
+});
+
+export type GatewayRow = typeof gateway.Type;
+
 export type AccessGroupRow = typeof group.Type;
 
 /** How many unmatched emails the "waiting for a group" list keeps. */
@@ -127,6 +135,28 @@ export class AccessGroupsRepository {
 
   forgetSeen(address: string) {
     this.executor.run(query.deleteFrom('access_seen').where('email', '=', address));
+  }
+
+  /** The Cloudflare Gateway settings; all empty until an administrator sets one. */
+  gateway(): GatewayRow {
+    const found = this.executor.get(
+      query.selectFrom('access_gateway').select(['secret_digest', 'secret_created_at', 'certificate']),
+    );
+
+    return found
+      ? Schema.decodeUnknownSync(gateway)(found)
+      : { secret_digest: null, secret_created_at: null, certificate: null };
+  }
+
+  /** Change some Gateway settings, keeping the rest. */
+  updateGateway(changes: Partial<GatewayRow>) {
+    const next = { ...this.gateway(), ...changes };
+    this.executor.run(
+      query
+        .insertInto('access_gateway')
+        .values({ id: 1, ...next })
+        .onConflict((conflict) => conflict.column('id').doUpdateSet(next)),
+    );
   }
 
   seen() {

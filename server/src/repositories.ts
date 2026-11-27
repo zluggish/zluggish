@@ -2,6 +2,7 @@ import { WorkoutPublication } from '#src/repositories/workout-publication.reposi
 import { openDatabase } from '#src/db/open';
 import { AccessGroupsRepository } from '#src/repositories/access-group.repository';
 import { AccountsRepository } from '#src/repositories/accounts.repository';
+import { CloudflareAccessRepository } from '#src/repositories/cloudflare-access.repository';
 import { BookmarksRepository } from '#src/repositories/bookmark.repository';
 import { DurabilityRepository } from '#src/repositories/durability.repository';
 import { JobsRepository } from '#src/repositories/jobs.repository';
@@ -39,6 +40,8 @@ import { resolve } from 'node:path';
 /** One repository set per account database, shared by every service. */
 export class Repositories {
   readonly loggingRepository = new LoggingRepository();
+
+  readonly cloudflareAccessRepository = new CloudflareAccessRepository();
 
   readonly db;
 

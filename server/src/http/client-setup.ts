@@ -9,6 +9,8 @@ const legacyCertificateBody = 'MIIEQTCCAymgAwIBAgIUVPfyk0BzcKB2eYhXZ+W9WZRY5HEwD
 
 export interface SetupScript {
   readonly pem: string;
+  /** Cloudflare Gateway's inspection root, or ''. Only Zwift's own list gets it: the client installs it system-wide. */
+  readonly gatewayPem: string;
   readonly certificate: CertificateStatus;
   /** IP address for the hosts file, or empty to leave the hosts file alone. */
   readonly address: string;
@@ -40,6 +42,7 @@ function header(script: SetupScript) {
     t('certificate_detail', { value1: certificate.subject }),
     `SHA-256:     ${certificate.fingerprint256}`,
     t('certificate_valid_until_detail', { value1: certificate.notAfter.slice(0, 10) }),
+    ...(script.gatewayPem ? [t('client_setup_gateway_certificate_detail')] : []),
   ].map((line) => `# ${line}`.trimEnd());
 }
 
@@ -85,6 +88,9 @@ export function windowsSetupScript(script: SetupScript) {
     "$CertificatePem = (@'",
     ...pemLines(script.pem),
     "'@) -replace \"`r\", ''",
+    ...(script.gatewayPem
+      ? ["$GatewayPem = (@'", ...pemLines(script.gatewayPem), "'@) -replace \"`r\", ''"]
+      : ["$GatewayPem = ''"]),
     '',
     'function Find-ZwiftFolder {',
     '  $candidates = @()',
@@ -139,7 +145,9 @@ export function windowsSetupScript(script: SetupScript) {
     String.raw`  $text = [regex]::Replace($text, '(?ms)^# BEGIN Zluggish.*?^# END Zluggish[^\n]*\n?', '')`,
     String.raw`  $text = [regex]::Replace($text, '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----\n?', '')`,
     String.raw`  $text = [regex]::Replace($text, '(?s)-----BEGIN CERTIFICATE-----\n' + [regex]::Escape($LegacyBody) + '.*?-----END CERTIFICATE-----\n?', '')`,
-    '  $text = $text.TrimEnd() + "`n`n# BEGIN Zluggish server certificate $Thumbprint`n$($CertificatePem.Trim())`n# END Zluggish server certificate`n"',
+    '  $block = "$($CertificatePem.Trim())`n"',
+    '  if ($GatewayPem) { $block += "$($GatewayPem.Trim())`n" }',
+    '  $text = $text.TrimEnd() + "`n`n# BEGIN Zluggish server certificate $Thumbprint`n$block# END Zluggish server certificate`n"',
     '  [IO.File]::WriteAllText($bundle, $text)',
     '  Write-Host (' + psQuote(t('updated', { value1: '{0}' })) + ' -f $bundle)',
     '',
@@ -194,6 +202,11 @@ function shellPrelude(script: SetupScript, name: string) {
     'PEM',
     '}',
     '',
+    '# The Cloudflare Gateway inspection root, for the Zwift lists only.',
+    ...(script.gatewayPem
+      ? ['gateway_certificate() {', "  cat <<'PEM'", ...pemLines(script.gatewayPem), 'PEM', '}']
+      : ['gateway_certificate() { :; }']),
+    '',
     'if command -v openssl >/dev/null 2>&1; then',
     "  actual=$(certificate | openssl x509 -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')",
     '  if [ "$actual" != "$THUMBPRINT" ]; then',
@@ -226,6 +239,7 @@ function shellBundles(notFound: Array<string>) {
     '    cat "$kept"',
     String.raw`    printf '\n# BEGIN Zluggish server certificate %s\n' "$THUMBPRINT"`,
     '    certificate',
+    '    gateway_certificate',
     "    echo '# END Zluggish server certificate'",
     '  } > "$1"',
     '  rm -f "${kept:?}"',

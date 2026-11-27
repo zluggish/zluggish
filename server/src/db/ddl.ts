@@ -141,3 +141,13 @@ CREATE TABLE access_seen (
  email TEXT PRIMARY KEY COLLATE NOCASE, last_seen INTEGER NOT NULL
 );
 `;
+
+/** Cloudflare Gateway settings. The secret is shown once and only its SHA-256 digest is kept; a digest turns the
+Gateway check on. The certificate is Gateway's inspection root, for Zwift's own certificate list.
+*/
+export const accessGatewaySQL = `
+CREATE TABLE access_gateway (
+ id INTEGER PRIMARY KEY CHECK (id = 1),
+ secret_digest TEXT, secret_created_at INTEGER, certificate TEXT
+);
+`;

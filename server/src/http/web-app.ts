@@ -17,7 +17,7 @@ import { fileResponse } from '#src/http/file-response';
 import { RecordsService } from '#src/services/records.service';
 import { ZwiftUpdatesService } from '#src/services/zwift-updates.service';
 import { AccessGroupsService } from '#src/services/access-groups.service';
-import { accessEmail, accessGroupInput } from '#src/dtos/access.dto';
+import { accessEmail, accessGroupInput, gatewayCertificateInput } from '#src/dtos/access.dto';
 import { webConnectionRoutes } from '#src/http/web-connections';
 import { webProfileRoutes } from '#src/http/web-profile';
 import { Hono } from 'hono';
@@ -124,6 +124,26 @@ export function createWebApp(runtime: HttpRuntime) {
     }
   });
   app.get('/health', (c) => c.json({ name: 'zluggish', version: packageVersion(), status: 'ok' }));
+
+  // A launcher's Cloudflare Access sign-in. Access has checked the person before the request gets here; the
+  // token it adds says who, and the launcher gets a one-time ticket for that email back on secure.zwift.com.
+  app.get('/launcher/link', async (c) => {
+    const access = runtime.effects.runSync(AccessGroupsService);
+
+    if (!access.signInConfigured()) {
+      return c.notFound();
+    }
+    const state = c.req.query('state') ?? '';
+    const email = access.isState(state) ? await access.accessEmail(c.req.header('Cf-Access-Jwt-Assertion')) : null;
+
+    if (!email) {
+      runtime.world.lifecycle.log.warn('auth.access_link_refused', 'Launcher sign-in without a valid Access token', {});
+
+      return c.text(t('access_link_refused'), 403);
+    }
+
+    return c.redirect(access.ticketUrl(email, state), 302);
+  });
 
   app.use('/api/*', async (c: Context<WebEnv>, next: Next) => {
     // This listener accepts only its own opaque session store. Bearer tokens are never used.
@@ -563,7 +583,8 @@ export function createWebApp(runtime: HttpRuntime) {
       const platform = Schema.decodeUnknownSync(setupPlatform)(c.req.param('platform'));
       const address = Schema.decodeUnknownSync(setupAddress)(c.req.query('address') ?? '');
       const { pem, certificate } = yield* installable(c);
-      const script = { pem, certificate, address, version: packageVersion(), now: new Date() };
+      const gatewayPem = (yield* AccessGroupsService).gatewayCertificate();
+      const script = { pem, gatewayPem, certificate, address, version: packageVersion(), now: new Date() };
 
       if (platform === 'windows') {
         return c.body(windowsSetupScript(script), 200, {
@@ -1125,6 +1146,36 @@ export function createWebApp(runtime: HttpRuntime) {
   appRoutes.get('/api/manage/access', (c) =>
     Effect.gen(function* () {
       return c.json(yield* (yield* AccessGroupsService).overview());
+    }),
+  );
+  // The secret is in this response only. Afterwards it can be made again or removed, never read.
+  appRoutes.post('/api/manage/access/gateway-secret', (c) =>
+    Effect.gen(function* () {
+      const admin = yield* sessions.require(c.get('sessionId'), true);
+
+      return c.json(yield* (yield* AccessGroupsService).generateGatewaySecret(admin.player_id), 201);
+    }),
+  );
+  appRoutes.delete('/api/manage/access/gateway-secret', (c) =>
+    Effect.gen(function* () {
+      const admin = yield* sessions.require(c.get('sessionId'), true);
+
+      return c.json(yield* (yield* AccessGroupsService).removeGatewaySecret(admin.player_id));
+    }),
+  );
+  // Gateway's inspection root, PEM or DER, sent as base64 so either file fits in a JSON body.
+  appRoutes.put('/api/manage/access/gateway-certificate', (c) =>
+    Effect.gen(function* () {
+      const { certificate } = Schema.decodeUnknownSync(gatewayCertificateInput)(
+        yield* Effect.promise(() => c.req.json()),
+      );
+
+      return c.json(yield* (yield* AccessGroupsService).setGatewayCertificate(Buffer.from(certificate, 'base64')));
+    }),
+  );
+  appRoutes.delete('/api/manage/access/gateway-certificate', (c) =>
+    Effect.gen(function* () {
+      return c.json(yield* (yield* AccessGroupsService).setGatewayCertificate(null));
     }),
   );
   appRoutes.post('/api/manage/access/groups', (c) =>

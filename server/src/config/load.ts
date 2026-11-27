@@ -58,28 +58,6 @@ export function selectConfigPath(path?: string, env = process.env): string {
   return selected;
 }
 
-/** Shortest secret accepted for the Cloudflare Gateway header: `openssl rand -base64 32` gives 44. */
-export const GATEWAY_SECRET_MIN_LENGTH = 32;
-
-/** The Cloudflare Gateway secret from its file, without surrounding whitespace. Read at startup. */
-export function readGatewaySecret(path: string): string {
-  let secret: string;
-
-  try {
-    secret = readFileSync(path, 'utf8').trim();
-  } catch {
-    throw new ConfigError(
-      t('config_load_referenced_file_unreadable', { value1: 'network.api.cloudflareGateway.secretFile' }),
-    );
-  }
-
-  if (secret.length < GATEWAY_SECRET_MIN_LENGTH) {
-    throw new ConfigError(t('config_cloudflare_gateway_secret_short', { value1: GATEWAY_SECRET_MIN_LENGTH }));
-  }
-
-  return secret;
-}
-
 export interface LoadedConfig {
   path: string;
   config: ResolvedConfig;
@@ -242,15 +220,6 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
         credentialsFile: relative(config.integrations.matrix.credentialsFile),
       },
     },
-    network: {
-      ...config.network,
-      api: {
-        ...config.network.api,
-        cloudflareGateway: config.network.api.cloudflareGateway && {
-          secretFile: relative(config.network.api.cloudflareGateway.secretFile),
-        },
-      },
-    },
     tls: {
       ...config.tls,
       certFile: relative(config.tls.certFile),
@@ -273,7 +242,6 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
     ['integrations.matrix.credentialsFile', resolved.integrations.matrix.credentialsFile],
     ['tls.certFile', resolved.tls.certFile],
     ['tls.keyFile', resolved.tls.keyFile],
-    ['network.api.cloudflareGateway.secretFile', resolved.network.api.cloudflareGateway?.secretFile ?? ''],
   ]) {
     if (!resource) {
       continue;
@@ -291,10 +259,6 @@ export async function loadConfig(options: LoadOptions = {}): Promise<LoadedConfi
 
       throw new ConfigError(t('config_load_referenced_file_unreadable', { value1: field }));
     }
-  }
-
-  if (resolved.network.api.cloudflareGateway) {
-    readGatewaySecret(resolved.network.api.cloudflareGateway.secretFile);
   }
 
   if (existsSync(resolved.storageDir) && !statSync(resolved.storageDir).isDirectory()) {

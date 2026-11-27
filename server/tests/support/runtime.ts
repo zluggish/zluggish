@@ -14,7 +14,15 @@ import { Schema } from 'effect';
 
 type ApiInput = NonNullable<NonNullable<ConfigInput['network']>['api']>;
 
-export function runtimeFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true, api: ApiInput = {}) {
+type WebInput = NonNullable<NonNullable<ConfigInput['network']>['web']>;
+
+export function runtimeFixture(
+  t: TestContext,
+  publicUrl: string | null = null,
+  webEnabled = true,
+  api: ApiInput = {},
+  web: WebInput = {},
+) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-accounts-'));
   const storage = resolve(root, 'storage');
   const accounts = AccountsService.open(storage);
@@ -22,7 +30,10 @@ export function runtimeFixture(t: TestContext, publicUrl: string | null = null, 
   const profiles = accounts.repositories.profileRepository;
   const settings = accounts.repositories.settingsRepository;
   const world = new World();
-  const config = validateConfig({ storageDir: storage, network: { web: { publicUrl, enabled: webEnabled }, api } });
+  const config = validateConfig({
+    storageDir: storage,
+    network: { web: { ...web, publicUrl, enabled: webEnabled }, api },
+  });
   const assets = resolve(packageRoot(), '../assets');
 
   const tokens = Schema.decodeUnknownSync(

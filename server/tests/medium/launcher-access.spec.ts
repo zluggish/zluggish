@@ -1,5 +1,5 @@
 import { AccessGroupsService } from '#src/services/access-groups.service';
-import { GATEWAY_SECRET, gatewaySecretFile } from '#tests/support/gateway';
+import { GATEWAY_SECRET, storeGatewaySecret } from '#tests/support/gateway';
 import { mediumFixture } from '#tests/medium/support';
 import { inputValue } from '#tests/support/html';
 import { t as translate } from '#src/i18n/index';
@@ -11,12 +11,11 @@ import { test } from 'node:test';
 const ANNA = 'anna@example.com';
 
 async function fixture(t: TestContext, gateway = true) {
-  const f = await mediumFixture(
-    t,
-    null,
-    true,
-    gateway ? { cloudflareGateway: { secretFile: gatewaySecretFile(t) } } : {},
-  );
+  const f = await mediumFixture(t);
+
+  if (gateway) {
+    storeGatewaySecret(f);
+  }
   const lines: Array<string> = [];
   f.accounts.repositories.loggingRepository.configure({
     level: 'VERBOSE',
@@ -218,4 +217,21 @@ await test('the gateway headers never reach the logs', async (t) => {
   assert.doesNotMatch(logged, new RegExp(GATEWAY_SECRET));
   assert.doesNotMatch(logged, /wrong-secret/);
   assert.doesNotMatch(logged, /anna@example\.com|mallory@example\.com|lisa@example\.com/);
+});
+
+await test('removing the secret turns the Gateway check off, and a new secret replaces the old one', async (t) => {
+  const f = await fixture(t);
+  f.effects.runSync(f.service.removeGatewaySecret(f.rider.player_id));
+
+  const off = await text(f.launcher(null, null).request('/login/'));
+  assert.equal(riderIds(off).length, 2);
+
+  const { secret } = f.effects.runSync(f.service.generateGatewaySecret(f.rider.player_id));
+  assert.match(secret, /^[\da-f]{64}$/);
+  assert.deepEqual(riderIds(await text(f.launcher(secret).request('/login/'))), [f.rider.player_id]);
+  // The old secret stops working, and only the digest is stored.
+  assert.deepEqual(riderIds(await text(f.launcher(GATEWAY_SECRET).request('/login/'))), []);
+  const stored = f.accounts.db.prepare('SELECT secret_digest FROM access_gateway').get()?.secret_digest;
+  assert.notEqual(stored, secret);
+  assert.doesNotMatch([...f.lines, ...f.world.lifecycle.log.recentEntries()].join('\n'), new RegExp(secret));
 });

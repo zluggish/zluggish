@@ -78,6 +78,10 @@ export function validateConfig(value: ConfigInput): ResolvedConfig {
     throw new ConfigError(t('config_tls_key_pair_required'));
   }
 
+  if (config.network.web.cloudflareAccess && !config.network.web.publicUrl?.startsWith('https:')) {
+    throw new ConfigError(t('config_cloudflare_access_public_url_required'));
+  }
+
   return freezeDeep(config);
 }
 

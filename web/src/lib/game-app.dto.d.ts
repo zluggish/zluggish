@@ -50,6 +50,8 @@ export interface GamePageModel {
   back?: { href: string; label: string };
   /** A message page's one action: load the page again, such as after signing in to Cloudflare. */
   retry?: { href: string; label: string };
+  /** On a message page: leave for the Cloudflare Access sign-in, the main action when present. */
+  signIn?: { href: string; label: string };
   /** On the rider picker: the email Cloudflare says is signed in. Null when Cloudflare is not used. */
   accessEmail?: string | null;
   message?: string;

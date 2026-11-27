@@ -7,14 +7,20 @@ import {
   createCipheriv,
   createDecipheriv,
   createPrivateKey,
+  createPublicKey,
   generateKeyPair,
   randomBytes,
   randomInt,
   randomUUID,
   sign,
   timingSafeEqual,
+  verify,
   X509Certificate,
 } from 'node:crypto';
+import type { KeyObject } from 'node:crypto';
+
+/** A public key that verifies signatures, such as a Cloudflare Access signing key. */
+export type PublicKey = KeyObject;
 import { promisify } from 'node:util';
 import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
 
@@ -89,6 +95,22 @@ export class CryptoRepository {
     } catch {
       return false;
     }
+  }
+
+  /** An RSA public key from a JSON Web Key, as Cloudflare Access publishes its signing keys. */
+  rsaPublicKey(jwk: { kty: string; n: string; e: string }): KeyObject {
+    const key = createPublicKey({ key: jwk, format: 'jwk' });
+
+    if (key.asymmetricKeyType !== 'rsa') {
+      throw new Error(t('crypto_rsa_key_required'));
+    }
+
+    return key;
+  }
+
+  /** Whether `signature` is an RS256 (RSA PKCS #1 v1.5 with SHA-256) signature of `data` by `key`. */
+  verifyRs256(data: string, signature: Uint8Array, key: KeyObject) {
+    return verify('sha256', Buffer.from(data, 'utf8'), key, signature);
   }
 
   signIdentity(identity: string, secret: Uint8Array) {
@@ -246,6 +268,17 @@ export class CryptoRepository {
   /** A DER-encoded ECDSA signature over SHA-256, as ecdsa-with-SHA256 certificates carry. */
   signEcdsaSha256(data: Uint8Array, privateKeyPem: string) {
     return sign('sha256', data, createPrivateKey(privateKeyPem));
+  }
+
+  /** A CA certificate (PEM or DER) as PEM, or null when the bytes are not a CA certificate. */
+  caCertificatePem(bytes: Uint8Array): string | null {
+    try {
+      const certificate = new X509Certificate(bytes);
+
+      return certificate.ca ? certificate.toString().trim() + '\n' : null;
+    } catch {
+      return null;
+    }
   }
 
   certificateFacts(pem: string): CertificateFacts {
