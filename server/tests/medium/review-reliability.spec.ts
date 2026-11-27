@@ -208,7 +208,7 @@ await test('configured logging level controls request logging and application di
   const verboseApp = createGameApp({ gameInfo: '{}', gameInfoHash: '0', variants: '{}' }, f);
   await verboseApp.request('/health?token=never-log-this');
   assert.equal(info.mock.callCount(), 1);
-  assert.match(String(info.mock.calls[0]?.arguments[0]), /VERBOSE http.completed/);
+  assert.match(String(info.mock.calls[0]?.arguments[0]), /VERBOSE GET \/health → 200 \(\d+ ms\)$/);
   assert.doesNotMatch(String(info.mock.calls[0]?.arguments[0]), /never-log-this/);
 });
 

@@ -91,7 +91,7 @@ await test('unexpected failures are logged while responses omit error details', 
   assert.equal(await response.text(), 'Request failed');
   assert.equal(logged.mock.callCount(), 1);
   const line = String(logged.mock.calls[0]?.arguments[0]);
-  assert.match(line, /ERROR http.failed Request failed unexpectedly/);
-  assert.match(line, /requestId/);
+  assert.match(line, /ERROR Request failed unexpectedly\n/);
+  assert.ok(f.world.lifecycle.log.recentEntries().some((entry) => /http\.failed .*requestId/.test(entry)));
   assert.doesNotMatch(line, /Bearer|access_token|profile.bin/);
 });
