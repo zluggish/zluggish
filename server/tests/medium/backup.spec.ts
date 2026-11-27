@@ -16,7 +16,7 @@ import { StorageFile } from '#src/migrations/storage';
 import { AccountsService } from '#src/services/auth.service';
 import { JobsService } from '#src/services/jobs.service';
 import { UploadsService } from '#src/services/uploads.service';
-import { binary, mediumFixture, mediumWeb } from '#tests/medium/support';
+import { activityFolderOf, binary, mediumFixture, mediumWeb } from '#tests/medium/support';
 import { create } from '@bufbuild/protobuf';
 import { responseStatus } from '#tests/support/html';
 import assert from 'node:assert/strict';
@@ -346,4 +346,63 @@ await test('stopping during a backup joins the worker and leaves the job queued'
 
   assert.equal(f.effects.runSync(service.status(operation))?.state, 'queued');
   assert.deepEqual(readdirSync(backupDirectory(f.config.storageDir)), []);
+});
+
+await test('the files of an activity deleted during a backup stay until the backup is done', async (t) => {
+  const f = await mediumFixture(t);
+  const service = f.effects.runSync(BackupService);
+  const jobs = f.effects.runSync(JobsService);
+  const repository = f.accounts.repositories.jobsRepository;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const run = BackupSnapshotWorker.prototype.run;
+
+  t.mock.method(
+    BackupSnapshotWorker.prototype,
+    'run',
+    async function (this: BackupSnapshotWorker, ...args: Parameters<typeof run>) {
+      entered.resolve();
+      await release.promise;
+
+      return run.apply(this, args);
+    },
+  );
+
+  const posted = await f.request(`/api/profiles/${f.rider.player_id}/activities`, {
+    method: 'POST',
+    ...binary(ActivitySchema, {
+      playerId: BigInt(f.rider.player_id),
+      courseId: 6n,
+      name: 'Deleted during backup',
+      startDate: new Date().toISOString(),
+      distanceInMeters: 100,
+    }),
+  });
+  const { id } = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.Finite }))(await posted.json());
+  const folder = activityFolderOf(f, id);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(resolve(folder, 'photo.jpg'), 'photo');
+
+  const operation = crypto.randomUUID();
+  f.effects.runSync(service.request(operation));
+  await f.effects.runPromise(jobs.start(10));
+  // A failed assertion must not leave the snapshot waiting.
+  t.after(() => release.resolve());
+  await entered.promise;
+
+  f.effects.runSync(ActivitiesService.use((activities) => activities.deleteActivity(BigInt(id), f.rider.player_id)));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 100);
+  });
+  assert.ok(existsSync(folder), 'the cleanup waits for the backup');
+  assert.deepEqual(
+    repository.list(JobType.ArtifactCleanup).map((job) => job.state),
+    ['queued'],
+  );
+
+  release.resolve();
+  await f.effects.runPromise(jobs.drain());
+  assert.equal(f.effects.runSync(service.status(operation))?.state, 'done');
+  assert.equal(existsSync(folder), false);
+  await f.effects.runPromise(jobs.close());
 });

@@ -32,6 +32,9 @@ const make = Effect.gen(function* () {
     concurrency: 1,
     attempts: 3,
     timeoutMs: 60 * 60 * 1000,
+    // The snapshot copies the database before the files. A job that removes the files of
+    // a deleted activity or medium in between would leave the backup with rows and no files.
+    excludes: [JobType.ArtifactCleanup, JobType.Retention],
     run: (job) =>
       Effect.tryPromise({
         try: async () => {
