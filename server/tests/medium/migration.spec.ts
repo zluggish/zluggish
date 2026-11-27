@@ -31,18 +31,25 @@ function fixture(t: TestContext) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-migrate-'));
   const storage = resolve(root, 'storage');
   const stores: Array<SettingsStore> = [];
+  const cleanups: Array<() => void> = [];
   mkdirSync(storage);
   t.after(() => {
     for (const store of stores) {
       store.close();
     }
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
+    rmSync(root, { recursive: true, force: true });
   });
 
   return {
     root,
     storage,
     output: resolve(root, 'external/zluggish.config.ts'),
+    onCleanup(cleanup: () => void) {
+      cleanups.push(cleanup);
+    },
     openSettings(readOnly = false) {
       const store = SettingsStore.legacy(storage, readOnly);
       stores.push(store);
@@ -396,7 +403,7 @@ await test('version 12 adds launcher access groups to an existing database witho
   created.close();
 
   const db = openDatabase(f.storage);
-  t.after(() => db.close());
+  f.onCleanup(() => db.close());
   assert.equal(SCHEMA_VERSION, 12);
   assert.equal(db.prepare('SELECT version FROM version').get()?.version, 12);
   assert.equal(db.prepare('SELECT username FROM user WHERE player_id=7').get()?.username, 'anna@example.com');
