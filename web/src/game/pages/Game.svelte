@@ -18,35 +18,36 @@
   }
 
   $effect(() => {
-    // The launcher's public loading screen has no rider session to monitor.
-    if (!current.csrf) {
+    const csrf = current.csrf;
+    if (!csrf || locked) {
       return;
     }
 
     const channel = 'BroadcastChannel' in window ? new BroadcastChannel('zluggish-session-change') : undefined;
     let controller: AbortController | undefined;
-    let alive = true;
     channel?.addEventListener('message', expire);
 
     async function check() {
-      if (document.hidden || locked) {
+      if (document.hidden || locked || controller) {
         return;
       }
-      controller?.abort();
-      controller = new AbortController();
+      const checkRequest = new AbortController();
+      controller = checkRequest;
 
       try {
         const response = await request('/ui/status/session', {
           credentials: 'same-origin',
-          headers: { Accept: 'application/json', 'X-Game-Context': current.csrf },
-          signal: controller.signal,
+          headers: { Accept: 'application/json', 'X-Game-Context': csrf },
+          signal: checkRequest.signal,
         });
 
-        if (alive && [401, 409].includes(response.status)) {
+        if (!checkRequest.signal.aborted && [401, 409].includes(response.status)) {
           expire();
         }
       } catch {
         /* A network error is not proof that the session expired. */
+      } finally {
+        controller = undefined;
       }
     }
 
@@ -58,7 +59,6 @@
     document.addEventListener('visibilitychange', focus);
 
     return () => {
-      alive = false;
       controller?.abort();
       channel?.close();
       window.removeEventListener('focus', focus);
@@ -163,7 +163,6 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  /* Sized for the small launcher window: one compact strip above the page. */
   .security {
     max-width: none;
     margin: 0 0 0.75rem;

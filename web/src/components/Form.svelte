@@ -33,19 +33,17 @@
   let baseline = $state(untrack(() => values(model)));
   let touched = $state<Record<string, boolean>>({});
   let submitted = $state(false);
-  let pending = $state(false);
-  let message = $state('');
+  type Submission = { kind: 'idle' | 'submitting' } | { kind: 'success' | 'error'; message: string };
+  let submission = $state<Submission>({ kind: 'idle' });
+  const pending = $derived(submission.kind === 'submitting');
   let serverErrors = $state<Record<string, Array<string>>>({});
-  let failed = $state(false);
   let form: HTMLFormElement;
   let controller: AbortController | undefined;
   let alive = true;
-  const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(baseline));
+  const dirty = $derived(model.fields.some((field) => draft[field.name] !== baseline[field.name]));
   const errors = $derived({ ...validation(model, draft), ...serverErrors });
 
-  const formState = $derived(
-    pending ? 'submitting' : failed ? 'error' : message ? 'success' : dirty ? 'dirty' : 'idle',
-  );
+  const formState = $derived(submission.kind === 'idle' && dirty ? 'dirty' : submission.kind);
 
   $effect(() => {
     const leave = () => {
@@ -89,14 +87,12 @@
   }
 
   function fail(text: string) {
-    failed = true;
-    message = text;
+    submission = { kind: 'error', message: text };
     onfail?.(text);
   }
 
   function clearMessage() {
-    failed = false;
-    message = '';
+    if (!pending) submission = { kind: 'idle' };
   }
 
   function focusError() {
@@ -116,7 +112,7 @@
 
     // Native navigation is required for the Zwift protocol handoff.
     if (model.navigation) {
-      pending = true;
+      submission = { kind: 'submitting' };
 
       return;
     }
@@ -139,9 +135,7 @@
     if (button?.name) {
       body.set(button.name, button.value);
     }
-    pending = true;
-    failed = false;
-    message = t('submitting');
+    submission = { kind: 'submitting' };
     controller = new AbortController();
 
     try {
@@ -208,7 +202,7 @@
       if (result.data.page) {
         onpage(result.data.page);
       }
-      message = result.message ?? t('saved');
+      submission = { kind: 'success', message: result.message ?? t('saved') };
       touched = {};
       submitted = false;
     } catch {
@@ -216,8 +210,8 @@
         fail(t('form_submit_error'));
       }
     } finally {
-      if (alive) {
-        pending = false;
+      if (alive && pending) {
+        submission = { kind: 'idle' };
       }
     }
   }
@@ -234,7 +228,7 @@
 >
   {#if model.title}<h2>{model.title}</h2>{/if}
   <input type="hidden" name="csrf_token" value={csrf} />
-  {#if failed && !onfail}<p class="error" role="alert">{message}</p>{/if}
+  {#if submission.kind === 'error' && !onfail}<p class="error" role="alert">{submission.message}</p>{/if}
   <fieldset disabled={(pending && !model.navigation) || locked}>
     {#each model.fields as field (field.name)}
       {@const id = `${model.id}-${field.name.replaceAll('.', '-')}`}
@@ -311,7 +305,7 @@
         >{#if model.user}<UserRow
             initials={model.user.initials}
             photo={model.user.photo}
-            name={pending ? 'Submitting…' : button.label}
+            name={pending ? t('submitting') : button.label}
             detail={model.user.email}
             workout={model.user.workout ?? null}
           />{:else}{pending ? t('submitting') : button.label}{/if}</button
@@ -319,7 +313,15 @@
     {/each}
     {@render actions?.()}
   </fieldset>
-  <p aria-live="polite">{failed ? '' : message || (dirty && !model.transient ? t('unsaved_changes') : '')}</p>
+  <p aria-live="polite">
+    {pending
+      ? t('submitting')
+      : submission.kind === 'success'
+        ? submission.message
+        : submission.kind === 'idle' && dirty && !model.transient
+          ? t('unsaved_changes')
+          : ''}
+  </p>
 </form>
 
 <style>

@@ -61,11 +61,13 @@ export async function requestJson(url: string, init: RequestInit = {}) {
   const response = await request(url, init);
 
   try {
-    // Callers check the shape they read; see decode() in api.ts.
     const body = jsonObject.parse(await response.json());
 
     return { response, body };
-  } catch {
+  } catch (error) {
+    if (init.signal?.aborted) {
+      throw error;
+    }
     disconnected();
     throw new ConnectionError();
   }
