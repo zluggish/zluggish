@@ -10,7 +10,7 @@ import { test } from 'node:test';
 
 for (const existing of [false, true]) {
   await test(
-    `web setup with ${existing ? 'existing' : 'new'} rider, management, and game login`,
+    `web setup with ${existing ? 'existing' : 'new'} rider, management, and launcher login over plain HTTP`,
     { timeout: 120_000 },
     async (t) => {
       const f = runtimeFixture(t);
@@ -26,8 +26,9 @@ for (const existing of [false, true]) {
       await Promise.all([web, game].flatMap((s) => (s.listening ? [] : [once(s, 'listening')])));
       const address = Schema.decodeUnknownSync(Schema.Struct({ port: Schema.Finite }))(web.address());
       const gameAddress = Schema.decodeUnknownSync(Schema.Struct({ port: Schema.Finite }))(game.address());
-      const origin = `http://127.0.0.1:${address.port}`;
-      const browser = await chromium.launch();
+      // Loopback URLs are secure contexts even over HTTP. Only the socket uses loopback here.
+      const origin = `http://zluggish.test:${address.port}`;
+      const browser = await chromium.launch({ args: ['--host-resolver-rules=MAP zluggish.test 127.0.0.1'] });
       t.after(() => browser.close());
       const page = await browser.newPage({ viewport: { width: 360, height: 800 }, reducedMotion: 'reduce' });
       page.setDefaultTimeout(20_000);
@@ -36,6 +37,7 @@ for (const existing of [false, true]) {
         errors.push(error.message);
       });
       await page.goto(origin + '/setup');
+      assert.equal(await page.evaluate(() => globalThis.isSecureContext), false);
       await page.getByLabel('Setup key').fill('wrong-key');
       await page.getByRole('button', { name: 'Check key' }).click();
       await page.getByText('This key does not match.').waitFor();
@@ -201,11 +203,31 @@ for (const existing of [false, true]) {
       f.world.lifecycle.log.info('server.test', 'Browser test refreshed entry');
       await page.getByRole('button', { name: 'Refresh logs' }).click();
       await logOutput.getByText('Browser test refreshed entry', { exact: false }).waitFor();
+      await page.getByRole('button', { name: 'Copy entries', exact: true }).click();
+      await page.getByRole('button', { name: 'Copied', exact: true }).waitFor();
+      await page.evaluate(() => {
+        globalThis.document.execCommand = () => false;
+      });
+      await page.getByRole('button', { name: /^(Copy entries|Copied)$/ }).click();
+      const manualCopy = page.getByRole('textbox', { name: 'Copy the selected text manually' });
+      await manualCopy.waitFor();
+      assert.match(await manualCopy.inputValue(), /Browser test refreshed entry/);
+      assert.equal(
+        await manualCopy.evaluate(
+          (field) =>
+            field instanceof HTMLTextAreaElement &&
+            field === globalThis.document.activeElement &&
+            field.selectionStart === 0 &&
+            field.selectionEnd === field.value.length,
+        ),
+        true,
+      );
       await page.getByRole('button', { name: 'Hide logs' }).click();
       await logOutput.waitFor({ state: 'hidden' });
 
       const gamePage = await browser.newPage();
-      await gamePage.goto(`http://127.0.0.1:${gameAddress.port}/login/`);
+      await gamePage.goto(`http://zluggish.test:${gameAddress.port}/login/`);
+      assert.equal(await gamePage.evaluate(() => globalThis.isSecureContext), false);
       await gamePage.getByRole('button', { name: /Second Rider/ }).click();
       await gamePage.getByLabel('Password', { exact: true }).fill('second-password');
       await gamePage.getByRole('button', { name: 'Sign in', exact: true }).click();

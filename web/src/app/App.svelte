@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { randomUUID } from '../lib/uuid';
   import { t } from '../lib/i18n/index';
   import { onMount } from 'svelte';
@@ -129,7 +130,6 @@
   let newCode = $state(oneTimeCode());
   /** Shown once, on the new user's page, for the administrator to hand over. */
   let handoff = $state<{ player_id: number; code: string } | null>(null);
-  let copiedCode = $state(false);
   /** The one-time password from sign-in, so the rider does not type it twice. */
   let oneTimePassword = $state('');
   let targetPassword = $state('');
@@ -847,7 +847,6 @@
     newLogin = '';
     newPassword = '';
     newConfirm = '';
-    copiedCode = false;
     handoff = oneTime ? { player_id: created.player_id, code: newCode } : null;
     newCode = oneTimeCode();
     await loadUsers();
@@ -856,14 +855,6 @@
     if (!oneTime) {
       done(t('setup_user_enabled', { value1: name(created) }));
     }
-  }
-
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the code is there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-
-  async function copyCode(code: string) {
-    await navigator.clipboard.writeText(code);
-    copiedCode = true;
   }
 
   /** Replacing the one-time password ends the session, so sign in again with the new one. */
@@ -1780,9 +1771,7 @@
                 </p>
                 <p class="muted">{t('one_time_password_shown_once')}</p>
                 <div class="actions">
-                  {#if canCopy}<button type="button" class="primary" onclick={() => copyCode(handoff!.code)}
-                      >{copiedCode ? t('copied') : t('copy')}</button
-                    >{/if}
+                  <CopyButton text={handoff.code} class="primary" />
                   <button
                     type="button"
                     onclick={() => {

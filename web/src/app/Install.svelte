@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
   import { onMount } from 'svelte';
@@ -103,16 +104,6 @@
 
     return `sh ~/Downloads/${file}`;
   });
-
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the command is there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-  let copied = $state('');
-
-  async function copy(text: string) {
-    await navigator.clipboard.writeText(text);
-    copied = text;
-    setTimeout(() => (copied = ''), 2000);
-  }
 
   function go(event: MouseEvent, to: string) {
     event.preventDefault();
@@ -262,11 +253,7 @@
 {#snippet line(text: string)}
   <div class="command">
     <code>{text}</code>
-    {#if canCopy}
-      <button type="button" class="copy" onclick={() => copy(text)} aria-live="polite"
-        >{copied === text ? t('copied') : t('copy')}</button
-      >
-    {/if}
+    <CopyButton {text} />
   </div>
 {/snippet}
 
@@ -439,7 +426,7 @@
       monospace;
     user-select: all;
   }
-  button.copy {
+  .command :global(button.copy) {
     flex: none;
     margin: 0 0 0 auto;
     padding: 0.35rem 0.8rem;
