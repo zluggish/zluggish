@@ -415,6 +415,15 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
         signedIn = user;
       }
 
+      if (signedIn?.password_change_required) {
+        runtime.world.lifecycle.log.warn('auth.login_password_change_required', t('login_password_change_required'), {
+          playerId: signedIn.player_id,
+          flow: 'browser',
+        });
+
+        return runtime.effects.runPromise(gamePage(c, unlockPage(c, signedIn, t('one_time_password_change_first'))));
+      }
+
       if (signedIn) {
         const user = signedIn;
 
@@ -628,6 +637,15 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
       if (!user || !valid) {
         runtime.world.lifecycle.diagnostic('auth.login_failed', t('login_rejected'), true);
+        throw new HTTPException(401);
+      }
+
+      // The game cannot ask for a new password, so the rider chooses one in the web app first.
+      if (user.password_change_required) {
+        runtime.world.lifecycle.log.warn('auth.login_password_change_required', t('login_password_change_required'), {
+          playerId: user.player_id,
+          flow: 'credentials',
+        });
         throw new HTTPException(401);
       }
     } else {

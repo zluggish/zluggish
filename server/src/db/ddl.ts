@@ -146,3 +146,8 @@ CREATE TABLE access_seen (
 export const dropAccessGatewaySQL = `
 DROP TABLE IF EXISTS access_gateway;
 `;
+
+// Version 15: an administrator can give a new rider a one-time password to change at first sign-in.
+export const passwordChangeSQL = `
+ALTER TABLE user ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0 CHECK(password_change_required IN (0,1));
+`;

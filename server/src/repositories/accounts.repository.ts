@@ -21,6 +21,7 @@ export const riderSchema = Schema.Struct({
   role: Schema.Literals(['rider', 'administrator']),
   enabled: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  password_change_required: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
 });
 
 export type User = (typeof riderSchema)['Type'];
@@ -45,6 +46,7 @@ export class AccountsRepository {
         'role',
         'enabled',
         'revision',
+        'password_change_required',
         sql<string | null>`cast(official_player_id as text)`.as('official_player_id'),
       ]);
   }
@@ -101,6 +103,7 @@ export class AccountsRepository {
           .updateTable('user')
           .set({
             pass_hash: hash,
+            password_change_required: 0,
             auth_version: sql`auth_version + 1`,
             revision: sql`revision + 1`,
             ...(admin && { role: 'administrator' as const, enabled: 1 }),

@@ -27,6 +27,7 @@ await test('account identities require an existing rider with the current auth v
     enabled: 1,
     revision: 1,
     auth_version: 3,
+    password_change_required: 0,
     official_player_id: null,
     is_admin: 0,
   });

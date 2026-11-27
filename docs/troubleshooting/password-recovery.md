@@ -9,6 +9,7 @@ description: Change a password, or recover access when nobody can sign in.
 
 - To change your own password, select **Change password** on the **Profile** page.
 - To set the password of a different user, an administrator goes to **Manage → Users**.
+- If an administrator gave you a one-time password, sign in to the web app with it and choose your own password. Zwift accepts only the password that you choose.
 
 ## Recover access with the CLI
 

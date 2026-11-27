@@ -67,7 +67,9 @@ for (const existing of [false, true]) {
       await page.getByText('No other users yet.', { exact: true }).waitFor();
       assert.equal(await page.locator('main[data-page="manage"]').count(), 1);
       await page.getByRole('button', { name: 'Create user' }).click();
-      const create = page.locator('form').filter({ has: page.getByLabel('Confirm password', { exact: true }) });
+      const create = page.locator('form').filter({ has: page.getByLabel('First name') });
+      assert.equal(await create.getByLabel('One-time password').isChecked(), true);
+      await create.getByLabel('Set a password').check();
       await create.getByLabel('First name').fill('Second');
       await create.getByLabel('Last name').fill('Rider');
       await create.getByLabel('Login name').fill('second');

@@ -399,6 +399,7 @@ await test('version 12 adds launcher access groups to an existing database witho
   const created = openDatabase(f.storage);
   created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
     DROP TABLE access_seen; DROP TABLE access_group_rider; DROP TABLE access_group_email; DROP TABLE access_group;
+    ALTER TABLE user DROP COLUMN password_change_required;
     UPDATE version SET version=11;`);
   created.close();
 
@@ -427,12 +428,26 @@ await test('version 14 removes the Cloudflare Gateway table that version 13 made
     id INTEGER PRIMARY KEY CHECK (id = 1), secret_digest TEXT, secret_created_at INTEGER, certificate TEXT
   );
   INSERT INTO access_gateway (id, secret_digest) VALUES (1, 'digest');
+  ALTER TABLE user DROP COLUMN password_change_required;
   UPDATE version SET version=13;`);
   created.close();
 
   const db = openDatabase(f.storage);
   f.onCleanup(() => db.close());
-  assert.equal(SCHEMA_VERSION, 14);
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 14);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
   assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='access_gateway'").get()?.n, 0);
+});
+
+await test('version 15 adds the one-time password flag to riders that already exist', (t) => {
+  const f = fixture(t);
+  const created = openDatabase(f.storage);
+  created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
+    ALTER TABLE user DROP COLUMN password_change_required;
+    UPDATE version SET version=14;`);
+  created.close();
+
+  const db = openDatabase(f.storage);
+  f.onCleanup(() => db.close());
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
+  assert.equal(db.prepare('SELECT password_change_required AS v FROM user WHERE player_id=7').get()?.v, 0);
 });

@@ -99,11 +99,12 @@ const make = Effect.gen(function* () {
   }
 
   function publicUser(user: User) {
-    const { pass_hash, auth_version: _authVersion, ...safe } = user;
+    const { pass_hash, auth_version: _authVersion, password_change_required, ...safe } = user;
 
     return {
       ...safe,
       has_password: !!pass_hash,
+      password_change_required: !!password_change_required,
       connected: context.world.active(user.player_id),
       avatar: avatarVersion(user.player_id),
     };
@@ -175,6 +176,7 @@ const make = Effect.gen(function* () {
       first_name: input.first_name,
       last_name: input.last_name,
       pass_hash: hash,
+      password_change_required: input.one_time ? 1 : 0,
     });
 
     return account(id);
@@ -289,7 +291,9 @@ const make = Effect.gen(function* () {
     Effect.runSync(sessions.session(id)).confirmedUntil = Date.now() + 900_000;
   }
 
-  /** Administrators can already set any password, so they skip the current one. */
+  /** Administrators can already set any password, so they skip the current one. A one-time
+  password is replaced by one the rider chooses, so the new password must differ from it.
+  */
   async function changeOwnPassword(id: string, current: string | undefined, password: string) {
     const user = Effect.runSync(sessions.require(id));
     const identity = context.accounts.identityOf(user);
@@ -299,6 +303,14 @@ const make = Effect.gen(function* () {
         throw new ApplicationError({ status: 403, message: t('password_incorrect') });
       }
 
+      if (
+        user.password_change_required &&
+        user.pass_hash &&
+        (await repositories.cryptoRepository.verifyPassword(user.pass_hash, password))
+      ) {
+        throw new ApplicationError({ status: 400, message: t('one_time_password_reused') });
+      }
+
       return repositories.cryptoRepository.hashPassword(password);
     });
 
@@ -306,7 +318,7 @@ const make = Effect.gen(function* () {
       if (!Effect.runSync(sessions.current(id, identity))) {
         throw new ApplicationError({ status: 401, message: t('session_changed') });
       }
-      store.update(user.player_id, { pass_hash: hash });
+      store.update(user.player_id, { pass_hash: hash, password_change_required: 0 });
     });
     Effect.runSync(completion.cancel(user.player_id));
   }
@@ -400,7 +412,7 @@ const make = Effect.gen(function* () {
 
       const values =
         action === 'password' && hash
-          ? { pass_hash: hash }
+          ? { pass_hash: hash, password_change_required: 0 }
           : action === 'role' && input.role
             ? { role: input.role }
             : action === 'disable'

@@ -9,6 +9,8 @@ export const userSchema = z.object({
   enabled: z.number(),
   revision: z.number(),
   has_password: z.boolean(),
+  /** Set while the user still has the one-time password an administrator gave them. */
+  password_change_required: z.boolean(),
   connected: z.boolean(),
   avatar: z.number().nullable(),
   /** Set when disabling a rider leaves the current ride time to be saved. */

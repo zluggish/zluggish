@@ -10,6 +10,7 @@ import {
   createSchemaSQL,
   dropManagementAuditSQL,
   indexesSQL,
+  passwordChangeSQL,
   storageSchemaSQL,
   webSessionSQL,
 } from '#src/db/ddl';
@@ -41,6 +42,7 @@ const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: strin
   // 13 made a table for Cloudflare Gateway headers, which the Windows launcher cannot use; 14 removes it again.
   { version: 13, up: () => {} },
   { version: 14, up: (db) => db.exec(dropAccessGatewaySQL) },
+  { version: 15, up: (db) => db.exec(passwordChangeSQL) },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;
