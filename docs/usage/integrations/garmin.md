@@ -12,13 +12,13 @@ description: Upload Zluggish activities to Garmin Connect.
 
 Zluggish uploads FIT files to Garmin Connect. It does not need a Python helper or a separate Garmin image.
 
-Photos taken during a ride are added to the activity that Garmin Connect creates from it, but only if you turn that on: it is off by default and Garmin then receives the FIT file alone. Enable it in **Integrations → Garmin**, or set `uploads.garmin.photos.enabled` to `true`. Adding the photos fails quietly: a photo Garmin refuses does not fail the upload of the activity.
+Zluggish can also add the photos that you take during a ride to the activity that Garmin Connect creates. This is off by default, and Garmin then receives only the FIT file. Turn it on in **Integrations → Garmin**, or set `uploads.garmin.photos.enabled` to `true`. If Garmin refuses a photo, the activity still uploads and Zluggish shows no error.
 
 You can keep existing garth token files, `oauth1_token.json` and `oauth2_token.json`, in `storage/<local-player-id>/garth/`.
 
 ## Device in the FIT file
 
-This part is optional and off by default. Left alone, Garmin Connect receives the FIT file exactly as the game writes it; the normal synchronisation is unchanged.
+This setting is off by default. Garmin Connect then receives the FIT file exactly as the game writes it.
 
 Turn it on with **Record rides on a Garmin Edge** in **Integrations → Garmin**, or set `uploads.garmin.device.enabled` to `true`. Then choose an Edge model (and, if you want, its serial number). Zluggish writes that device into the FIT file it uploads, so Garmin Connect shows the ride as recorded on that Edge. Strava, Runalyze, Intervals.icu and the other services keep receiving the file of the game.
 

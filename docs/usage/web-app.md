@@ -5,7 +5,7 @@ description: Use the Zluggish web app to manage rides, accounts and the server.
 
 # Web app
 
-The Zluggish web app is the portal for managing the game, including installing the patched client apps and the companion.
+In the Zluggish web app, riders see their activities and install the patched Zwift and Companion apps. Administrators also manage users and the server there.
 
 On a local network, open the web app at `http://<server-address>:8080` using the default web app port. Setup commands, one-time passwords and server logs can be copied over HTTP. If the browser blocks automatic copying, select and copy the text from the field that appears.
 
@@ -35,4 +35,4 @@ Open **Manage** in the sidebar.
 
 ## Turn off the web app
 
-If you want, the webapp can be disabled entirely. Set `network.web.enabled` to `false` in `zluggish.config.ts` and restart the server. You can still ride Zwift via the game launcher.
+To turn off the web app, set `network.web.enabled` to `false` in `zluggish.config.ts` and restart the server. You can still sign in through the game launcher and ride.

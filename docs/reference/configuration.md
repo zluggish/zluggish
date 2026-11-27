@@ -412,7 +412,7 @@ Most features have their settings on their own page:
 | Setting                           | Page                                                                                 |
 | --------------------------------- | ------------------------------------------------------------------------------------ |
 | `tls`                             | [Server certificate](../install/certificate.md)                                      |
-| `dns.enabled`                     | [Android](../install/clients/android.md)                                             |
+| `dns.enabled`                     | [Ports](ports.md#optional-dns-with-docker)                                           |
 | `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                                           |
 | `network.web.cloudflareAccess`    | [Remote access](../install/remote-access.md#show-each-household-only-its-own-riders) |
 | `bots`                            | [Bots](../usage/features/bots.md)                                                    |

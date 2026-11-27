@@ -5,17 +5,15 @@ description: Connect Zwift for macOS to Zluggish.
 
 # macOS
 
-Zluggish supports running the game client on macOS.
-
 1. Install Zwift normally. Open it once to finish any updates and create its data folder, then quit before signing in.
 2. In the [Zluggish web app](../../usage/web-app.md), open **Apps → Zwift → macOS**. Use **Other systems** if macOS is hidden.
-3. Select **Download setup script**. Use the script from the specific Zluggish server you want to connect to, since each server has a unique certificate.
+3. Select **Download setup script**. Each server has its own certificate, so use the script from the server you want to connect to.
 4. In Terminal, run the command shown on the setup page. Enter your password when `sudo` prompts you.
 5. Open Zwift and sign in through the Zluggish launcher.
 
-The script adds the Zluggish certificate to the **System** keychain and to `~/Library/Application Support/Zwift/data/cacert.pem`. By default, the script also updates DNS lookup settings in `/etc/hosts` with the Zluggish IP address.
+The script adds the Zluggish certificate to the **System** keychain and to `~/Library/Application Support/Zwift/data/cacert.pem`. By default, the script also adds the Zwift host names to `/etc/hosts`, pointing at the Zluggish IP address.
 
-If you don't want the script to change DNS settings, turn off **Patch hosts file** under **Advanced settings** before downloading the script. You can then manually follow the instructions on the [DNS settings page](dns-settings.md).
+To keep the script away from your DNS settings, turn off **Patch hosts file** under **Advanced settings** before you download it. Then set up the redirect yourself with the [DNS settings page](dns-settings.md).
 
 ## Updating
 

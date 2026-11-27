@@ -25,6 +25,6 @@ For Zwift's hardware requirements, see [Zwift's supported devices](https://suppo
 
 ## Why iPhone and iPad are not supported
 
-Zluggish does not support Zwift or Companion on iOS or iPadOS. These are locked-down platforms: Zluggish needs to patch the apps so they connect to your server, but iPhone and iPad restrict app modification and installation through code signing and platform security controls. Zluggish has no supported way to patch and install either app on these devices.
+Zluggish does not support Zwift or Companion on iOS or iPadOS. To connect to your server, the apps must be patched. iPhone and iPad use code signing and other security controls to block modified apps, so there is no supported way to install a patched Zwift or Companion on them.
 
 Use one of the supported Zwift clients above, or [Companion on Android](clients/companion-android.md).

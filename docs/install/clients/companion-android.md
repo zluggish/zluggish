@@ -5,9 +5,9 @@ description: Publish and install Companion for Zluggish on Android and send Comp
 
 # Companion (Android)
 
-**Companion for Zluggish** is a patched Zwift companion app for Zluggish. It can be installed alongside the official Zwift companion app, and you don't need to root your device.
+**Companion for Zluggish** is a patched Zwift companion app for Zluggish. It installs next to the official Zwift companion app and does not need a rooted device.
 
-If you just set up your Zluggish server, an administrator must [publish Companion](#publish-companion) before these instructions work.
+On a new server, an administrator must first [publish Companion](#publish-companion).
 
 ## Install Companion
 
@@ -25,7 +25,7 @@ When your administrator publishes an update or [rotates the server certificate](
 
 ## Modify Android DNS settings
 
-The Android DNS settings need to be manually patched for the app to work. There are several methods documented on the [DNS settings page](dns-settings.md), but the [Virtual Hosts](dns-settings.md#virtual-hosts-android) method is usually the best place to start.
+The app reaches your server only if Android resolves the Zwift host names to it. The [DNS settings page](dns-settings.md) lists several ways to do this. [Virtual Hosts](dns-settings.md#virtual-hosts-android) is usually the easiest to start with.
 
 Point `secure.zwift.com` and `us-or-rly101.zwift.com` at your Zluggish server. Copy the entries from the setup page into Virtual Hosts. Leave `cdn.zwift.com` on public DNS for Companion images.
 

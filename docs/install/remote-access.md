@@ -13,7 +13,7 @@ To give the web app HTTPS or reach Zluggish from outside your local network, you
 - With a VPN such as WireGuard or Tailscale, remote devices reach the server over the VPN as if they were on the local network.
 - With Cloudflare Tunnel, the web app gets an HTTPS address behind Cloudflare Access, and you and your friends can run Zwift from any location. Cloudflare Access also lets each household's launcher show only its own riders.
 
-The rest of this guide sets up Cloudflare Tunnel in stages. You only need the stages for what you want to do, and only the most complete setup uses all of them:
+The rest of this guide sets up Cloudflare Tunnel in stages. Set up only the stages that you need:
 
 | Stage                                                           | What you get                                                                      | What you set up                                                       |
 | --------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------- |

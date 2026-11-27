@@ -36,7 +36,7 @@ Console lines start with a UTC timestamp and severity, followed by a short messa
 2026-11-27T18:39:16.698Z VERBOSE POST /* → 401 (17 ms)
 ```
 
-The web app’s server log viewer keeps event names and diagnostic fields, including request IDs. Error stacks and causes appear below the console message.
+The web app's server log viewer keeps event names and diagnostic fields, including request IDs. Error stacks and causes appear below the console message.
 
 `INFO` and `VERBOSE` go to stdout. Warnings and errors go to stderr. Use your process manager to keep and rotate the logs.
 
