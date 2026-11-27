@@ -12,13 +12,18 @@ import { activityFolder } from '#src/activity-storage';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-export async function mediumFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true) {
+export async function mediumFixture(
+  t: TestContext,
+  publicUrl: string | null = null,
+  webEnabled = true,
+  web: Parameters<typeof runtimeFixture>[3] = {},
+) {
   const network = t.mock.method(globalThis, 'fetch', () => {
     throw new Error('Unexpected external request in medium test');
   });
 
   t.after(() => assert.equal(network.mock.callCount(), 0, 'External providers must be explicitly mocked'));
-  const f = runtimeFixture(t, publicUrl, webEnabled);
+  const f = runtimeFixture(t, publicUrl, webEnabled, web);
   // Runtime lifecycle tests must not schedule real release checks against external providers.
   const empty = { apkmirror: null, apkpure: null, errors: { apkmirror: null, apkpure: null } };
   writeFileSync(
@@ -119,7 +124,7 @@ export function mediumWeb(f: ReturnType<typeof runtimeFixture>, rider: User) {
   ) => {
     const headers = new Headers({
       Cookie: `zluggish_web_session=${id}`,
-      Origin: 'http://local:8080',
+      Origin: f.config.network.web.publicUrl ?? 'http://local:8080',
       'X-CSRF-Token': csrf,
     });
 

@@ -1,6 +1,8 @@
 import { WorkoutPublication } from '#src/repositories/workout-publication.repository';
 import { openDatabase } from '#src/db/open';
+import { AccessGroupsRepository } from '#src/repositories/access-group.repository';
 import { AccountsRepository } from '#src/repositories/accounts.repository';
+import { CloudflareAccessRepository } from '#src/repositories/cloudflare-access.repository';
 import { BookmarksRepository } from '#src/repositories/bookmark.repository';
 import { DurabilityRepository } from '#src/repositories/durability.repository';
 import { JobsRepository } from '#src/repositories/jobs.repository';
@@ -39,6 +41,8 @@ import { resolve } from 'node:path';
 export class Repositories {
   readonly loggingRepository = new LoggingRepository();
 
+  readonly cloudflareAccessRepository = new CloudflareAccessRepository();
+
   readonly db;
 
   readonly workoutPublication: WorkoutPublication;
@@ -46,6 +50,8 @@ export class Repositories {
   private settings: SettingsStore | undefined;
 
   readonly accountsRepository: AccountsRepository;
+
+  readonly accessGroupsRepository: AccessGroupsRepository;
 
   readonly activitiesRepository: ActivitiesRepository;
 
@@ -112,6 +118,7 @@ export class Repositories {
   constructor(readonly storage: string) {
     this.db = openDatabase(storage);
     this.accountsRepository = new AccountsRepository(this.db);
+    this.accessGroupsRepository = new AccessGroupsRepository(this.db);
     this.riderDocuments = new RiderDocuments(this.db, storage);
     this.bookmarksRepository = new BookmarksRepository(this.db);
     this.jobsRepository = new JobsRepository(this.db);

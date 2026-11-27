@@ -120,7 +120,34 @@ CREATE TABLE web_session (
 );
 `;
 
-// Version 12: an administrator can give a new rider a one-time password to change at first sign-in.
+// Version 12: groups that decide which riders each Cloudflare email sees in the launcher.
+export const accessGroupSQL = `
+CREATE TABLE access_group (
+ id INTEGER PRIMARY KEY, name TEXT NOT NULL
+);
+CREATE TABLE access_group_email (
+ group_id INTEGER NOT NULL REFERENCES access_group(id) ON DELETE CASCADE,
+ email TEXT NOT NULL COLLATE NOCASE,
+ PRIMARY KEY (group_id, email)
+);
+CREATE TABLE access_group_rider (
+ group_id INTEGER NOT NULL REFERENCES access_group(id) ON DELETE CASCADE,
+ player_id INTEGER NOT NULL REFERENCES user(player_id) ON DELETE CASCADE,
+ PRIMARY KEY (group_id, player_id)
+);
+CREATE INDEX access_group_email_email ON access_group_email(email);
+CREATE INDEX access_group_rider_player ON access_group_rider(player_id);
+CREATE TABLE access_seen (
+ email TEXT PRIMARY KEY COLLATE NOCASE, last_seen INTEGER NOT NULL
+);
+`;
+
+/** Version 13 made this table for Cloudflare Gateway headers, which the Windows launcher cannot use. */
+export const dropAccessGatewaySQL = `
+DROP TABLE IF EXISTS access_gateway;
+`;
+
+// Version 15: an administrator can give a new rider a one-time password to change at first sign-in.
 export const passwordChangeSQL = `
 ALTER TABLE user ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0 CHECK(password_change_required IN (0,1));
 `;

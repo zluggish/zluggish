@@ -121,6 +121,15 @@
       </Form>
     </div>
   {/each}
+  {#if current.signIn || current.retry}<div class="actions">
+      {#if current.signIn}<a class="retry" href={current.signIn.href}>{current.signIn.label}</a>{/if}
+      {#if current.retry}<a class={['retry', current.signIn && 'secondary']} href={current.retry.href}
+          >{current.retry.label}</a
+        >{/if}
+    </div>{/if}
+  {#if current.kind === 'login' && current.accessEmail}<p class="signed-in">
+      {t('access_signed_in_as', { value1: current.accessEmail })}
+    </p>{/if}
 </Layout>
 
 <style>
@@ -154,6 +163,51 @@
   .web-app:focus-visible {
     outline: 2px solid var(--orange);
     outline-offset: 2px;
+  }
+  /* A message page's actions: links with the primary button's look. With two, the second is quieter. */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .retry {
+    display: inline-block;
+    padding: 0.65rem 1.4rem;
+    border: 1.5px solid transparent;
+    border-radius: 10px;
+    background: var(--orange);
+    box-shadow: 0 3px 0 var(--orange-deep);
+    color: var(--text);
+    font-weight: 800;
+    text-decoration: none;
+  }
+  .retry:hover {
+    background: #f06a1e;
+  }
+  .retry:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 var(--orange-deep);
+  }
+  .retry.secondary {
+    border-color: rgb(255 255 255 / 0.35);
+    background: transparent;
+    box-shadow: none;
+  }
+  .retry.secondary:hover {
+    border-color: var(--orange);
+    background: rgb(255 255 255 / 0.08);
+  }
+  .retry.secondary:active {
+    box-shadow: none;
+  }
+  /* Who Cloudflare says is signed in: a quiet line under the riders, across the whole list. */
+  .signed-in {
+    grid-column: 1 / -1;
+    max-width: none;
+    margin: 0.4rem 0 0;
+    color: var(--muted);
+    font-size: 0.8125rem;
   }
   .visually-hidden {
     position: absolute;
