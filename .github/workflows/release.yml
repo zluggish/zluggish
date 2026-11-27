@@ -69,7 +69,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 0.0.1 is tagged 0.0.1 and 0.0. Prereleases get only their full version. latest stays on main.
+      # 0.0.1 is tagged 0.0.1, 0.0 and latest. Prereleases get only their full version.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -80,6 +80,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ needs.verify.outputs.prerelease == 'false' }}
 
       - name: Build and push
         uses: docker/build-push-action@v7
