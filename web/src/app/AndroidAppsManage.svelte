@@ -267,7 +267,7 @@
     fill: var(--orange);
   }
 
-  /* The answer to "can riders get it?" sits in the corner, readable at a glance and by shape as well as colour. */
+  /* Whether riders can get the app shows in the corner, by shape as well as colour. */
   .status {
     grid-area: status;
     align-self: start;
@@ -322,7 +322,7 @@
     stroke: var(--orange);
   }
 
-  /* A new version is news, not a fault: it reads in orange under the version, never in the status colours. */
+  /* A new version shows in orange under the version number. The status colours are for faults. */
   .update {
     grid-area: update;
     justify-self: start;

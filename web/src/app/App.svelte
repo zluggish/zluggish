@@ -1324,7 +1324,7 @@
                 {#each setupUsers as r (r.player_id)}
                   <option value={r.player_id} disabled={!r.enabled || !r.has_password}>
                     {`${r.first_name} ${r.last_name}`.trim() || r.username} (#{r.player_id}, {r.username}){!r.enabled
-                      ? ' — Disabled'
+                      ? ` · ${t('user_disabled_status')}`
                       : !r.has_password
                         ? t('user_password_missing_suffix')
                         : ''}
@@ -2511,7 +2511,7 @@
     color: var(--alarm);
     font-size: 0.875rem;
   }
-  /* The handover slip: the one moment an administrator reads a password aloud or copies it out. */
+  /* The handover slip, where an administrator reads the password aloud or copies it. */
   .handoff {
     outline: 2px solid var(--orange);
   }
@@ -2946,7 +2946,7 @@
   .access button {
     margin: 0;
   }
-  /* Set apart from access: the account goes, not just the way in. */
+  /* Kept apart from the sign-in controls, because deleting removes the whole account. */
   .delete-user {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

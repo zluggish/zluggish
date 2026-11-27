@@ -405,7 +405,7 @@ await test('web upload list polls while uploads run, pauses while hidden and ret
   await page.clock.install();
   await webSignIn(page, f, rider);
   await page.goto(`${f.webOrigin}/integrations`);
-  await page.getByText('Activity 1: strava — pending', { exact: true }).waitFor();
+  await page.getByText('Activity 1 to strava: pending', { exact: true }).waitFor();
   const initial = status.mock.callCount();
   await page.evaluate(() => {
     // Browser callback runs in the page's DOM environment.
@@ -423,7 +423,7 @@ await test('web upload list polls while uploads run, pauses while hidden and ret
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.clock.runFor(5100);
-  await page.getByText('Activity 1: strava — failed', { exact: true }).waitFor();
+  await page.getByText('Activity 1 to strava: failed', { exact: true }).waitFor();
   const stopped = status.mock.callCount();
   await page.clock.runFor(15_000);
   assert.equal(status.mock.callCount(), stopped);

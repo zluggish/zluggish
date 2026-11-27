@@ -149,7 +149,7 @@ function segmentsOf(step: ElementNode): Array<WorkoutSegment> | null {
   };
 
   if ([t('warmup'), t('cooldown'), t('ramp')].includes(tag)) {
-    // Cooldown and Ramp may go down: PowerLow is the START, PowerHigh the END, as written.
+    // Cooldown and Ramp may go down: PowerLow is where the step starts and PowerHigh where it ends.
     const one = segment(
       num(attributes, '@_Duration'),
       num(attributes, '@_PowerLow') ?? 0,
@@ -165,7 +165,7 @@ function segmentsOf(step: ElementNode): Array<WorkoutSegment> | null {
     const high = num(attributes, '@_PowerHigh');
 
     if (constant === null && low !== null && high !== null) {
-      // A target RANGE ("ride anywhere in this band"): flat at the mean, band kept for display.
+      // A target range ("ride anywhere in this band"): flat at the mean, with the band kept for display.
       const mean = (low + high) / 2;
       const one = segment(num(attributes, '@_Duration'), mean, mean);
 

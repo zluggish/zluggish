@@ -63,7 +63,7 @@
 
 {#if status}
   {#if release.download}
-    <!-- The one thing worth reading at a glance: what riders have against what the server can fetch now. -->
+    <!-- The version riders have, next to the version the server can fetch now. -->
     <div class="release" role="group" aria-labelledby="release-{app}">
       <p class="title" id="release-{app}">{installed ? t('release_update_available') : t('release_ready')}</p>
       <div class="jump">

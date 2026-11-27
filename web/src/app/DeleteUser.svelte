@@ -331,7 +331,7 @@
   button.danger:hover:not(:disabled) {
     background: rgb(255 90 70 / 0.14);
   }
-  /* Disabled until the name matches, which is not a wait. */
+  /* Disabled until the name matches. That is not a busy state, so it gets the not-allowed cursor. */
   button.danger:disabled:not(.busy) {
     cursor: not-allowed;
   }

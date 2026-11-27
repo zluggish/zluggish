@@ -194,7 +194,7 @@ await test('choosing a rider without a password fails on the rider list', async 
   // The rider only learns that login failed; the administrator gets the recovery steps in the log.
   const chosen = await client.form('/login/', { player_id: String(rider.player_id) });
   const html = await chosen.text();
-  assert.match(html, /<title>Who’s riding\?<\/title>/);
+  assert.match(html, /<title>Who's riding\?<\/title>/);
   assert.match(html, /Login failed\./);
   assert.doesNotMatch(html, /accounts recover|name="password"/);
   assert.equal(warn.mock.calls[0]?.arguments[0], 'auth.login_no_password');
@@ -240,7 +240,7 @@ await test('the rider picker advertises the workout planned today under each rid
 
   const pickerResponse = await f.app.request('http://local:8080/login/');
   const picker = await pickerResponse.text();
-  assert.match(picker, /<title>Who’s riding\?<\/title>/);
+  assert.match(picker, /<title>Who's riding\?<\/title>/);
   const props: { forms: Array<{ user?: { workout?: { name: string; minutes: number } | null } }> } = JSON.parse(
     picker
       .match(/<script type="application\/json" id="launcher-props">([\s\S]*?)<\/script>/)?.[1]

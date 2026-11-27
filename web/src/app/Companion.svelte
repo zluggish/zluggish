@@ -243,7 +243,7 @@
     transform: translateY(2px);
     box-shadow: 0 1px 0 var(--orange-deep);
   }
-  /* An app for an old certificate still downloads, but it is not the celebrated action. */
+  /* An app built for an old certificate still downloads, with an outlined button instead of the orange one. */
   a.download.muted-action {
     border: 2px solid rgb(255 255 255 / 0.7);
     background: none;

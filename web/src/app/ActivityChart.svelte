@@ -234,7 +234,7 @@
     margin: 0 0 1.25rem;
   }
 
-  /* The one bold thing on the page: the shape of the activity, drawn in once when it opens. */
+  /* The route is the only bold element on the page. It draws in once when the activity opens. */
   .route {
     display: block;
     width: 100%;

@@ -181,7 +181,7 @@
     intervals: { username: t('athlete_id'), secret: t('api_key') },
   };
 
-  /** Connected means finished rides (or workouts) actually flow, not just that something was typed in. */
+  /** Connected means finished rides (or workouts) reach the service. Saved credentials alone do not count. */
   function status(name: Integration, all: Record<Provider, Connection>) {
     if (name === 'trainingpeaks') {
       return saved.bridgeFolder

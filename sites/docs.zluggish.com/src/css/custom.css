@@ -86,7 +86,7 @@ html[data-theme='dark'] {
   --docusaurus-highlighted-code-line-bg: rgb(255 138 76 / 0.16);
 }
 
-/* Navbar: the signature. The route line replaces a border. */
+/* Navbar: the route line replaces the bottom border. */
 .navbar {
   position: sticky;
   border-bottom: 0;
