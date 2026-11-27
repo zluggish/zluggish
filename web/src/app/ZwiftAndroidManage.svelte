@@ -326,7 +326,7 @@
   }
 
   const busy = $derived(!!upload || admin?.activity?.state === 'running');
-  /** Whether a job ran during this visit. One that finished before it has nothing new to say: the facts show its app. */
+  /** Whether a job ran during this visit. An earlier job is not shown: the app's details already cover it. */
   let watched = $state(false);
 
   $effect(() => {
@@ -612,7 +612,7 @@
     color: var(--alarm);
   }
 
-  /* The way to a new upload once an app is published: one quiet action under the facts. */
+  /* Once an app is published, a new upload is one plain button under the app's details. */
   button.replace {
     display: inline-flex;
     align-items: center;

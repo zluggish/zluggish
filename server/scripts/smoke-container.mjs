@@ -21,8 +21,8 @@ assert.equal(typecheck.status, 0, typecheck.stdout + typecheck.stderr);
 const storageConfig = '/usr/src/app/zluggish/storage/zluggish.config.ts';
 assert.equal(existsSync(storageConfig), false);
 
-// ARM64 runs under QEMU in CI. Wait for actual listener readiness, rather than
-// assuming module loading and configuration evaluation finish within ten seconds.
+// ARM64 runs under QEMU in CI, so module loading and configuration evaluation can take
+// more than ten seconds. Wait until the listener is ready.
 function waitForReady(server) {
   return new Promise((resolve, reject) => {
     let output = '';

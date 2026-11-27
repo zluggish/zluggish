@@ -300,7 +300,7 @@
   .lead {
     margin: 0 0 1.25rem;
   }
-  /* The detected system is one confident action; the full list waits behind a quiet toggle. */
+  /* The detected system gets the one button; the full list is behind a toggle. */
   a.setup {
     align-self: flex-start;
     padding: 0.75rem 1.6rem;
@@ -461,7 +461,7 @@
   a.row.here {
     box-shadow: inset 3px 0 0 var(--orange);
   }
-  /* Not supported, but still a door: it opens the reason. Quiet, never orange. */
+  /* An unsupported system still opens, to explain why. It is muted and never orange. */
   a.row.unavailable .name {
     color: var(--muted);
   }

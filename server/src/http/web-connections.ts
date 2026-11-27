@@ -100,7 +100,7 @@ export function webConnectionRoutes(app: Hono<WebEnv>, runtime: HttpRuntime) {
     }),
   );
 
-  // Garmin device routes – registered before the generic :provider routes so garmin/device is not captured.
+  // The Garmin device routes come before the generic :provider routes, so :provider does not capture garmin/device.
   appRoutes.get('/api/me/connections/garmin/device', (c) =>
     Effect.gen(function* () {
       const webSessionsService = yield* WebSessionsService;

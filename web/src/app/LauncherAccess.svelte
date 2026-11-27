@@ -557,7 +557,7 @@
     max-width: 30rem;
     margin: 0 0 2rem;
   }
-  /* The one thing on this page that needs doing: riders nobody can pick in any launcher. */
+  /* Riders no launcher can pick get an orange edge: they are the only list here that needs action. */
   .unreachable {
     margin: 0 0 1.5rem;
     padding: 1rem 1.25rem;
