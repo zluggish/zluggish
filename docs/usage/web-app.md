@@ -26,6 +26,7 @@ Open **Manage** in the sidebar.
 
 - **Users** lets you create, disable or delete accounts, set passwords, change roles and end sessions.
 - **Users → Create user** gives a new user a one-time password by default. Give the user this password. The password shows only once, on the new user's page. At first sign-in to the web app, the user chooses their own password. Until then, the user cannot ride Zwift. To choose the password yourself, select **Set a password**.
+- On a user's page, **Reset to one-time password** replaces the user's password with a new one-time password from the server and signs the user out everywhere. The password shows only once. If it is lost, reset it again.
 - **Android apps** lets you publish [Zwift](../install/clients/android.md#publish-zwift-for-android) and [Companion](../install/clients/companion-android.md#publish-companion) builds for your server.
 - **Server** lets you rotate the [certificate](../install/certificate.md), [start a backup](../maintenance/backup-and-restore.md), read logs and manage bots, events and world settings.
 

@@ -152,6 +152,14 @@ const make = Effect.gen(function* () {
     }
   }
 
+  /** Readable at a glance and over the phone: no 0, 1, I or O. 75 random bits in three groups of five. */
+  function oneTimePassword() {
+    const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const letters = [...repositories.cryptoRepository.randomBytes(15)].map((byte) => alphabet[byte & 31]).join('');
+
+    return (letters.match(/.{5}/g) ?? []).join('-');
+  }
+
   function insert(input: (typeof newUser)['Type'], hash: string) {
     if (context.accounts.loginNameTaken(input.username)) {
       throw new ApplicationError({ status: 409, message: t('login_name_already_exists') });
@@ -176,7 +184,7 @@ const make = Effect.gen(function* () {
       first_name: input.first_name,
       last_name: input.last_name,
       pass_hash: hash,
-      password_change_required: input.one_time ? 1 : 0,
+      password_change_required: 'one_time' in input ? 1 : 0,
     });
 
     return account(id);
@@ -332,7 +340,9 @@ const make = Effect.gen(function* () {
   async function create(id: string, raw: unknown, operation: string) {
     const input = Schema.decodeUnknownSync(newUser)(raw);
     Effect.runSync(sessions.require(id, true));
-    const hash = await passwordTask(() => repositories.cryptoRepository.hashPassword(input.password));
+    const password = 'one_time' in input ? oneTimePassword() : input.password;
+    const code = 'one_time' in input ? password : null;
+    const hash = await passwordTask(() => repositories.cryptoRepository.hashPassword(password));
 
     return store.transaction(() => {
       const actor = Effect.runSync(sessions.require(id, true));
@@ -349,9 +359,10 @@ const make = Effect.gen(function* () {
 
       const user = insert(input, hash);
       const result = publicUser(user);
+      // The one-time password is in this response only. A retried request gets the user without it.
       store.record(actor.player_id, operation, 'create', user.player_id, fingerprint, result);
 
-      return result;
+      return code ? { ...result, one_time_password: code } : result;
     });
   }
 
@@ -359,7 +370,8 @@ const make = Effect.gen(function* () {
     const input = Schema.decodeUnknownSync(mutationRequest)(raw);
     Effect.runSync(sessions.require(id, true));
 
-    const password = action === 'password' ? input.password : undefined;
+    const code = action === 'one-time-password' ? oneTimePassword() : null;
+    const password = action === 'password' ? input.password : (code ?? undefined);
     const hash = password ? await passwordTask(() => repositories.cryptoRepository.hashPassword(password)) : undefined;
 
     let permission: Effect.Success<ReturnType<RideCompletionService['Service']['capture']>> = null;
@@ -368,7 +380,7 @@ const make = Effect.gen(function* () {
     const result = store.transaction(() => {
       const actor = Effect.runSync(sessions.require(id, true));
 
-      if (actor.player_id === targetId && action === 'password') {
+      if (actor.player_id === targetId && (action === 'password' || action === 'one-time-password')) {
         throw new ApplicationError({
           status: 403,
           message: t('management_own_password_reset_blocked'),
@@ -413,15 +425,17 @@ const make = Effect.gen(function* () {
       const values =
         action === 'password' && hash
           ? { pass_hash: hash, password_change_required: 0 }
-          : action === 'role' && input.role
-            ? { role: input.role }
-            : action === 'disable'
-              ? { enabled: 0 }
-              : action === 'enable'
-                ? { enabled: 1 }
-                : action === 'revoke-sessions'
-                  ? {}
-                  : null;
+          : action === 'one-time-password' && hash
+            ? { pass_hash: hash, password_change_required: 1 }
+            : action === 'role' && input.role
+              ? { role: input.role }
+              : action === 'disable'
+                ? { enabled: 0 }
+                : action === 'enable'
+                  ? { enabled: 1 }
+                  : action === 'revoke-sessions'
+                    ? {}
+                    : null;
 
       if (!values) {
         throw new ApplicationError({ status: 400, message: t('invalid_action') });
@@ -447,7 +461,8 @@ const make = Effect.gen(function* () {
       }
     }
 
-    return result;
+    // Like a new user's, a reset one-time password is in this response only, never in the recorded result.
+    return committed && code ? { ...result, one_time_password: code } : result;
   }
 
   function edit(id: string, player: number, raw: unknown) {
