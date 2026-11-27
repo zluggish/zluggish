@@ -5,67 +5,70 @@ description: Reach the Zluggish web app and game server remotely through Cloudfl
 
 # Remote access
 
-By default, Zluggish listens to `127.0.0.1` which means it only accepts request from the local machine. This is fine if you are running Zwift on the same machine, but you will get an insecure http connection warning when browsing to the webapp.
+Zluggish listens only on the server itself by default. To reach it remotely with Cloudflare, choose the setup you need:
 
-You can set up remote access to Zluggish in several ways, including a simple reverse proxy (only secure if restricted to your local network), Wireguard Tailscale or Cloudflare Tunnel. This guide will show how to set up Cloudflare.
+| Access                    | What to set up                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [Web app](#web-app)       | Publish an HTTPS hostname protected by Cloudflare Access. Riders open it in a browser.                      |
+| [Zwift game](#zwift-game) | Route the server's private IP through Cloudflare Tunnel. Each remote Zwift device runs Cloudflare One Client. |
 
-With this setup, you will get a TLS certificate for the webapp and you and your friends can run the Zwift app from any location.
-
-| Access                    | What to set up                                                                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [Web app](#web-app)       | Publish an HTTPS hostname with Cloudflare Access. The tunnel forwards requests to the Zluggish HTTP listener.                      |
-| [Zwift game](#zwift-game) | Route the server's private IP over the tunnel. Install the Cloudflare One Client on each Zwift device for game HTTPS, TCP and UDP. |
-
-Both need a Cloudflare account and a [tunnel with `cloudflared`](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) running where it can reach Zluggish. You can use the same tunnel for both.
+Both setups require a [Cloudflare Zero Trust organization](https://developers.cloudflare.com/cloudflare-one/setup/). In the Cloudflare dashboard, go to **Networking → Tunnels → Create a tunnel**. Follow the [tunnel setup instructions](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) to run `cloudflared` where it can reach Zluggish. You can use one tunnel for both setups.
 
 ## Web app
 
 1. Choose a hostname on a domain you manage in Cloudflare, such as `zluggish.example.com`.
-2. [Create a self-hosted Access app](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) for that hostname. Add an Allow policy for the people who need access.
-3. Add a **Published application** route to your tunnel. Use service URL `http://localhost:8080` if `cloudflared` runs on the server, or `http://<server-ip>:8080` if it runs elsewhere. Enable **Protect with Access**.
-4. In `zluggish.config.ts`, set `network.web.publicUrl` to the full HTTPS origin, such as `https://zluggish.example.com`.
-5. Restart Zluggish, then open the HTTPS address and sign in.
+2. Open **Zero Trust → Access controls → Applications**. Select **Create new application → Self-hosted and private → Add public hostname**. Enter the hostname, leave the path blank, and add an **Allow** policy for the people who need access. Save the [Access application](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/).
+3. Open **Networking → Tunnels**, select your tunnel, and go to **Routes → Add route → Published application**. Enter the same hostname.
 
-Cloudflare provides HTTPS to the browser. Zluggish uses the configured origin to validate changes and mark session cookies secure.
+   For **Service URL**, use the web listener's HTTP address as seen by `cloudflared`. Use `http://127.0.0.1:8080` if the connector can reach Zluggish over loopback. For a connector on another machine, use the server's private IP and make sure the web listener is reachable there. See [Web app listener](../reference/configuration.md#web-app-listener) for the bind address and port settings.
+
+4. In the route's **Additional application settings**, turn on **Protect with Access**. Select your Zero Trust team and the Access application's audience tag, then save the route. See [Cloudflare's tunnel setup for Access](https://developers.cloudflare.com/reference-architecture/design-guides/identity-gated-edge/#remotely-managed-tunnel).
+5. In `zluggish.config.ts`, set `network.web.publicUrl` to the HTTPS origin, such as `https://zluggish.example.com`. Restart Zluggish.
+
+Open the HTTPS address. After passing Cloudflare Access, sign in with your Zluggish account. Cloudflare provides HTTPS to the browser. Zluggish uses `publicUrl` to check the origin of requests that change data and mark its session cookies secure.
 
 ## Zwift game
 
-Zwift connects using the original Zwift hostnames and needs TCP port 3025 and UDP port 3024 for riding, in addition to HTTPS 443 and HTTP 80. Use a private route for these [game ports](../reference/ports.md).
+The remote device must reach the server's private IP on HTTPS 443, HTTP 80, TCP 3025 and UDP 3024 by default. See [Ports](../reference/ports.md) for what each port does.
 
-1. Add a **CIDR** route to the tunnel for the server's private IP, for example `192.168.1.10/32`.
-2. In the Cloudflare One device profile, [configure Split Tunnels](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/route-traffic/split-tunnels/) so the server IP goes through the tunnel. In **Include** mode, add the route. In **Exclude** mode, adjust any excluded range that contains the server IP.
-3. Enable [TCP and UDP proxying](https://developers.cloudflare.com/cloudflare-one/traffic-controls/proxy/).
-4. Set `server.advertisedIp` to that private IP in `zluggish.config.ts` and restart Zluggish.
-5. [Enroll the Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/warp/) on each Zwift device. Connect it in **Traffic and DNS** mode.
-6. Follow the setup guide for [Windows](clients/windows.md), [macOS](clients/macos.md), [Linux](clients/linux.md) or [Android](clients/android.md) to install the certificate or patched app. Use the private IP in the desktop hosts file or set a Gateway DNS override below.
+1. In `zluggish.config.ts`, set `server.advertisedIp` to the server's private IP, for example `192.168.1.100`. Make sure the game listeners accept connections on that IP. For a native installation using the loopback default, set `network.host` to the private IP. To keep a same-host web route using the loopback URL above, set `network.web.host` to `'127.0.0.1'`. Restart Zluggish.
+2. In the Cloudflare dashboard, open **Networking → Routes → Create route**, then choose **Tunnel CIDR**. Select your tunnel, enter the server's address as a single-host route such as `192.168.1.100/32`, and save. See [Add a CIDR route](https://developers.cloudflare.com/cloudflare-one/networks/routes/add-routes/#add-a-cidr-route).
+3. Open **Zero Trust → Traffic policies → Traffic settings**. Under **Proxy and inspection settings**, turn on **Allow Secure Web Gateway to proxy traffic** and select both **TCP** and **UDP**. See [Gateway proxy settings](https://developers.cloudflare.com/cloudflare-one/traffic-controls/proxy/#turn-on-the-gateway-proxy).
+4. Open **Zero Trust → Team & Resources → Devices → Device profiles → General profiles**. Select **Configure** for the profile your Zwift devices use, then **Split Tunnels → Manage**.
 
-If port 8080 is reachable over the private route and the web listener is enabled, open `http://<server-ip>:8080/health` on the Zwift device to check the route. Use different IP ranges at home and at the remote location to avoid routing conflicts.
+   - In **Include** mode, add the server's route and keep the [required Zero Trust destinations](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/private-net/cloudflared/connect-cidr/#3-route-private-network-ips-through-the-cloudflare-one-client) in the list.
+   - In **Exclude** mode, adjust any excluded range that contains the server's IP so only the other addresses in that range stay excluded. See [Split Tunnels](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/route-traffic/split-tunnels/).
+
+5. In **Zero Trust → Team & Resources → Devices → Device profiles → Management**, open **Device enrollment → Device enrollment permissions → Manage** and allow the riders who can enroll devices. See [Device enrollment permissions](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/deployment/device-enrollment/).
+6. [Install and enroll Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/deployment/manual-deployment/) on each remote Zwift device. Use **Traffic and DNS** mode.
+7. Follow the setup guide for [Windows](clients/windows.md), [macOS](clients/macos.md), [Linux](clients/linux.md) or [Android](clients/android.md) to install the certificate or patched app. On desktop, you can use the server's private IP in the hosts file or use the Gateway DNS override below. On Android, use the Gateway DNS override with Cloudflare One Client.
+
+Use different IP ranges at the server and remote locations to avoid routing conflicts. If the web listener is also reachable over the private route, open `http://<server-ip>:8080/health` on the remote device to check that it can reach Zluggish. Launching a ride checks the game connection.
 
 ### Redirect the Zwift names with Gateway DNS
 
-Use a [Gateway DNS policy](https://developers.cloudflare.com/cloudflare-one/traffic-controls/dns-policies/#override) to resolve the Zwift hostnames to the private IP.
+A [Gateway DNS override](https://developers.cloudflare.com/cloudflare-one/traffic-controls/dns-policies/#override) makes the original Zwift hostnames resolve to your server's private IP on enrolled devices. On desktop, turn off **Patch hosts file** when downloading the setup script if you use Gateway DNS. Remove any previous Zluggish hosts-file entries so DNS takes effect. See [DNS settings](clients/dns-settings.md#setup-script-windows-macos-and-linux).
 
-1. Use the **Host** selector and **in** operator: `secure.zwift.com`, `us-or-rly101.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
+1. In the Cloudflare dashboard, go to **Zero Trust → Traffic policies → Firewall policies**. On the **DNS** tab, select **Add a policy**. See [Set up DNS filtering](https://developers.cloudflare.com/cloudflare-one/traffic-controls/get-started/dns/#3-create-your-first-dns-policy).
+2. Use the **Host** selector with the **in** operator. Add `us-or-rly101.zwift.com`, `secure.zwift.com`, `cdn.zwift.com` and `launcher.zwift.com`.
 
-   ![Cloudflare Gateway DNS policy scope with Host in matching all four Zwift game hostnames](../../media/screenshots/cloudflare-gateway-dns-hosts.png)
+   ![Gateway DNS policy matching the four Zwift hostnames](../../media/screenshots/cloudflare-gateway-dns-hosts.png)
 
-2. Set the action to **Override** and enter the server's private IP in **Override destination**. Replace the example `192.168.1.100` below with your server's private IP.
+3. Select **Override**, enter the server's private IP in **Override destination**, and select **Create policy**.
 
-   ![Cloudflare Gateway DNS policy with the Override action and an example override destination of 192.168.1.100](../../media/screenshots/cloudflare-gateway-dns-override.png)
+   ![Gateway DNS Override action pointing to the example server IP 192.168.1.100](../../media/screenshots/cloudflare-gateway-dns-override.png)
 
 ## Show each household only its own riders
 
-The launcher can list only the riders that belong to the person using it. The rider selects **Sign in with Cloudflare** in the launcher and signs in to the Cloudflare Access application of the [web app](#web-app). Zluggish then lists the riders in that email's groups, and the rider whose login name is that email. The launcher stays signed in for 30 days.
+You can use Cloudflare Access to control which riders appear in the desktop launcher. Zluggish matches the Cloudflare email to the rider groups you configure and to any rider whose login name is that email. The launcher remembers the Cloudflare identity for 30 days. Each rider still needs their Zluggish password unless the launcher remembers it. Riders with a [one-time password](../usage/web-app.md#administrator-pages) must first choose their own password in the web app.
 
-This works on any device that reaches the game, including one that cannot run your Cloudflare One Client, such as a work laptop that must run its employer's.
-
-The filter decides who appears in the rider list. It does not replace passwords: a rider whose password this computer does not remember still enters it. The web app and the Android apps are not filtered.
+The launcher must be able to reach both the [Access-protected web app](#web-app) and the game server. A device that already reaches the game server, for example over the local network, can use the Cloudflare sign-in without enrolling in Cloudflare One Client. Android apps and the web app use their usual Zluggish sign-in.
 
 ### Turn on the sign-in
 
-1. In Cloudflare One, open the web app's Access application and copy its **Application Audience (AUD) Tag**.
-2. Note your team domain, such as `example.cloudflareaccess.com`. It is under **Settings** in Cloudflare One.
-3. Set both in `zluggish.config.ts`. `network.web.publicUrl` must be the web app's https address, and the Access application must cover the whole hostname:
+1. In **Zero Trust → Access controls → Applications**, select **Edit** for the web app's Access application. Under **Additional settings**, copy the [Application Audience (AUD) Tag](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/#get-your-aud-tag).
+2. Find the [team domain](https://developers.cloudflare.com/cloudflare-one/faq/getting-started-faq/#what-is-a-team-domainteam-name) under **Zero Trust → Settings**, for example `example.cloudflareaccess.com`.
+3. Set both values in `zluggish.config.ts`. Keep the web listener enabled and use the web app's HTTPS origin for `publicUrl`. The Access application for that hostname must cover `/launcher/link`.
 
    ```ts
    network: {
@@ -78,37 +81,28 @@ The filter decides who appears in the rider list. It does not replace passwords:
 
 4. Restart Zluggish.
 
-Who may sign in is up to the Access application's policies.
-
-### Skip the login prompt on your Cloudflare One Client
-
-Riders whose device runs your Cloudflare One Client can sign in without the Access login page. Access then uses the identity the client enrolled with. Cloudflare calls this [Authenticate with Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/client-sessions/).
-
-1. In Cloudflare One, open **Access controls** > **Access settings**.
-2. Turn on **Authenticate with Cloudflare One Client** and choose a **Session duration** of up to 90 days.
-3. Select **Apply to all Access applications**, or turn it on only in the web app's Access application. Then select **Save**.
-4. In the device profile's **Split Tunnels** Include list, add the web app's hostname, such as `zluggish.example.com`, and your team domain, such as `example.cloudflareaccess.com`. Access only sees the client's identity on requests that go through the client, and Include mode otherwise sends only the server's IP through it. Reconnect the client afterwards.
-
-It only works if the Access application uses Allow or Block policies and has **Binding Cookie** turned off. A device sends one user's identity, the person who enrolled the client. Devices without your client, such as a work laptop on its employer's client, still get the normal Access login.
-
-### Do not decrypt the Zwift names
-
-Leave Gateway TLS decryption off, or add a **Do Not Inspect** HTTP policy for `secure.zwift.com`, `launcher.zwift.com`, `cdn.zwift.com` and `us-or-rly101.zwift.com`. The Zwift launcher on Windows checks whether a certificate was revoked. The certificates Gateway makes when it decrypts say nowhere how to check, so the launcher refuses them with "Could not establish trust relationship for the SSL/TLS secure channel".
-
 ### Choose who sees which riders
 
-In the web app, open **Manage** > **Launcher access**. The page appears once the sign-in is turned on.
+As a Zluggish administrator, open **Manage → Launcher access**. This page appears once launcher sign-in is enabled.
 
-- Each group lists emails and riders. Everyone signed in to Cloudflare with one of the emails sees all of the group's riders.
-- An email can be in several groups, and a rider can be in several groups.
-- A rider whose login name is an email is visible to that email without any group.
-- **Riders no launcher can pick** lists riders in no group whose login name is not an email. Add each one to a group.
-- **Waiting for a group** lists emails that signed in but matched no rider, so you can add them without typing.
+- Add the Cloudflare email addresses and riders for each household to a group. Everyone listed in a group's emails can see its enabled riders. An email or rider can belong to more than one group.
+- **Riders no launcher can pick** lists enabled riders with neither a group nor an email login. Add these riders to a group.
+- **Waiting for a group** lists emails that signed in and have no available riders. You can add them directly to a group.
 
-Changes take effect the next time the launcher loads its rider list.
+Changes take effect the next time the launcher loads the rider list.
 
 ### What riders see
 
-- Not signed in yet, or the sign-in is older than 30 days: a page with **Sign in with Cloudflare**.
-- Signed in with an email that has riders: only those riders, and a line naming the email.
-- Signed in with an email that has no riders: a page asking them to contact an administrator, with **Check again** and **Sign in with Cloudflare** to use another email.
+- The launcher offers **Sign in with Cloudflare** when it needs a Cloudflare identity, including after the 30-day sign-in expires.
+- After sign-in, the launcher shows the available riders and the signed-in email address.
+- If the email has no available riders, the launcher asks the rider to contact an administrator. The rider can select **Check again** after the administrator adds access, or select **Sign in with Cloudflare** to retry sign-in.
+
+### Skip the login prompt on your Cloudflare One Client
+
+Cloudflare can use the identity enrolled on the device so that riders with an active client session can skip the Access login prompt. This [client session feature](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/client-sessions/#configure-client-sessions-in-access) is in beta. It supports Access applications that use **Allow** or **Block** policies and have **Binding Cookie** disabled.
+
+1. In **Zero Trust → Access controls → Access settings**, enable **Authenticate with Cloudflare One Client**, choose a **Session duration** of up to 90 days, and save.
+2. In **Zero Trust → Access controls → Applications**, edit the web app's Access application and enable **Authenticate with Cloudflare One Client** there. Use **Apply to all Access applications** in Access settings only if you want this behavior across your applications by default.
+3. Make sure the web app hostname, team domain and identity provider are reachable through Cloudflare One Client. In **Include** mode, add those destinations in the device profile's **Split Tunnels → Manage** list.
+
+The device sends the identity of the person who enrolled it. Cloudflare may prompt again when the client session expires. Devices without an enrolled client use the usual Access login.
