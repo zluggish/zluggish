@@ -218,6 +218,13 @@ export const configSchema = Schema.Struct({
       host: optionalHost,
       port: port.pipe(withDefault(443)),
       useCert: Schema.Literal(true).pipe(withDefault(true)),
+      /** Trust the Cloudflare email that a Gateway HTTP policy adds to launcher requests. Null turns it off. */
+      cloudflareGateway: Schema.NullOr(
+        Schema.Struct({
+          /** Holds the value Gateway sends in X-Zluggish-Gateway. */
+          secretFile: NonBlank,
+        }),
+      ).pipe(withDefault(null)),
     }),
   }),
   riderDefaults: riderSettingsSchema,

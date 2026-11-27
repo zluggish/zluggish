@@ -7,7 +7,7 @@ import {
   storageSchemaSQL,
   webSessionSQL,
 } from '#src/db/ddl';
-import { openDatabase } from '#src/db/open';
+import { openDatabase, SCHEMA_VERSION } from '#src/db/open';
 import { migrateActivityFolders } from '#src/migrations/activity-folders';
 import { activityDirectoryName } from '#src/activity-storage';
 import assert from 'node:assert/strict';
@@ -94,7 +94,7 @@ function version10(t: TestContext) {
 }
 
 function assertMigrated(storage: string, rider: string, db: DatabaseSync) {
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 11);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
 
   const activities = resolve(rider, 'activities');
   assert.deepEqual(readdirSync(activities).toSorted(), ['2026-08-18T105849Z_1', '2026-08-30T231659Z_3', 'orphaned']);

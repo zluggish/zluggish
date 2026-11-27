@@ -3,6 +3,7 @@ import { run } from '#src/cli/cli';
 import { validateConfig } from '#src/config/index';
 import { loadConfig, packageRoot } from '#src/config/load';
 import { migrateConfig, migrationCandidate } from '#src/config/migrate';
+import { openDatabase, SCHEMA_VERSION } from '#src/db/open';
 import { LockRepository } from '#src/repositories/lock.repository';
 import { SettingsStore } from '#src/repositories/settings.repository';
 import { AccountsService } from '#src/services/auth.service';
@@ -384,4 +385,31 @@ await test('account migration uses the selected config storage', async (t) => {
   assert.equal(migrated.get(user.player_id)?.first_name, 'Legacy');
   migrated.close();
   assert.equal(existsSync(resolve(f.storage, 'zluggish.db')), false);
+});
+
+await test('version 12 adds launcher access groups to an existing database without touching riders', (t) => {
+  const f = fixture(t);
+  const created = openDatabase(f.storage);
+  created.exec(`INSERT INTO user (player_id, username, first_name, last_name) VALUES (7, 'anna@example.com', 'Anna', 'Berg');
+    DROP TABLE access_seen; DROP TABLE access_group_rider; DROP TABLE access_group_email; DROP TABLE access_group;
+    UPDATE version SET version=11;`);
+  created.close();
+
+  const db = openDatabase(f.storage);
+  t.after(() => db.close());
+  assert.equal(SCHEMA_VERSION, 12);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 12);
+  assert.equal(db.prepare('SELECT username FROM user WHERE player_id=7').get()?.username, 'anna@example.com');
+  // A schema-only migration takes no backup.
+  assert.equal(existsSync(resolve(f.storage, 'backups')), false);
+
+  db.exec(`INSERT INTO access_group (id, name) VALUES (1, 'Berg family');
+    INSERT INTO access_group_email VALUES (1, 'Anna@Example.com');
+    INSERT INTO access_group_rider VALUES (1, 7);`);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM access_group_email WHERE email='anna@example.com'").get()?.n, 1);
+  assert.throws(() => db.exec('INSERT INTO access_group_rider VALUES (1, 99)'), /FOREIGN KEY/);
+  db.exec('DELETE FROM user WHERE player_id=7');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_rider').get()?.n, 0);
+  db.exec('DELETE FROM access_group');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM access_group_email').get()?.n, 0);
 });

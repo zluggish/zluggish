@@ -43,6 +43,10 @@ export default defineConfig({
       port: 443,
       // Serve HTTPS with the certificate from tls below. false serves plain HTTP, for development only.
       useCert: true,
+      // Show each Cloudflare email only its own riders in the launcher, such as { secretFile: './gateway-secret.txt' }.
+      // The file holds the secret that a Cloudflare Gateway HTTP policy sends with each launcher request.
+      // null lists every rider in every launcher.
+      cloudflareGateway: null,
     },
   },
 

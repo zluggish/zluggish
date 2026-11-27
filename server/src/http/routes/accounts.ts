@@ -1,6 +1,8 @@
 import { t } from '#src/i18n/index';
 import { PasswordLimits } from '#src/http/password-limits';
 import { AccountsService } from '#src/services/auth.service';
+import { AccessGroupsService } from '#src/services/access-groups.service';
+import type { LauncherIdentity } from '#src/services/access-groups.service';
 import { WorkoutsService } from '#src/services/workout.service';
 import { FilesService } from '#src/services/files.service';
 import { ProfilesService } from '#src/services/profile.service';
@@ -98,6 +100,15 @@ export async function csrf(c: Context<RuntimeEnv>, runtime: Runtime): Promise<Fo
       ]),
     ),
   )(form);
+}
+
+/** Who Cloudflare Gateway says is signed in, from the headers its HTTP policy overwrites. Only the
+launcher picker uses it. The header values are never logged.
+*/
+export function launcherIdentity(c: Context<RuntimeEnv>, runtime: Runtime): LauncherIdentity {
+  return runtime.effects
+    .runSync(AccessGroupsService)
+    .identify({ gateway: c.req.header('X-Zluggish-Gateway'), email: c.req.header('X-Zluggish-Identity') });
 }
 
 export function peerAddress(c: Context) {
@@ -221,61 +232,94 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     },
   );
 
-  function loginPage(c: Context<RuntimeEnv>, error = '') {
+  const access = runtime.effects.runSync(AccessGroupsService);
+
+  /** The riders a launcher may pick: every enabled rider, or only the signed-in Cloudflare email's. */
+  function pickable(identity: Exclude<LauncherIdentity, 'unidentified'>) {
+    return identity === 'off' ? accounts.list().filter((user) => user.enabled) : access.riders(identity.email);
+  }
+
+  // Shown instead of the picker when Cloudflare did not say who is signed in, whatever the reason.
+  function connectPage(c: Context<RuntimeEnv>) {
+    return model(c, 'message', t('access_connect_title'), [], {
+      message: t('access_connect_message'),
+      retry: { href: '/login/', label: t('access_check_again') },
+    });
+  }
+
+  function noRidersPage(c: Context<RuntimeEnv>, email: string) {
+    return model(c, 'message', t('access_no_riders_title', { value1: email }), [], {
+      message: t('access_no_riders_message'),
+      retry: { href: '/login/', label: t('access_check_again') },
+    });
+  }
+
+  function loginPage(c: Context<RuntimeEnv>, identity: Exclude<LauncherIdentity, 'unidentified'>, error = '') {
+    const riders = pickable(identity);
+
     return model(
       c,
       'login',
       t('who_s_riding'),
-      accounts
-        .list()
-        .filter((user) => user.enabled)
-        .map((user) =>
-          makeForm(
-            `rider-${user.player_id}`,
-            '/login/',
-            [hidden('player_id', String(user.player_id))],
-            riderName(user),
-            {
-              user: {
-                initials: `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase(),
-                photo: runtime.effects.runSync(
-                  Effect.flatMap(
-                    ProfilesService.use((service) => service.folder(user.player_id)),
-                    (folder) => FilesService.use((files) => files.exists(resolve(folder, 'avatarLarge.jpg'))),
-                  ),
-                )
-                  ? `/download/${user.player_id}/avatarLarge.jpg`
-                  : null,
-                // Riders created without an email get a placeholder username that means nothing to people.
-                email: user.username.endsWith('@local.invalid') ? null : user.username,
-                workout: (() => {
-                  try {
-                    const [planned] = runtime.effects.runSync(
-                      WorkoutsService.use((service) => service.today(user.player_id)),
-                    ).workouts;
+      riders.map((user) =>
+        makeForm(`rider-${user.player_id}`, '/login/', [hidden('player_id', String(user.player_id))], riderName(user), {
+          user: {
+            initials: `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase(),
+            photo: runtime.effects.runSync(
+              Effect.flatMap(
+                ProfilesService.use((service) => service.folder(user.player_id)),
+                (folder) => FilesService.use((files) => files.exists(resolve(folder, 'avatarLarge.jpg'))),
+              ),
+            )
+              ? `/download/${user.player_id}/avatarLarge.jpg`
+              : null,
+            // Riders created without an email get a placeholder username that means nothing to people.
+            email: user.username.endsWith('@local.invalid') ? null : user.username,
+            workout: (() => {
+              try {
+                const [planned] = runtime.effects.runSync(
+                  WorkoutsService.use((service) => service.today(user.player_id)),
+                ).workouts;
 
-                    return planned
-                      ? { name: planned.name, minutes: Math.round(planned.summary.durationSeconds / 60) }
-                      : null;
-                  } catch {
-                    // A broken workout store must never hide the rider list.
-                    return null;
-                  }
-                })(),
-              },
-            },
-          ),
-        ),
+                return planned
+                  ? { name: planned.name, minutes: Math.round(planned.summary.durationSeconds / 60) }
+                  : null;
+              } catch {
+                // A broken workout store must never hide the rider list.
+                return null;
+              }
+            })(),
+          },
+        }),
+      ),
       {
-        message: error || (accounts.list().some((user) => user.enabled) ? '' : t('accounts_users_unavailable')),
+        message: error || (riders.length > 0 ? '' : t('accounts_users_unavailable')),
         failed: !!error,
+        accessEmail: identity === 'off' ? null : identity.email,
       },
     );
   }
 
   app.on(['GET', 'POST'], '/login/', async (c) => {
+    const identity = launcherIdentity(c, runtime);
+
+    if (identity === 'unidentified') {
+      // The launcher's forms lock on 401 and ask for a reload, which lands on the page below.
+      if (c.req.method === 'POST') {
+        throw new HTTPException(401);
+      }
+
+      return runtime.effects.runPromise(gamePage(c, connectPage(c)));
+    }
+
     const session = c.get('browser');
     sessions.transition(session, { type: 'clear-selection' });
+
+    if (c.req.method === 'GET' && identity !== 'off' && access.riders(identity.email).length === 0) {
+      runtime.effects.runSync(access.recordSeen(identity.email));
+
+      return runtime.effects.runPromise(gamePage(c, noRidersPage(c, identity.email)));
+    }
 
     let error = '';
 
@@ -284,7 +328,26 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
       const id = Schema.decodeUnknownOption(PositiveIntFromString)(form.player_id);
 
-      const user = Option.isSome(id) ? accounts.get(id.value) : null;
+      const chosen = Option.isSome(id) ? accounts.get(id.value) : null;
+
+      // A rider outside the signed-in email's groups answers exactly like a rider that does not exist.
+      const outside =
+        chosen !== null &&
+        identity !== 'off' &&
+        pickable(identity).every((user) => user.player_id !== chosen.player_id);
+
+      if (outside) {
+        runtime.world.lifecycle.log.warn(
+          'auth.login_outside_group',
+          'Login refused: rider outside the launcher groups',
+          {
+            playerId: chosen.player_id,
+            flow: 'browser',
+          },
+        );
+      }
+
+      const user = outside ? null : chosen;
       const password = Schema.decodeUnknownSync(Schema.String.pipe(orElse('')))(form.password);
       const step = form.step === 'password';
       let signedIn: User | null = null;
@@ -297,7 +360,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           { playerId: user.player_id },
         );
 
-        return runtime.effects.runPromise(gamePage(c, loginPage(c, t('login_failed'))));
+        return runtime.effects.runPromise(gamePage(c, loginPage(c, identity, t('login_failed'))));
       }
 
       if (user && !step) {
@@ -370,7 +433,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
       error = t('accounts_user_not_found');
     }
 
-    return runtime.effects.runPromise(gamePage(c, loginPage(c, error)));
+    return runtime.effects.runPromise(gamePage(c, loginPage(c, identity, error)));
   });
 
   app.post('/riders/switch/', async (c) => {

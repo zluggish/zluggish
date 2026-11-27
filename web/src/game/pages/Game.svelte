@@ -121,6 +121,10 @@
       </Form>
     </div>
   {/each}
+  {#if current.retry}<a class="retry" href={current.retry.href}>{current.retry.label}</a>{/if}
+  {#if current.kind === 'login' && current.accessEmail}<p class="signed-in">
+      {t('access_signed_in_as', { value1: current.accessEmail })}
+    </p>{/if}
 </Layout>
 
 <style>
@@ -154,6 +158,33 @@
   .web-app:focus-visible {
     outline: 2px solid var(--orange);
     outline-offset: 2px;
+  }
+  /* The one action on a message page: the primary button's look, as a link that loads the page again. */
+  .retry {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.65rem 1.4rem;
+    border-radius: 10px;
+    background: var(--orange);
+    box-shadow: 0 3px 0 var(--orange-deep);
+    color: var(--text);
+    font-weight: 800;
+    text-decoration: none;
+  }
+  .retry:hover {
+    background: #f06a1e;
+  }
+  .retry:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 var(--orange-deep);
+  }
+  /* Who Cloudflare says is signed in: a quiet line under the riders, across the whole list. */
+  .signed-in {
+    grid-column: 1 / -1;
+    max-width: none;
+    margin: 0.4rem 0 0;
+    color: var(--muted);
+    font-size: 0.8125rem;
   }
   .visually-hidden {
     position: absolute;

@@ -48,6 +48,10 @@ export interface GamePageModel {
   forms: Array<GameForm>;
   /** Shown as a back button beside the title; it navigates and never signs out. */
   back?: { href: string; label: string };
+  /** A message page's one action: load the page again, such as after signing in to Cloudflare. */
+  retry?: { href: string; label: string };
+  /** On the rider picker: the email Cloudflare says is signed in. Null when Cloudflare is not used. */
+  accessEmail?: string | null;
   message?: string;
   failed?: boolean;
   /** A security problem with the server that every rider should see, such as the shared certificate. */

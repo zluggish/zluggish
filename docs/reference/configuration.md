@@ -64,6 +64,10 @@ export default defineConfig({
       port: 443,
       // Serve HTTPS with the certificate from tls below. false serves plain HTTP, for development only.
       useCert: true,
+      // Show each Cloudflare email only its own riders in the launcher, such as { secretFile: './gateway-secret.txt' }.
+      // The file holds the secret that a Cloudflare Gateway HTTP policy sends with each launcher request.
+      // null lists every rider in every launcher.
+      cloudflareGateway: null,
     },
   },
 
@@ -405,16 +409,17 @@ Set the log level under `logging`. See [Logging](../troubleshooting/logging.md).
 
 Most features have their settings on their own page:
 
-| Setting                           | Page                                                       |
-| --------------------------------- | ---------------------------------------------------------- |
-| `tls`                             | [Server certificate](../install/certificate.md)            |
-| `dns.enabled`                     | [Android](../install/clients/android.md)                   |
-| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                 |
-| `bots`                            | [Bots](../usage/features/bots.md)                          |
-| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                  |
-| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md) |
-| `equipment`                       | [Entitlements](../usage/features/entitlements.md)          |
-| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                |
-| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)          |
-| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)         |
-| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)           |
+| Setting                           | Page                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `tls`                             | [Server certificate](../install/certificate.md)                                      |
+| `dns.enabled`                     | [Android](../install/clients/android.md)                                             |
+| `network.host` and listener hosts | [IPv6](../install/ipv6.md)                                                           |
+| `network.api.cloudflareGateway`   | [Remote access](../install/remote-access.md#show-each-household-only-its-own-riders) |
+| `bots`                            | [Bots](../usage/features/bots.md)                                                    |
+| `pelotons`                        | [Pelotons](../usage/features/pelotons.md)                                            |
+| `leaderboards.allTime`            | [All-time leaderboards](../usage/features/leaderboards.md)                           |
+| `equipment`                       | [Entitlements](../usage/features/entitlements.md)                                    |
+| `proxy.mode`                      | [CDN proxy](../usage/features/cdn-proxy.md)                                          |
+| `integrations.garmin.domain`      | [Garmin Connect](../usage/integrations/garmin.md)                                    |
+| `integrations.discord`            | [Discord bridge](../usage/chat-bridges/discord.md)                                   |
+| `integrations.matrix`             | [Matrix bridge](../usage/chat-bridges/matrix.md)                                     |

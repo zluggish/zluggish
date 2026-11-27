@@ -16,6 +16,8 @@ import { ZwiftAndroidService, zwiftAndroidChunkSize } from '#src/services/zwift-
 import { fileResponse } from '#src/http/file-response';
 import { RecordsService } from '#src/services/records.service';
 import { ZwiftUpdatesService } from '#src/services/zwift-updates.service';
+import { AccessGroupsService } from '#src/services/access-groups.service';
+import { accessEmail, accessGroupInput } from '#src/dtos/access.dto';
 import { webConnectionRoutes } from '#src/http/web-connections';
 import { webProfileRoutes } from '#src/http/web-profile';
 import { Hono } from 'hono';
@@ -1115,6 +1117,57 @@ export function createWebApp(runtime: HttpRuntime) {
       }),
     );
   }
+
+  // Launcher access groups: which Cloudflare emails see which riders in the launcher picker.
+  const groupId = (c: Context<WebEnv>) =>
+    Schema.decodeUnknownSync(NumberFromInput.check(Schema.isInt(), Schema.isGreaterThan(0)))(c.req.param('id'));
+
+  appRoutes.get('/api/manage/access', (c) =>
+    Effect.gen(function* () {
+      return c.json(yield* (yield* AccessGroupsService).overview());
+    }),
+  );
+  appRoutes.post('/api/manage/access/groups', (c) =>
+    Effect.gen(function* () {
+      const { name } = Schema.decodeUnknownSync(accessGroupInput)(yield* Effect.promise(() => c.req.json()));
+
+      return c.json(yield* (yield* AccessGroupsService).create(name), 201);
+    }),
+  );
+  appRoutes.patch('/api/manage/access/groups/:id', (c) =>
+    Effect.gen(function* () {
+      const { name } = Schema.decodeUnknownSync(accessGroupInput)(yield* Effect.promise(() => c.req.json()));
+
+      return c.json(yield* (yield* AccessGroupsService).rename(groupId(c), name));
+    }),
+  );
+  appRoutes.delete('/api/manage/access/groups/:id', (c) =>
+    Effect.gen(function* () {
+      return c.json(yield* (yield* AccessGroupsService).remove(groupId(c)));
+    }),
+  );
+  appRoutes.on(['PUT', 'DELETE'], '/api/manage/access/groups/:id/emails/:email', (c) =>
+    Effect.gen(function* () {
+      const service = yield* AccessGroupsService;
+      const email = Schema.decodeUnknownSync(accessEmail)(c.req.param('email'));
+
+      return c.json(
+        yield* c.req.method === 'PUT' ? service.addEmail(groupId(c), email) : service.removeEmail(groupId(c), email),
+      );
+    }),
+  );
+  appRoutes.on(['PUT', 'DELETE'], '/api/manage/access/groups/:id/riders/:playerId', (c) =>
+    Effect.gen(function* () {
+      const service = yield* AccessGroupsService;
+      const player = Schema.decodeUnknownSync(NumberFromInput.check(Schema.isInt(), Schema.isGreaterThan(0)))(
+        c.req.param('playerId'),
+      );
+
+      return c.json(
+        yield* c.req.method === 'PUT' ? service.addRider(groupId(c), player) : service.removeRider(groupId(c), player),
+      );
+    }),
+  );
 
   appRoutes.patch('/api/manage/settings', (c) =>
     Effect.gen(function* () {

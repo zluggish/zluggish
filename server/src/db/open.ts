@@ -3,6 +3,7 @@ import { Schema } from 'effect';
 import { removeLegacyAccountFields } from '#src/db/account-upgrade';
 import { ConfigError } from '#src/config/index';
 import {
+  accessGroupSQL,
   administratorSchemaSQL,
   completionSchemaSQL,
   createSchemaSQL,
@@ -35,6 +36,7 @@ const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: strin
   { version: 9, up: (db) => db.exec(dropManagementAuditSQL) },
   { version: 10, up: (db) => db.exec(webSessionSQL) },
   { version: 11, up: migrateActivityFolders, backup: true },
+  { version: 12, up: (db) => db.exec(accessGroupSQL) },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;
