@@ -6,7 +6,7 @@ export function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-/** A basic email shape. Gateway puts literals such as `cf-unresolved` in place of an email it cannot resolve. */
+/** A basic email shape, enough to tell an address from a placeholder or a typo. */
 export function isEmail(value: string) {
   return value.length <= 254 && /^[^\s@"<>]+@[^\s@"<>]+\.[^\s@"<>]+$/.test(value);
 }

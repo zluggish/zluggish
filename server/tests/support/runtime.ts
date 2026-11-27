@@ -12,17 +12,9 @@ import { resolve } from 'node:path';
 import type { TestContext } from 'node:test';
 import { Schema } from 'effect';
 
-type ApiInput = NonNullable<NonNullable<ConfigInput['network']>['api']>;
-
 type WebInput = NonNullable<NonNullable<ConfigInput['network']>['web']>;
 
-export function runtimeFixture(
-  t: TestContext,
-  publicUrl: string | null = null,
-  webEnabled = true,
-  api: ApiInput = {},
-  web: WebInput = {},
-) {
+export function runtimeFixture(t: TestContext, publicUrl: string | null = null, webEnabled = true, web: WebInput = {}) {
   const root = mkdtempSync(resolve(tmpdir(), 'zluggish-accounts-'));
   const storage = resolve(root, 'storage');
   const accounts = AccountsService.open(storage);
@@ -32,7 +24,7 @@ export function runtimeFixture(
   const world = new World();
   const config = validateConfig({
     storageDir: storage,
-    network: { web: { ...web, publicUrl, enabled: webEnabled }, api },
+    network: { web: { ...web, publicUrl, enabled: webEnabled } },
   });
   const assets = resolve(packageRoot(), '../assets');
 

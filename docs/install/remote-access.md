@@ -78,7 +78,18 @@ The filter decides who appears in the rider list. It does not replace passwords:
 
 4. Restart Zluggish.
 
-Who may sign in is up to the Access application's policies. To spare riders on your Cloudflare One Client the login prompt, let the Access application accept the client's identity: Cloudflare calls this WARP authentication identity.
+Who may sign in is up to the Access application's policies.
+
+### Skip the login prompt on your Cloudflare One Client
+
+Riders whose device runs your Cloudflare One Client can sign in without the Access login page. Access then uses the identity the client enrolled with. Cloudflare calls this [Authenticate with Cloudflare One Client](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/client-sessions/).
+
+1. In Cloudflare One, open **Access controls** > **Access settings**.
+2. Turn on **Authenticate with Cloudflare One Client** and choose a **Session duration** of up to 90 days.
+3. Select **Apply to all Access applications**, or turn it on only in the web app's Access application. Then select **Save**.
+4. In the device profile's **Split Tunnels** Include list, add the web app's hostname, such as `zluggish.example.com`, and your team domain, such as `example.cloudflareaccess.com`. Access only sees the client's identity on requests that go through the client, and Include mode otherwise sends only the server's IP through it. Reconnect the client afterwards.
+
+It only works if the Access application uses Allow or Block policies and has **Binding Cookie** turned off. A device sends one user's identity, the person who enrolled the client. Devices without your client, such as a work laptop on its employer's client, still get the normal Access login.
 
 ### Do not decrypt the Zwift names
 

@@ -11,8 +11,6 @@ const rider = Schema.Struct({ group_id: Schema.Int, player_id: Schema.Int });
 
 const seen = Schema.Struct({ email: Schema.String, last_seen: Schema.Int });
 
-export type AccessGroupRow = typeof group.Type;
-
 /** How many unmatched emails the "waiting for a group" list keeps. */
 const SEEN_LIMIT = 50;
 

@@ -2,12 +2,7 @@ import { validateConfig } from '#src/config/index';
 import { createWebApp } from '#src/http/web-app';
 import { AccessGroupsService } from '#src/services/access-groups.service';
 import { mediumFixture } from '#tests/medium/support';
-import {
-  ACCESS_AUDIENCE as AUDIENCE,
-  ACCESS_PUBLIC_URL as PUBLIC_URL,
-  ACCESS_TEAM as TEAM,
-  ACCESS_WEB,
-} from '#tests/support/access';
+import { ACCESS_AUDIENCE, ACCESS_PUBLIC_URL, ACCESS_TEAM, ACCESS_WEB } from '#tests/support/access';
 import { t as translate } from '#src/i18n/index';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
@@ -47,14 +42,21 @@ function token(
   const now = Math.floor(Date.now() / 1000);
   const head = encode(JSON.stringify({ alg, kid, typ: 'JWT' }));
   const body = encode(
-    JSON.stringify({ iss: `https://${TEAM}`, aud: [AUDIENCE], exp: now + 300, iat: now, email: ANNA, ...claims }),
+    JSON.stringify({
+      iss: `https://${ACCESS_TEAM}`,
+      aud: [ACCESS_AUDIENCE],
+      exp: now + 300,
+      iat: now,
+      email: ANNA,
+      ...claims,
+    }),
   );
 
   return `${head}.${body}.${sign('sha256', Buffer.from(`${head}.${body}`), key).toString('base64url')}`;
 }
 
 async function fixture(t: TestContext) {
-  const f = await mediumFixture(t, PUBLIC_URL, true, {}, ACCESS_WEB);
+  const f = await mediumFixture(t, ACCESS_PUBLIC_URL, true, ACCESS_WEB);
   const keys = t.mock.method(f.accounts.repositories.cloudflareAccessRepository, 'keys', () =>
     Promise.resolve([jwk(signer.publicKey, 'one')]),
   );
@@ -87,7 +89,7 @@ async function fixture(t: TestContext) {
       const response = await request('/login/access');
       assert.equal(response.status, 302);
       const location = new URL(response.headers.get('Location') ?? '');
-      assert.equal(`${location.origin}${location.pathname}`, `${PUBLIC_URL}/launcher/link`);
+      assert.equal(`${location.origin}${location.pathname}`, `${ACCESS_PUBLIC_URL}/launcher/link`);
 
       return location.searchParams.get('state') ?? '';
     };
@@ -276,7 +278,7 @@ await test('Access sign-in needs an https public URL', () => {
   assert.throws(
     () =>
       validateConfig({
-        network: { web: { publicUrl: null, cloudflareAccess: { teamDomain: TEAM, audience: AUDIENCE } } },
+        network: { web: { ...ACCESS_WEB, publicUrl: null } },
       }),
     /network\.web\.cloudflareAccess/,
   );

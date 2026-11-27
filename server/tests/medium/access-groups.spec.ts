@@ -6,7 +6,7 @@ import type { TestContext } from 'node:test';
 import { test } from 'node:test';
 
 async function fixture(t: TestContext) {
-  const f = runtimeFixture(t, ACCESS_PUBLIC_URL, true, {}, ACCESS_WEB);
+  const f = runtimeFixture(t, ACCESS_PUBLIC_URL, true, ACCESS_WEB);
   const service = f.effects.runSync(AccessGroupsService);
   const anna = await f.accounts.create('Anna Berg', 'test-password', 'anna@example.com');
   const olle = await f.accounts.create('Olle Berg', 'test-password');

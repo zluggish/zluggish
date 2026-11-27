@@ -23,7 +23,7 @@ const overview = Schema.Struct({
 });
 
 async function fixture(t: TestContext, configured = true) {
-  const f = runtimeFixture(t, configured ? ACCESS_PUBLIC_URL : null, true, {}, configured ? ACCESS_WEB : {});
+  const f = runtimeFixture(t, configured ? ACCESS_PUBLIC_URL : null, true, configured ? ACCESS_WEB : {});
   const service = f.effects.runSync(ManagementService);
   const owner = await f.effects.runPromise(
     service.setup({

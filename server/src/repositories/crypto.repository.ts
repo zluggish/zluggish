@@ -18,11 +18,11 @@ import {
   X509Certificate,
 } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
+import { promisify } from 'node:util';
+import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
 
 /** A public key that verifies signatures, such as a Cloudflare Access signing key. */
 export type PublicKey = KeyObject;
-import { promisify } from 'node:util';
-import { closeSync, createReadStream, openSync, readSync } from 'node:fs';
 
 const generateKeyPairAsync = promisify(generateKeyPair);
 

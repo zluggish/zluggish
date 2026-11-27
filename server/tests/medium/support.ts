@@ -16,15 +16,14 @@ export async function mediumFixture(
   t: TestContext,
   publicUrl: string | null = null,
   webEnabled = true,
-  api: Parameters<typeof runtimeFixture>[3] = {},
-  web: Parameters<typeof runtimeFixture>[4] = {},
+  web: Parameters<typeof runtimeFixture>[3] = {},
 ) {
   const network = t.mock.method(globalThis, 'fetch', () => {
     throw new Error('Unexpected external request in medium test');
   });
 
   t.after(() => assert.equal(network.mock.callCount(), 0, 'External providers must be explicitly mocked'));
-  const f = runtimeFixture(t, publicUrl, webEnabled, api, web);
+  const f = runtimeFixture(t, publicUrl, webEnabled, web);
   // Runtime lifecycle tests must not schedule real release checks against external providers.
   const empty = { apkmirror: null, apkpure: null, errors: { apkmirror: null, apkpure: null } };
   writeFileSync(

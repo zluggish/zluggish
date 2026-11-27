@@ -11,7 +11,7 @@ import { test } from 'node:test';
 const ANNA = 'anna@example.com';
 
 async function fixture(t: TestContext, access = true) {
-  const f = await mediumFixture(t, access ? ACCESS_PUBLIC_URL : null, true, {}, access ? ACCESS_WEB : {});
+  const f = await mediumFixture(t, access ? ACCESS_PUBLIC_URL : null, true, access ? ACCESS_WEB : {});
   const lines: Array<string> = [];
   f.accounts.repositories.loggingRepository.configure({
     level: 'VERBOSE',

@@ -108,7 +108,7 @@ const ACCESS_COOKIE = 'zluggish_access';
 /** Who signed in to Cloudflare Access on this launcher, from its device cookie. Only the launcher picker uses
 it. The cookie and the email are never logged.
 */
-export function launcherIdentity(c: Context<RuntimeEnv>, runtime: Runtime): LauncherIdentity {
+function launcherIdentity(c: Context<RuntimeEnv>, runtime: Runtime): LauncherIdentity {
   return runtime.effects.runSync(AccessGroupsService).identify(getCookie(c, ACCESS_COOKIE));
 }
 
