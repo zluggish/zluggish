@@ -519,6 +519,7 @@
   "copied": "Copied",
   "copy": "Copy",
   "copy_its": "Copy its",
+  "copy_manually": "Copy the selected text manually",
   "couldn_t_reach_strava": "Couldn't reach Strava",
   "create_a_new_user": "Create a new user",
   "create_backup": "Create backup",

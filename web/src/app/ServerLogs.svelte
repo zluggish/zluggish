@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { tick } from 'svelte';
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
@@ -18,10 +19,6 @@
   let query = $state('');
   let flashed = $state(-1);
   let list = $state<HTMLOListElement>();
-
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the entries are there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-  let copied = $state(false);
 
   const floor: Record<Filter, number> = { all: 0, warnings: rank.warning, errors: rank.error };
 
@@ -80,12 +77,6 @@
     if (open && !loading) {
       void refresh();
     }
-  }
-
-  async function copy() {
-    await navigator.clipboard.writeText(shown.map(({ entry }) => entry.raw).join('\n'));
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
   }
 
   function showAll() {
@@ -173,11 +164,11 @@
           autocomplete="off"
           spellcheck="false"
         />
-        {#if canCopy}
-          <button type="button" class="copy" disabled={!shown.length} onclick={copy}>
-            {copied ? t('copied') : t('server_logs_copy')}
-          </button>
-        {/if}
+        <CopyButton
+          text={shown.map(({ entry }) => entry.raw).join('\n')}
+          label={t('server_logs_copy')}
+          disabled={!shown.length}
+        />
       </div>
 
       {#if shown.length}
@@ -384,7 +375,7 @@
     font-size: 0.875rem;
   }
 
-  .copy {
+  .toolbar :global(button.copy) {
     margin: 0;
     padding: 0.4rem 0.9rem;
     font-size: 0.8125rem;

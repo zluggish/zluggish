@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { t } from '../lib/i18n/index';
   import SlowLoading from '../components/SlowLoading.svelte';
   import { onMount } from 'svelte';
@@ -56,16 +57,6 @@
     etcHosts: t('phone_setup_rooted_android_hostnames', { value1: address }),
   });
 
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the lines are there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-  let copied = $state('');
-
-  async function copy(key: keyof typeof blocks) {
-    await navigator.clipboard.writeText(blocks[key]);
-    copied = key;
-    setTimeout(() => (copied = ''), 2000);
-  }
-
   function go(event: MouseEvent, to: string) {
     event.preventDefault();
     void navigate(to);
@@ -97,11 +88,7 @@
 {#snippet code(key: keyof typeof blocks)}
   <div class="command">
     <code>{blocks[key]}</code>
-    {#if canCopy}
-      <button type="button" class="copy" onclick={() => copy(key)} aria-live="polite"
-        >{copied === key ? t('copied') : t('copy')}</button
-      >
-    {/if}
+    <CopyButton text={blocks[key]} />
   </div>
 {/snippet}
 
@@ -377,7 +364,7 @@
       'DejaVu Sans Mono',
       monospace;
   }
-  button.copy {
+  .command :global(button.copy) {
     flex: none;
     margin: 0 0 0 auto;
     padding: 0.35rem 0.8rem;

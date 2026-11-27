@@ -7,6 +7,8 @@ description: Use the Zluggish web app to manage rides, accounts and the server.
 
 The Zluggish web app is the portal for managing the game, including installing the patched client apps and the companion.
 
+On a local network, open the web app at `http://<server-address>:8080` using the default web app port. Setup commands, one-time passwords and server logs can be copied over HTTP. If the browser blocks automatic copying, select and copy the text from the field that appears.
+
 ![The Zluggish web app showing activities, a route map, elevation profile and ride statistics](../../media/screenshots/webapp-activities.png)
 
 ## Rider pages
