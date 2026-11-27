@@ -1,7 +1,8 @@
 <script lang="ts">
+  import CopyButton from '../components/CopyButton.svelte';
   import { randomUUID } from '../lib/uuid';
   import { t } from '../lib/i18n/index';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { requestJson, ConnectionError, connection } from '../lib/connection';
   import { get } from 'svelte/store';
   import ProfileData from './ProfileData.svelte';
@@ -23,6 +24,7 @@
   import AndroidAppsManage from './AndroidAppsManage.svelte';
   import ServerCertificate from './ServerCertificate.svelte';
   import LauncherAccess from './LauncherAccess.svelte';
+  import DeleteUser from './DeleteUser.svelte';
   import { accessOverview, groupsOf } from './access';
   import type { AccessOverview } from './access';
   import { tlsStatus } from './tls';
@@ -32,6 +34,8 @@
   import {
     avatarResponse,
     backupResponse,
+    deletedUserResponse,
+    deletionFootprint,
     eventsResponse,
     outcomeResponse,
     profileResponse,
@@ -42,11 +46,20 @@
     setupResponse,
     signedInResponse,
     userSchema,
+    issuedUserSchema,
     userSettingsSchema,
     usersResponse,
     zwiftUpdatesResponse,
   } from './schemas';
-  import type { ManagedEvent, SetupUser, User, UserSettings, WorldSetting, ZwiftUpdates } from './schemas';
+  import type {
+    DeletionFootprint,
+    ManagedEvent,
+    SetupUser,
+    User,
+    UserSettings,
+    WorldSetting,
+    ZwiftUpdates,
+  } from './schemas';
   import type { TlsStatus } from './tls';
 
   type Pending = { title: string; detail: string; label: string; destructive: boolean; confirm: () => Promise<void> };
@@ -79,6 +92,8 @@
   let fieldErrors = $state<Record<string, Array<string>>>({});
   let conflict = $state<User | null>(null);
   let pending = $state<Pending | null>(null);
+  /** Set while the delete confirmation for the selected user is open. */
+  let removing = $state<DeletionFootprint | null>(null);
   let operation = randomUUID();
 
   let mode = $state<'new' | 'existing'>('new');
@@ -124,12 +139,12 @@
   let newLogin = $state('');
   let newPassword = $state('');
   let newConfirm = $state('');
-  /** A one-time password stays the same until the user is created, so a retried request matches. */
   let newMethod = $state<'set' | 'one-time'>('one-time');
-  let newCode = $state(oneTimeCode());
-  /** Shown once, on the new user's page, for the administrator to hand over. */
+  /** How the administrator replaces the selected user's password. */
+  let targetMethod = $state<'set' | 'one-time'>('one-time');
+  /** The server's one-time password, held only here and shown once on the user's page. */
   let handoff = $state<{ player_id: number; code: string } | null>(null);
-  let copiedCode = $state(false);
+  let handoffTitle = $state<HTMLElement>();
   /** The one-time password from sign-in, so the rider does not type it twice. */
   let oneTimePassword = $state('');
   let targetPassword = $state('');
@@ -637,9 +652,38 @@
   }
 
   function select() {
+    targetMethod = 'one-time';
     targetPassword = '';
     targetConfirm = '';
     conflict = null;
+    removing = null;
+  }
+
+  async function openDelete() {
+    if (!selected) {
+      return;
+    }
+    removing = await api(deletionFootprint, `/api/manage/users/${selected.player_id}/deletion`);
+  }
+
+  async function removeUser(username: string) {
+    if (!selected || !removing) {
+      return;
+    }
+    const target = selected;
+
+    await api(deletedUserResponse, `/api/manage/users/${target.player_id}`, 'DELETE', {
+      revision: removing.revision,
+      operation,
+      username,
+    });
+
+    removing = null;
+    users = users.filter((r) => r.player_id !== target.player_id);
+    go('/manage');
+    await loadUsers();
+    page = Math.min(page, Math.max(0, pages - 1));
+    done(t('user_deleted_notice', { value1: label(target) }));
   }
 
   async function openUser(target: User) {
@@ -724,7 +768,7 @@
     go('/sign-in');
   }
 
-  type UserAction = 'disable' | 'enable' | 'role' | 'revoke-sessions' | 'password';
+  type UserAction = 'disable' | 'enable' | 'role' | 'revoke-sessions' | 'password' | 'one-time-password';
 
   function ask(action: UserAction) {
     if (!selected) {
@@ -772,6 +816,12 @@
         label: t('set_password'),
         destructive: false,
       },
+      'one-time-password': {
+        title: t('one_time_password_reset_confirm', { value1: who }),
+        detail: t('one_time_password_reset_detail', { value1: who, value2: progress }),
+        label: t('one_time_password_reset_action'),
+        destructive: true,
+      },
     } satisfies Record<UserAction, Omit<Pending, 'confirm'>>;
 
     pending = { ...choices[action], confirm: () => mutate(action) };
@@ -788,7 +838,7 @@
     }
 
     const result = await api(
-      userSchema,
+      issuedUserSchema,
       `/api/manage/users/${selected.player_id}/${action}`,
       action === 'role' ? 'PUT' : 'POST',
       {
@@ -802,7 +852,19 @@
     targetPassword = '';
     targetConfirm = '';
     await loadUsers();
-    users = users.map((r) => (r.player_id === result.player_id ? { ...r, ...result } : r));
+    const { one_time_password: code, ...updated } = result;
+    users = users.map((r) => (r.player_id === updated.player_id ? { ...r, ...updated } : r));
+
+    if (action === 'one-time-password') {
+      await reveal(updated.player_id, code);
+
+      return;
+    }
+
+    // A password set by hand replaces the one-time password, so the slip no longer applies.
+    if (action === 'password') {
+      handoff = null;
+    }
 
     const messages = {
       disable: result.completion_deadline ? t('user_disabled_ride_hint') : t('user_disabled_notice'),
@@ -810,17 +872,22 @@
       role: result.role === 'administrator' ? t('administrator_role_given') : t('administrator_role_removed'),
       'revoke-sessions': t('signed_out_everywhere'),
       password: t('password_set'),
-    } satisfies Record<UserAction, string>;
+    } satisfies Record<Exclude<UserAction, 'one-time-password'>, string>;
 
     done(messages[action]);
   }
 
-  /** Readable at a glance and over the phone: no 0, 1, I or O. 60 random bits in three groups. */
-  function oneTimeCode() {
-    const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const letters = [...crypto.getRandomValues(new Uint8Array(12))].map((byte) => alphabet[byte & 31]).join('');
+  /** Shows the server's one-time password. A retried request gets no password back, so the reply was lost. */
+  async function reveal(player: number, code: string | undefined) {
+    if (!code) {
+      handoff = null;
+      done(t('one_time_password_lost'));
 
-    return (letters.match(/.{4}/g) ?? []).join('-');
+      return;
+    }
+    handoff = { player_id: player, code };
+    await tick();
+    handoffTitle?.focus();
   }
 
   async function create() {
@@ -831,15 +898,10 @@
       throw new Error(t('form_validation_error'));
     }
 
-    const created = await api(userSchema, '/api/manage/users', 'POST', {
+    const names = { username: newLogin, first_name: newFirst, last_name: newLast };
+    const { one_time_password: code, ...created } = await api(issuedUserSchema, '/api/manage/users', 'POST', {
       operation,
-      user: {
-        username: newLogin,
-        password: oneTime ? newCode : newPassword,
-        first_name: newFirst,
-        last_name: newLast,
-        ...(oneTime && { one_time: true }),
-      },
+      user: oneTime ? { ...names, one_time: true } : { ...names, password: newPassword },
     });
 
     newFirst = '';
@@ -847,23 +909,14 @@
     newLogin = '';
     newPassword = '';
     newConfirm = '';
-    copiedCode = false;
-    handoff = oneTime ? { player_id: created.player_id, code: newCode } : null;
-    newCode = oneTimeCode();
     await loadUsers();
     await openUser(created);
 
-    if (!oneTime) {
+    if (oneTime) {
+      await reveal(created.player_id, code);
+    } else {
       done(t('setup_user_enabled', { value1: name(created) }));
     }
-  }
-
-  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the code is there to select. */
-  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
-
-  async function copyCode(code: string) {
-    await navigator.clipboard.writeText(code);
-    copiedCode = true;
   }
 
   /** Replacing the one-time password ends the session, so sign in again with the new one. */
@@ -1088,6 +1141,7 @@
     if (e.key !== 'Escape' || busy) return;
 
     if (pending) pending = null;
+    else if (removing) removing = null;
     else if (changing) closePassword();
     else if (regenerating) closeRegenerate();
   }}
@@ -1182,7 +1236,9 @@
         {/if}
       </aside>
     {/if}
-    {#if message && !changing}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>{message}</p>{/if}
+    {#if message && !changing && !removing}<p class="notice" class:failed role={failed ? 'alert' : 'status'}>
+        {message}
+      </p>{/if}
 
     {#if loading}<span class="loading-status" role="status">{t('loading')}</span>
     {:else if !user}
@@ -1773,16 +1829,20 @@
 
             {#if handoff && handoff.player_id === selected.player_id}
               <section class="panel handoff" aria-labelledby="handoff-title">
-                <h2 id="handoff-title">{t('one_time_password')}</h2>
+                <h2 id="handoff-title" tabindex="-1" bind:this={handoffTitle}>
+                  {t('one_time_password_for', { value1: label(selected) })}
+                </h2>
                 <p class="lead">{t('one_time_password_handoff', { value1: label(selected) })}</p>
-                <p class="code">
-                  {#each handoff.code.split('-') as group, i (i)}{#if i}<span class="dash">-</span>{/if}{group}{/each}
-                </p>
-                <p class="muted">{t('one_time_password_shown_once')}</p>
+                {#key handoff.code}
+                  <p class="code">
+                    {#each handoff.code.split('') as char, i (i)}<span class:dash={char === '-'} style:--i={i}
+                        >{char}</span
+                      >{/each}
+                  </p>
+                {/key}
+                <p class="once">{t('one_time_password_shown_once')}</p>
                 <div class="actions">
-                  {#if canCopy}<button type="button" class="primary" onclick={() => copyCode(handoff!.code)}
-                      >{copiedCode ? t('copied') : t('copy')}</button
-                    >{/if}
+                  <CopyButton text={handoff.code} class="primary" />
                   <button
                     type="button"
                     onclick={() => {
@@ -1830,30 +1890,47 @@
                   class:password-needed={!selected.has_password}
                   onsubmit={(e) => {
                     e.preventDefault();
-                    ask('password');
+                    ask(targetMethod === 'one-time' ? 'one-time-password' : 'password');
                   }}
                 >
                   <h2>{selected.has_password ? t('password') : t('set_a_password')}</h2>
                   {#if !selected.has_password}<p class="muted">{t('password_required_hint')}</p>{/if}
-                  <TextField
-                    id="target-password"
-                    label={t('new_password')}
-                    password
-                    bind:value={targetPassword}
-                    autocomplete="new-password"
-                    required
-                    errors={errors('password', 'password')}
-                  />
-                  <TextField
-                    id="target-confirm"
-                    label={t('confirm_password')}
-                    password
-                    bind:value={targetConfirm}
-                    autocomplete="new-password"
-                    required
-                    errors={errors('password', 'confirm')}
-                  />
-                  <button disabled={busy}>{t('set_password')}</button>
+                  <div class="choice" role="radiogroup" aria-label={t('password')}>
+                    <label class:checked={targetMethod === 'one-time'}
+                      ><input type="radio" bind:group={targetMethod} value="one-time" /> {t('one_time_password')}</label
+                    >
+                    <label class:checked={targetMethod === 'set'}
+                      ><input type="radio" bind:group={targetMethod} value="set" /> {t('set_a_password')}</label
+                    >
+                  </div>
+                  {#if targetMethod === 'one-time'}
+                    <p class="muted">
+                      {selected.password_change_required && !handoff
+                        ? t('one_time_password_pending_hint', { value1: label(selected) })
+                        : t('one_time_password_reset_hint', { value1: label(selected) })}
+                    </p>
+                    <button disabled={busy}>{t('one_time_password_reset_action')}</button>
+                  {:else}
+                    <TextField
+                      id="target-password"
+                      label={t('new_password')}
+                      password
+                      bind:value={targetPassword}
+                      autocomplete="new-password"
+                      required
+                      errors={errors('password', 'password')}
+                    />
+                    <TextField
+                      id="target-confirm"
+                      label={t('confirm_password')}
+                      password
+                      bind:value={targetConfirm}
+                      autocomplete="new-password"
+                      required
+                      errors={errors('password', 'confirm')}
+                    />
+                    <button disabled={busy}>{t('set_password')}</button>
+                  {/if}
                 </form>
               {:else}
                 <section class="panel">
@@ -1903,6 +1980,18 @@
                 </ul>
               </section>
             </div>
+
+            {#if selected.player_id !== user.player_id}
+              <section class="panel delete-user" aria-labelledby="delete-user-heading">
+                <div>
+                  <h2 id="delete-user-heading">{t('user_delete_heading')}</h2>
+                  <p class="muted">{t('user_delete_hint')}</p>
+                </div>
+                <button class="danger" disabled={busy} onclick={() => run(openDelete, 'delete')}
+                  >{t('user_delete_action')}</button
+                >
+              </section>
+            {/if}
           {:else if !busy}
             <p class="empty">{t('user_not_found')} {@render link('/manage', 'Show all users', false)}</p>
           {/if}
@@ -2244,6 +2333,27 @@
   </div>
 {/if}
 
+{#if removing && selected}
+  {@const target = selected}
+  <div class="scrim">
+    <DeleteUser
+      who={target}
+      name={label(target)}
+      initials={initials(target)}
+      photo={target.avatar !== null ? `/api/manage/users/${target.player_id}/avatar?v=${target.avatar}` : null}
+      footprint={removing}
+      {busy}
+      error={failed && errorScope === 'delete' ? message : ''}
+      onconfirm={(username) => run(() => removeUser(username), 'delete')}
+      oncancel={() => (removing = null)}
+      ondisable={() => {
+        removing = null;
+        ask('disable');
+      }}
+    />
+  </div>
+{/if}
+
 {#if pending}
   <div class="scrim">
     <div
@@ -2405,30 +2515,51 @@
   .handoff {
     outline: 2px solid var(--orange);
   }
-  .handoff .lead {
-    margin-bottom: 0.75rem;
+  .handoff h2:focus {
+    outline: none;
   }
+  .handoff .lead {
+    margin-bottom: 0.9rem;
+  }
+  /* Fifteen characters in three groups of five: big enough to read aloud across a room. */
   .code {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 0.15em;
     width: fit-content;
     max-width: 100%;
-    margin: 0 0 0.75rem;
-    padding: 0.7rem 1.1rem;
+    margin: 0 0 0.6rem;
+    padding: 0.75rem 1.2rem;
     border: 2px dashed rgb(255 255 255 / 0.3);
     border-radius: 10px;
     background: var(--well);
-    font-size: clamp(1.4rem, 6vw, 2rem);
+    font-size: clamp(1.25rem, 5.4vw, 2.1rem);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     line-height: 1.2;
     user-select: all;
   }
+  /* The password resolves out of a blur one character at a time, once, as the server hands it over. */
+  .code span {
+    display: inline-block;
+    animation: resolve 260ms calc(var(--i) * 24ms) both cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
   .code .dash {
+    padding: 0 0.12em;
     color: var(--orange);
+  }
+  @keyframes resolve {
+    from {
+      opacity: 0;
+      filter: blur(6px);
+      transform: translateY(0.18em);
+    }
+  }
+  .once {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-size: 0.875rem;
   }
   .choose .lead {
     margin-top: 0;
@@ -2500,6 +2631,9 @@
   @media (prefers-reduced-motion: reduce) {
     .change {
       transition: none;
+    }
+    .code span {
+      animation: none;
     }
   }
   .inset {
@@ -2811,6 +2945,29 @@
   }
   .access button {
     margin: 0;
+  }
+  /* Set apart from access: the account goes, not just the way in. */
+  .delete-user {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem 1.5rem;
+  }
+  .delete-user h2 {
+    margin-bottom: 0.35rem;
+  }
+  .delete-user p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+  .delete-user button {
+    margin: 0;
+  }
+  @media (max-width: 500px) {
+    .delete-user {
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
   }
 
   /* Status uses text and color together, never color alone. */

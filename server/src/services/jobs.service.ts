@@ -11,6 +11,8 @@ export type JobHandler = {
   concurrency: number;
   attempts: number;
   timeoutMs: number;
+  /** Job types that must not run while this one runs, in either order. */
+  excludes?: ReadonlyArray<JobType>;
   /** Runs to the end: a timeout, a lost lease or a stop aborts `job.signal` instead of interrupting. */
   run: (job: RunningJob) => Effect.Effect<void, unknown>;
 };
@@ -31,6 +33,16 @@ const make = Effect.gen(function* () {
 
   const paused = (type: JobType) =>
     type === 'delivery' && repositories.systemFlagsRepository.get(SystemFlag.UploadPause) !== null;
+
+  /** A running job of a type that excludes this one, or that this one excludes. */
+  const excluded = (type: JobType) =>
+    handlers
+      .entries()
+      .some(
+        ([other, handler]) =>
+          (active.get(other) ?? 0) > 0 &&
+          (handler.excludes?.includes(type) === true || handlers.get(type)?.excludes?.includes(other) === true),
+      );
 
   /** Poll soon, after the current transaction commits. Kicks in one turn share one poll. */
   function kick() {
@@ -61,7 +73,7 @@ const make = Effect.gen(function* () {
         continue;
       }
 
-      while ((active.get(type) ?? 0) < handler.concurrency) {
+      while ((active.get(type) ?? 0) < handler.concurrency && !excluded(type)) {
         const claim = jobs.claim(type, leaseMs);
 
         if (!claim) {

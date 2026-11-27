@@ -83,6 +83,8 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     Effect.gen(function* () {
       const activitiesService = yield* ActivitiesService;
 
+      const rideCompletionService = yield* RideCompletionService;
+
       const user = authenticated(c);
       const id = BigInt(c.req.param('activityId'));
 
@@ -100,6 +102,7 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
 
       if (c.req.method === 'DELETE') {
         yield* activitiesService.deleteActivity(id, user.player_id);
+        yield* rideCompletionService.end(user.player_id, id);
         runtime.world.logout(BigInt(user.player_id), 'activity_finished');
 
         return c.text('true');
@@ -119,6 +122,11 @@ export function activityRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           throw new HTTPException(401);
         }
       });
+
+      if (finish) {
+        // The final save happened, now or in an earlier request: the web app may delete the ride.
+        yield* rideCompletionService.end(user.player_id, id);
+      }
 
       if (finish && outcome !== 'unchanged') {
         runtime.world.logout(BigInt(user.player_id), 'activity_finished');

@@ -28,8 +28,13 @@ const newUserFields = {
   last_name: Schema.Trim.check(Schema.isMaxLength(50)),
 };
 
-/** One-time: the rider must choose their own password at their first sign-in to the web app. */
-export const newUser = Strict({ ...newUserFields, one_time: Schema.optional(Schema.Boolean) });
+const { password: _password, ...oneTimeFields } = newUserFields;
+
+/** One-time: the server makes the password, and the rider chooses their own at their first sign-in to the web app. */
+export const newUser = Schema.Union([
+  Strict(newUserFields),
+  Strict({ ...oneTimeFields, one_time: Schema.Literal(true) }),
+]);
 
 export const setupRequest = Schema.Union([
   Strict({ ...newUserFields, mode: Schema.Literal('new'), key: Schema.String.check(Schema.isMaxLength(200)) }),
@@ -51,6 +56,13 @@ export const mutationRequest = Strict({
   operation: Schema.String.check(Schema.isUUID()),
   password: Schema.optional(password),
   role: Schema.optional(Schema.Literals(['rider', 'administrator'])),
+});
+
+/** The administrator types the login name: deleting cannot be undone. */
+export const deleteUserRequest = Strict({
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  operation: Schema.String.check(Schema.isUUID()),
+  username: Schema.String,
 });
 
 export const editUserRequest = Strict({

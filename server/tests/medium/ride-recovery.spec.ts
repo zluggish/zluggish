@@ -6,12 +6,14 @@ import { GhostSchema, PlayerStateSchema } from '#src/protocol/generated/udp-node
 import { RideRecoveryService } from '#src/services/ride-recovery.service';
 import { World, worldTime } from '#src/world/state';
 import { binary, mediumFixture } from '#tests/medium/support';
-import { create, fromBinary } from '@bufbuild/protobuf';
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync, truncateSync, utimesSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { StateHistory } from '#src/world/state-history';
+import { RideRecoveryRepository } from '#src/repositories/ride-recovery.repository';
 import { Effect, Layer, Schema } from 'effect';
 
 const sample = (id: bigint, index: number, courseId = 6) =>
@@ -23,6 +25,8 @@ const sample = (id: bigint, index: number, courseId = 6) =>
     aux3: 1 << 8,
     distance: index * 30,
   });
+
+const encoded = (index: number) => toBinary(PlayerStateSchema, sample(1n, index));
 
 async function riding(t: Parameters<typeof mediumFixture>[0]) {
   const f = await mediumFixture(t);
@@ -61,6 +65,43 @@ await test('checkpoints append only new samples; a cut last record is ignored', 
   truncateSync(path, readFileSync(path).length - 3);
   const cut = await f.effects.runSync(RideRecoveryService).recordings.read(f.rider.player_id);
   assert.equal(cut?.states.length, 14);
+});
+
+await test('after a crash cuts the last record, the next process appends after the complete ones', async (t) => {
+  const storage = mkdtempSync(resolve(tmpdir(), 'zluggish-recovery-'));
+  t.after(() => rmSync(storage, { recursive: true, force: true }));
+  const before = new RideRecoveryRepository(storage, 1_000_000);
+  await before.append(1, [encoded(0), encoded(1)]);
+  const path = before.path(1);
+  truncateSync(path, readFileSync(path).length - 3);
+
+  const after = new RideRecoveryRepository(storage, 1_000_000);
+  await after.append(1, [encoded(2), encoded(3)]);
+  await after.append(1, [encoded(4)]);
+  const recorded = await after.read(1);
+  assert.deepEqual(
+    recorded?.states.map((state) => state.distance),
+    [0, 2, 3, 4].map((index) => index * 30),
+  );
+});
+
+await test('a failed checkpoint writes its samples at the next one', async (t) => {
+  const { f, id } = await riding(t);
+  const { recordings } = f.effects.runSync(RideRecoveryService);
+  ride(f.world, id, 0, 5);
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  ride(f.world, id, 5, 10);
+  const failing = t.mock.method(recordings, 'append', () => Promise.reject(new Error('disk full')));
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  assert.equal(failing.mock.callCount(), 1);
+  failing.mock.restore();
+  ride(f.world, id, 10, 12);
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
+  const recorded = await recordings.read(f.rider.player_id);
+  assert.deepEqual(
+    recorded?.states.map((state) => state.distance),
+    Array.from({ length: 12 }, (_, index) => index * 30),
+  );
 });
 
 await test('a restarted server resumes a recent ride on the same course and its ghost keeps every sample', async (t) => {
@@ -160,6 +201,11 @@ await test('a connection end neither completes nor uploads a ride, and keeps the
   assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM job').get()?.n, 0);
 
   f.world.logout(id, 'activity_finished');
+  await f.effects.runSync(RideRecoveryService).recordings.idle();
+  assert.equal(existsSync(path), false);
+
+  // The next checkpoint does not record the finished ride again.
+  await f.effects.runPromise(RideRecoveryService.use((service) => service.checkpoint()));
   await f.effects.runSync(RideRecoveryService).recordings.idle();
   assert.equal(existsSync(path), false);
 });

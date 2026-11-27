@@ -820,6 +820,23 @@ const make = Effect.gen(function* () {
       },
     });
 
+    // A deleted rider's folder: activities, exports, media and the avatar. Player IDs
+    // are never reused, so the folder cannot belong to a newer rider.
+    register('rider_cleanup', {
+      concurrency: 1,
+      attempts: 5,
+      timeoutMs: 300_000,
+      run: async (job) => {
+        const player = job.number('playerId');
+
+        if (context.accounts.get(player)) {
+          return;
+        }
+
+        await repositories.filesRepository.removeTreeAsync(context.profiles.folder(player));
+      },
+    });
+
     // Legacy completions finished by the storage migration create their deliveries at
     // runtime, where the operator configuration is known.
     register('completion_deliveries', {
