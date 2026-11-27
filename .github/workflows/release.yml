@@ -1,0 +1,121 @@
+name: release
+
+# Push a tag such as v0.0.1 on a commit from main to publish the container image and the GitHub release.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-26.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag matches server/package.json
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          package_version="$(jq -r .version server/package.json)"
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::Tag $TAG does not match server/package.json version $package_version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release tags must point to a commit on main."
+            exit 1
+          fi
+
+  image:
+    needs: verify
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 0.0.1 is tagged 0.0.1 and 0.0. Prereleases get only their full version. latest stays on main.
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/zluggish
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./server/Dockerfile
+          target: server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    needs: [verify, image]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/zluggish
+        run: |
+          args=(--verify-tag --title "$TAG" --generate-notes)
+          # The upstream zoffline tags have no releases, so the notes start at the previous Zluggish release.
+          previous="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')"
+          if [[ -n "$previous" ]]; then
+            args+=(--notes-start-tag "$previous")
+          fi
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          printf 'Container image: `%s:%s`\n\nRead the [CHANGELOG](https://github.com/%s/blob/%s/CHANGELOG) before updating.\n' \
+            "$IMAGE" "$VERSION" "$GH_REPO" "$TAG" > notes.md
+          gh release create "$TAG" "${args[@]}" --notes-file notes.md

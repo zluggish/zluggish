@@ -101,6 +101,24 @@ mise exec -- pnpm --filter @zluggish/landing deploy:dry-run
 
 The dry runs build the sites and validate their Cloudflare packages without deploying.
 
+## Publish a release
+
+Releases use [semantic versioning](https://semver.org/). The version lives in `server/package.json`.
+
+1. In a pull request, set `version` in `server/package.json` and add any steps server admins must take to `CHANGELOG`. Merge it.
+2. Tag the merge commit on `main` and push the tag:
+
+   ```sh
+   git switch main && git pull
+   git tag -a v0.0.1 -m v0.0.1
+   git push origin v0.0.1
+   ```
+
+The `release` workflow checks that the tag matches `server/package.json` and points to a commit on `main`. It then
+publishes `ghcr.io/zluggish/zluggish:0.0.1` and `:0.0` for amd64 and arm64 and creates the GitHub release with notes
+generated from the merged pull requests. A tag with a suffix, such as `v0.1.0-rc.1`, becomes a prerelease and gets only
+its full version tag. The `latest` image tag keeps following `main`.
+
 ## Edit interface text
 
 English messages live in `i18n/en.json`. Reuse a key when its meaning and wording match. For new messages, add a flat `snake_case` key and use the existing `t()` helper. Keep full sentences together and supply values for any placeholders. For example, `t('key', { value1: count })` fills `{value1}` in the catalog.
