@@ -19,6 +19,8 @@ export interface Database {
     enabled: Generated<Integer>;
     revision: Generated<Integer>;
     password_change_required: Generated<Integer>;
+    /** Epoch milliseconds of the last sign-in, in the game or the web app. */
+    last_login: Generated<NullableInteger>;
   };
   web_setup_state: { id: number; state: 'unclaimed' | 'complete' };
   management_operation: {

@@ -151,3 +151,8 @@ DROP TABLE IF EXISTS access_gateway;
 export const passwordChangeSQL = `
 ALTER TABLE user ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0 CHECK(password_change_required IN (0,1));
 `;
+
+// Version 16: when each rider last signed in, in the game or the web app, for the administrator's user list.
+export const lastLoginSQL = `
+ALTER TABLE user ADD COLUMN last_login INTEGER;
+`;

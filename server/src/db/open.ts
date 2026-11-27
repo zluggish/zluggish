@@ -10,6 +10,7 @@ import {
   createSchemaSQL,
   dropManagementAuditSQL,
   indexesSQL,
+  lastLoginSQL,
   passwordChangeSQL,
   storageSchemaSQL,
   webSessionSQL,
@@ -43,6 +44,7 @@ const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: strin
   { version: 13, up: () => {} },
   { version: 14, up: (db) => db.exec(dropAccessGatewaySQL) },
   { version: 15, up: (db) => db.exec(passwordChangeSQL) },
+  { version: 16, up: (db) => db.exec(lastLoginSQL) },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;

@@ -52,6 +52,29 @@ export class ManagementRepository {
     }
   }
 
+  /** When each rider last signed in and last started an activity, for the user list. */
+  recency() {
+    const rows = this.executor.all(
+      query.selectFrom('user').select((eb) => [
+        'player_id',
+        'last_login',
+        eb
+          .selectFrom('activity')
+          .select((inner) => inner.fn.max<string | null>('start_date').as('start'))
+          .whereRef('activity.player_id', '=', 'user.player_id')
+          .as('last_ride'),
+      ]),
+    );
+
+    return new Map(
+      rows.map((row) => {
+        const ride = Date.parse(row.last_ride ?? '');
+
+        return [row.player_id, { last_login: row.last_login, last_ride: Number.isNaN(ride) ? null : ride }];
+      }),
+    );
+  }
+
   /** What deleting a rider removes, for the confirmation the administrator reads first. */
   footprint(player: number) {
     const row = this.executor.get(

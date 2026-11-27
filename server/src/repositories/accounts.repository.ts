@@ -88,6 +88,10 @@ export class AccountsRepository {
     return this.list().filter((rider) => normalizeLoginName(rider.username) === wanted);
   }
 
+  recordLogin(id: number, now: number) {
+    this.executor.run(query.updateTable('user').set({ last_login: now }).where('player_id', '=', id));
+  }
+
   insert(rider: Insertable<Database['user']>) {
     return this.executor.run(query.insertInto('user').values(rider));
   }

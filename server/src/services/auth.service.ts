@@ -44,6 +44,11 @@ function open(storage: string) {
     return repository.byUsername(username);
   }
 
+  /** Store the sign-in time. It does not edit the account, so the revision stays the same. */
+  function recordLogin(id: number) {
+    repository.recordLogin(id, Date.now());
+  }
+
   function loginNameTaken(username: string, except?: number) {
     return repository.sameLoginName(username).some((rider) => rider.player_id !== except);
   }
@@ -178,6 +183,7 @@ function open(storage: string) {
     list,
     get,
     byUsername,
+    recordLogin,
     loginNameTaken,
     identityOf,
     identity,

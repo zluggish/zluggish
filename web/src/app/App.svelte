@@ -320,6 +320,29 @@
 
   const initials = (r: User) => `${r.first_name.charAt(0)}${r.last_name.charAt(0)}`.toUpperCase();
   const time = (value: number) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // The message catalog is English, so the relative time is English too.
+  const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  const steps = [
+    { unit: 'minute', ms: 60_000, below: 60 },
+    { unit: 'hour', ms: 3_600_000, below: 24 },
+    { unit: 'day', ms: 86_400_000, below: 30 },
+    { unit: 'month', ms: 2_629_800_000, below: 12 },
+  ] as const;
+  const year = { unit: 'year', ms: 31_557_600_000 } as const;
+  /** How long ago, in the largest whole unit: "3 hours ago", "yesterday". */
+  const ago = (value: number, now = Date.now()) => {
+    const elapsed = Math.max(0, now - value);
+
+    if (elapsed < 60_000) {
+      return t('user_just_now');
+    }
+    const step = steps.find(({ ms, below }) => elapsed / ms < below) ?? year;
+
+    return relative.format(-Math.floor(elapsed / step.ms), step.unit);
+  };
+  const stamp = (value: number) => new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  /** Dates more than 30 days old show in the muted color. */
+  const stale = (value: number | null | undefined) => !value || Date.now() - value > 30 * 86_400_000;
   const errors = (scope: string, field: string) => (errorScope === scope ? (fieldErrors[field] ?? []) : []);
 
   async function api<Schema extends z.ZodType>(
@@ -1156,12 +1179,36 @@
     }}>{label}</a
   >{/snippet}
 
-{#snippet chips(r: User)}
+{#snippet chips(r: User, listed = false)}
   {#if r.role === 'administrator'}<span class="chip admin">{t('administrator')}</span>{/if}
   {#if !r.enabled}<span class="chip muted">{t('user_disabled_status')}</span>{/if}
   {#if !r.has_password}<span class="chip alarm">{t('no_password')}</span>{/if}
   {#if r.password_change_required}<span class="chip pending">{t('one_time_password')}</span>{/if}
-  {#if r.connected}<span class="chip riding">{t('riding_now')}</span>{/if}
+  {#if r.connected && !listed}<span class="chip riding">{t('riding_now')}</span>{/if}
+{/snippet}
+
+<!-- In the user list, a rider who is out riding shows Riding now in place of the last ride, without a separate chip. -->
+{#snippet recency(r: User, live = true)}
+  <span class="recency">
+    {#if r.connected}
+      {#if live}<span class="live">{t('riding_now')}</span>{/if}
+    {:else if r.last_ride}
+      <time class:quiet={stale(r.last_ride)} datetime={new Date(r.last_ride).toISOString()} title={stamp(r.last_ride)}
+        >{t('user_last_ride', { value1: ago(r.last_ride) })}</time
+      >
+    {:else}
+      <span class="quiet">{t('user_never_rode')}</span>
+    {/if}
+    {#if r.last_login}
+      <time
+        class:quiet={stale(r.last_login)}
+        datetime={new Date(r.last_login).toISOString()}
+        title={stamp(r.last_login)}>{t('user_last_login', { value1: ago(r.last_login) })}</time
+      >
+    {:else}
+      <span class="quiet">{t('user_never_logged_in')}</span>
+    {/if}
+  </span>
 {/snippet}
 
 {#snippet menu()}
@@ -1803,6 +1850,9 @@
                   <span class="chip muted num">{t('player_id', { value1: selected.player_id })}</span>
                   {@render chips(selected)}
                 </p>
+                {#if selected.last_login !== undefined}
+                  <p class="seen">{@render recency(selected, false)}</p>
+                {/if}
                 {#if access?.configured}
                   {@const groups = groupsOf(access, selected.player_id)}
                   {@const own = access.ownEmail.find((row) => row.playerId === selected.player_id)}
@@ -2036,7 +2086,9 @@
                       name={label(r)}
                       detail={r.username}
                     /></span
-                  ><span class="facts">{@render chips(r)}</span><span class="num muted id">#{r.player_id}</span><svg
+                  ><span class="facts">{@render chips(r, true)}</span>{#if r.last_login !== undefined}{@render recency(
+                      r,
+                    )}{/if}<span class="num muted id">#{r.player_id}</span><svg
                     class="go"
                     viewBox="0 0 24 24"
                     aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" /></svg
@@ -2632,7 +2684,8 @@
     .change {
       transition: none;
     }
-    .code span {
+    .code span,
+    .recency .live::before {
       animation: none;
     }
   }
@@ -2884,6 +2937,52 @@
     margin: 0;
     max-width: none;
   }
+  /* Last ride above last sign-in. The fixed width lines the dates up from row to row. */
+  .recency {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    width: 11.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+  .recency .quiet {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .recency time {
+    font-variant-numeric: tabular-nums;
+  }
+  .recency .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 800;
+  }
+  .recency .live::before {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--orange);
+    box-shadow: 0 0 0 0 rgb(226 86 12 / 0.6);
+    animation: live 2.4s ease-out infinite;
+  }
+  @keyframes live {
+    70%,
+    100% {
+      box-shadow: 0 0 0 0.4rem rgb(226 86 12 / 0);
+    }
+  }
+  .seen {
+    margin-top: 0.5rem;
+  }
+  .seen .recency {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0 1rem;
+  }
   /* The user page opens like the profile card in the game: the circle in Zwift orange, then who they are. */
   .summary {
     display: flex;
@@ -3103,6 +3202,18 @@
     }
     a.user .id,
     .go {
+      display: none;
+    }
+    a.user .recency {
+      flex: 1 0 100%;
+      order: 1;
+      width: auto;
+      padding-left: 3.25rem;
+    }
+    a.user .facts {
+      order: 2;
+    }
+    a.user .facts:not(:has(.chip)) {
       display: none;
     }
     .summary {

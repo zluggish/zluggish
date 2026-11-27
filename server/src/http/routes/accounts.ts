@@ -462,6 +462,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
           maxAge: 86_400,
         });
 
+        accounts.recordLogin(user.player_id);
         runtime.world.lifecycle.log.info('auth.login_succeeded', 'User logged in', {
           playerId: user.player_id,
           flow: 'browser',
@@ -667,6 +668,7 @@ export function accountRoutes(app: Hono<RuntimeEnv>, runtime: Runtime) {
     const result = sessions.tokens(user, runtime.tokens);
 
     if (form.username) {
+      accounts.recordLogin(user.player_id);
       runtime.world.lifecycle.log.info('auth.login_succeeded', 'User logged in', {
         playerId: user.player_id,
         flow: 'credentials',
