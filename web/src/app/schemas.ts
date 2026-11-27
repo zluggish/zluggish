@@ -19,6 +19,9 @@ export const userSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 
+/** A user the server just gave a one-time password. It is in this response only, never again. */
+export const issuedUserSchema = userSchema.extend({ one_time_password: z.string().optional() });
+
 export const setupUserSchema = userSchema.pick({
   player_id: true,
   username: true,

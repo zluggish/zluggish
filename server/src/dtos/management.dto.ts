@@ -28,8 +28,13 @@ const newUserFields = {
   last_name: Schema.Trim.check(Schema.isMaxLength(50)),
 };
 
-/** One-time: the rider must choose their own password at their first sign-in to the web app. */
-export const newUser = Strict({ ...newUserFields, one_time: Schema.optional(Schema.Boolean) });
+const { password: _password, ...oneTimeFields } = newUserFields;
+
+/** One-time: the server makes the password, and the rider chooses their own at their first sign-in to the web app. */
+export const newUser = Schema.Union([
+  Strict(newUserFields),
+  Strict({ ...oneTimeFields, one_time: Schema.Literal(true) }),
+]);
 
 export const setupRequest = Schema.Union([
   Strict({ ...newUserFields, mode: Schema.Literal('new'), key: Schema.String.check(Schema.isMaxLength(200)) }),

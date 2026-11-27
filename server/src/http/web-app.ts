@@ -924,7 +924,7 @@ export function createWebApp(runtime: HttpRuntime) {
     }),
   );
 
-  for (const action of ['password', 'disable', 'enable', 'revoke-sessions', 'role']) {
+  for (const action of ['password', 'one-time-password', 'disable', 'enable', 'revoke-sessions', 'role']) {
     appRoutes.on(action === 'role' ? 'PUT' : 'POST', `/api/manage/users/:id/${action}`, (c) =>
       Effect.gen(function* () {
         const managementService = yield* ManagementService;
