@@ -162,6 +162,17 @@ const make = Effect.gen(function* () {
     }
   }
 
+  /** The game saved or discarded this activity for the last time: it no longer blocks deletion. */
+  function end(player: number, activity: bigint) {
+    if (active.get(player)?.activity === activity) {
+      active.delete(player);
+    }
+
+    if (permissions.get(player)?.activity === activity) {
+      permissions.delete(player);
+    }
+  }
+
   /** Whether the game may still save this activity, so deleting it now would lose the ride. */
   function riding(player: number, activity: bigint) {
     return active.get(player)?.activity === activity || permissions.get(player)?.activity === activity;
@@ -278,6 +289,10 @@ const make = Effect.gen(function* () {
 
     cancel: Effect.fn('RideCompletionService.cancel')(function* (player: number, close: boolean = true) {
       return cancel(player, close);
+    }),
+
+    end: Effect.fn('RideCompletionService.end')(function* (player: number, activity: bigint) {
+      return end(player, activity);
     }),
 
     riding: Effect.fn('RideCompletionService.riding')(function* (player: number, activity: bigint) {
