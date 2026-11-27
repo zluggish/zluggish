@@ -373,22 +373,6 @@
     padding: 0.45rem 0.9rem;
     font-size: 0.75rem;
   }
-  /* The way to do it by hand closes the steps, out of the way of riders who just run the script. */
-  .elsewhere {
-    margin: 1.5rem 0 0;
-    padding-top: 1rem;
-    border-top: 1px solid var(--line);
-    color: var(--muted);
-    font-size: 0.875rem;
-  }
-  .elsewhere a {
-    color: var(--muted);
-    text-decoration-thickness: 1px;
-    text-underline-offset: 3px;
-  }
-  .elsewhere a:hover {
-    color: var(--text);
-  }
   .walk {
     counter-reset: step;
     margin: 0;
