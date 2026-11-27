@@ -130,3 +130,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser
+
+  # Single required check: matrix jobs skipped by the paths filter never report their expanded
+  # names (e.g. "server (ubuntu-26.04)"), so branch protection requires this job instead.
+  required:
+    if: always()
+    needs: [changes, server, translations, quality, container, launcher-browser]
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
