@@ -8,7 +8,7 @@ description: Run the Zluggish admin CLI natively or with Docker Compose.
 
 The CLI manages the configuration, user settings, legacy migrations, account recovery and storage. It works directly on the configuration files and the storage. It does not connect to a running server, and it does not start one.
 
-Run the commands from the **repository root**. Replace the sample paths and the rider ID `1` with your values.
+Run the commands from the repository root. Replace the sample paths and the rider ID `1` with your values.
 
 :::warning[Stop the server first]
 

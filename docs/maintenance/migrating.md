@@ -5,13 +5,9 @@ description: Move from zwift-offline to Zluggish.
 
 # Migrate from zwift-offline
 
-Zluggish is a rework of the legacy zwift-offline app. The main differences are:
+Zluggish is a TypeScript rewrite of the legacy zwift-offline app. It adds a Svelte web app for users, server settings, activities and integrations, and it keeps accounts and settings in SQLite with a typed config file.
 
-- The code is written in TypeScript.
-- A Svelte web app manages users, server settings, activities and integrations.
-- The storage and the settings management are better.
-
-Zluggish tries to import and convert your storage automatically. Before a legacy conversion, it saves a gzip-compressed snapshot in `storage/backups/`. If the snapshot fails, the migration stops before changing the legacy data. Keep the earliest migration snapshot if you plan to roll back to zwift-offline.
+Zluggish converts the zwift-offline storage when it starts. Before a legacy conversion, it saves a gzip-compressed snapshot in `storage/backups/`. If the snapshot fails, the migration stops before changing the legacy data. Keep the earliest migration snapshot if you plan to roll back to zwift-offline.
 
 :::danger
 

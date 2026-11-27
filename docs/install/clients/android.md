@@ -5,9 +5,9 @@ description: Publish and install Zwift for Zluggish on Android and send game tra
 
 # Android
 
-**Zwift for Zluggish** is a patched Zwift app that lets you play Zwift on Android with Zluggish. It can be installed alongside the official Zwift app, and you don't need to root your device.
+**Zwift for Zluggish** is a patched Zwift app that lets you play Zwift on Android with Zluggish. It installs next to the official Zwift app and does not need a rooted device.
 
-If you just set up your Zluggish server, you must [download Zwift manually and let Zluggish patch it](#publish-zwift-for-android) before these instructions work..
+On a new server, an administrator must first [publish Zwift for Android](#publish-zwift-for-android).
 
 ## Install Zwift
 
@@ -19,11 +19,11 @@ If you just set up your Zluggish server, you must [download Zwift manually and l
 
 ## Update Zwift
 
-When there is a new app, the Zluggish administrator has to [upload the latest version to Zluggish](#publish-zwift-for-android), and then the patched version needs to be downloaded from there.
+When Zwift releases a new version, an administrator [publishes it on the server](#publish-zwift-for-android). Then download and install the new build from **Apps → Zwift → Android**.
 
 ## Modify Android DNS settings
 
-The Android DNS settings need to be manually patched for the app to work. There are several methods documented on the [DNS settings page](dns-settings.md), but the [Virtual Hosts](dns-settings.md#virtual-hosts-android) method is usually the best place to start
+The app reaches your server only if Android resolves the Zwift host names to it. The [DNS settings page](dns-settings.md) lists several ways to do this. [Virtual Hosts](dns-settings.md#virtual-hosts-android) is usually the easiest to start with.
 
 If Android's **Private DNS** setting bypasses your chosen DNS server, turn it off while you use the redirect. The redirect applies to both installed copies of Zwift. Disable it before using the official service.
 
@@ -31,7 +31,7 @@ If Android's **Private DNS** setting bypasses your chosen DNS server, turn it of
 
 An administrator does this once per app version.
 
-1. Manually download the **BUNDLE 1 OBB** variant of Zwift from [APKMirror](https://www.apkmirror.com/apk/zwift-inc/zwift/). You need the `.apkm` file.
+1. Download the **BUNDLE 1 OBB** variant of Zwift from [APKMirror](https://www.apkmirror.com/apk/zwift-inc/zwift/). You need the `.apkm` file.
 2. On the Zluggish server riders will connect to, open **Manage → Android apps → Zwift** as an administrator.
 3. Use **Upload Zwift** or drop the `.apkm` file on the upload area. Keep the page open until the upload finishes.
 4. Wait for Zluggish to patch and sign the app. The server builds it in the background and shows its progress on the same page.
