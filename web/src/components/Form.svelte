@@ -92,7 +92,9 @@
   }
 
   function clearMessage() {
-    if (!pending) submission = { kind: 'idle' };
+    if (!pending) {
+      submission = { kind: 'idle' };
+    }
   }
 
   function focusError() {
