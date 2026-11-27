@@ -29,7 +29,7 @@ function waitForReady(server) {
     const timer = setTimeout(() => finish(new Error(`Server readiness timeout after 60s\n${output}`)), 60_000);
     const stdout = (bytes) => {
       output += bytes;
-      if (output.includes('server.ready')) finish();
+      if (output.includes('INFO Server ready on ')) finish();
     };
     const stderr = (bytes) => {
       output += bytes;

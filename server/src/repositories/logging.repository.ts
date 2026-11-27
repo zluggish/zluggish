@@ -74,8 +74,12 @@ function safe(value: LogValue, seen = new WeakSet<object>(), depth = 0): Seriali
     return value.slice(0, 30).map((item) => safe(item, seen, depth + 1));
   }
 
+  return safeFields(value, seen, depth);
+}
+
+function safeFields(fields: Fields, seen: WeakSet<object>, depth: number): Record<string, Serialized> {
   return Object.fromEntries(
-    Object.entries(value)
+    Object.entries(fields)
       .slice(0, 30)
       .map(([key, item]) => [
         key,
@@ -91,17 +95,16 @@ function multiline(value: string) {
   return value.replaceAll(/[\u{0000}-\u{0008}\u{000B}-\u{001F}\u{007F}]/gu, ' ');
 }
 
-function fieldText(value: Serialized, includeStack: boolean, key = ''): string {
+function fieldText(value: Serialized, key = ''): string {
   if (value === undefined) {
     return '';
   }
 
   if (value !== null && typeof value === 'object') {
     const parts = Object.entries(value)
-      .filter(([name]) => includeStack || name !== 'stack')
       .map(([name, field]) => {
         const label = /^[\w-]+$/.test(name) ? name : inspect(name);
-        return fieldText(field, includeStack, key ? `${key}.${label}` : label);
+        return fieldText(field, key ? `${key}.${label}` : label);
       })
       .filter(Boolean);
 
@@ -112,6 +115,61 @@ function fieldText(value: Serialized, includeStack: boolean, key = ''): string {
     typeof value === 'string' && /^[\w./:@+\-[\]]+$/.test(value) ? value : inspect(value, { colors: false });
 
   return `${key}=${display}`;
+}
+
+// Only these details accompany the message in the console. The admin viewer can inspect the full entry.
+const consoleDetails = {
+  playerId: 'rider #{}',
+  activityId: 'activity #{}',
+  jobId: 'job #{}',
+  provider: '{}',
+  app: '{}',
+  version: 'v{}',
+  versionName: 'v{}',
+  java: 'Java {}',
+  outcome: '{}',
+  reason: '{}',
+  distanceMeters: '{} m',
+  elapsedSeconds: '{} s',
+  durationMs: '{} ms',
+  files: '{} files',
+  bytes: '{} bytes',
+  waiting: '{} waiting',
+  count: '{} total',
+  notAfter: 'expires {}',
+  error: '{}',
+} satisfies Record<string, string>;
+
+function consoleMessage(event: string, message: string, fields: Record<string, Serialized>) {
+  const { host, port, method, route, status, durationMs } = fields;
+
+  if (event === 'server.ready' && typeof host === 'string' && typeof port === 'number') {
+    return `Server ready on ${host.includes(':') ? `[${host}]` : host}:${port}`;
+  }
+
+  if (event === 'http.completed' && typeof method === 'string' && typeof route === 'string') {
+    return `${method} ${route} → ${status} (${durationMs} ms)`;
+  }
+
+  const details: Array<string> = [];
+
+  for (const [key, format] of Object.entries(consoleDetails)) {
+    const value = fields[key];
+
+    if (typeof value === 'number' || (typeof value === 'string' && value)) {
+      details.push(format.replace('{}', () => String(value)));
+    }
+  }
+
+  if (fields.counterReset === true) {
+    details.push('distance counter reset');
+  }
+
+  if (typeof fields.suppressed === 'number' && fields.suppressed > 0) {
+    details.push(`${fields.suppressed} repeats suppressed`);
+  }
+
+  return details.length > 0 ? `${message} (${details.join(', ')})` : message;
 }
 
 export class LoggingRepository {
@@ -179,12 +237,14 @@ export class LoggingRepository {
 
     try {
       const all = { ...this.context, ...fields };
-      const data = safe(all);
+      const data = safeFields(all, new WeakSet([all]), 0);
 
       const timestamp = (this.options.clock?.() ?? new Date()).toISOString();
-      const prefix = `${timestamp} ${level} ${safe(event)} ${safe(message)}`;
-      const historyFields = fieldText(data, true);
-      this.remember(historyFields ? `${prefix} ${historyFields}` : prefix);
+      const prefix = `${timestamp} ${level}`;
+      const summary = String(safe(message));
+      const header = `${prefix} ${safe(event)} ${summary}`;
+      const historyFields = fieldText(data);
+      this.remember(historyFields ? `${header} ${historyFields}` : header);
 
       // Text logs print each error the way Node does, stack and causes on their own lines.
       const traces = Object.values(all)
@@ -192,12 +252,9 @@ export class LoggingRepository {
         .map((error) => `\n${multiline(inspect(error, { depth: 4 })).slice(0, 10_000)}`)
         .join('');
 
-      const consoleFields = fieldText(data, false);
+      const line = `${prefix} ${consoleMessage(event, summary, data)}`;
       const details = diagnostics?.trimEnd();
-      this.sink(
-        `${consoleFields ? `${prefix} ${consoleFields}` : prefix}${details ? `\n${multiline(details)}` : ''}${traces}`,
-        level,
-      );
+      this.sink(`${line}${details ? `\n${multiline(details)}` : ''}${traces}`, level);
     } catch {
       // Logging must never interrupt a request, network callback, or shutdown.
     }

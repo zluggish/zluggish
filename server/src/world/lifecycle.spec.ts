@@ -34,7 +34,7 @@ await test('deduplicate transitions, throttle progress, and release state', () =
   tracker.end(42n, 'logout');
   tracker.end(42n, 'inactivity_timeout');
   tracker.close();
-  const events = lines.map((line) => line.split(' ', 3)[2]);
+  const events = tracker.log.recentEntries().map((line) => line.split(' ', 3)[2]);
   assert.equal(events.filter((event) => event === 'game.connected').length, 1);
   assert.equal(events.filter((event) => event === 'companion.registered').length, 1);
   assert.equal(events.filter((event) => event === 'ride.started').length, 2);
@@ -68,7 +68,7 @@ await test('disabled progress still cleans up; invalid packet diagnostics are bo
   assert.equal(lines.length, 2);
   tracker.end(1n, 'inactivity_timeout');
   assert.equal(tracker.rides.size, 0);
-  assert.doesNotMatch(lines.join('\n'), /ride.progress/);
+  assert.doesNotMatch(lines.join('\n'), /Ride progress/);
 });
 
 await test('world acceptance gates lifecycle events for stale, invalid and out-of-order state', () => {
@@ -112,5 +112,5 @@ await test('inactive handshakes expire without fabricating a ride', () => {
   tracker.prune();
   assert.equal(lines.length, 2);
   assert.match(lines[1]!, /inactivity_timeout/);
-  assert.doesNotMatch(lines.join('\n'), /ride.started|ride.ended/);
+  assert.doesNotMatch(lines.join('\n'), /Rider entered a ride|Ride ended/);
 });

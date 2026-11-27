@@ -29,7 +29,14 @@ At the default `INFO` level, the server logs:
 
 Routine HTTP requests show only at the `VERBOSE` level.
 
-Each line has a UTC timestamp, the level, an event name, a message and optional context such as `component=server status=401`. Error stacks and causes appear on separate lines in the console.
+Console lines start with a UTC timestamp and severity, followed by a short message. For example:
+
+```text
+2026-11-27T18:38:19.948Z INFO Server ready on 0.0.0.0:443
+2026-11-27T18:39:16.698Z VERBOSE POST /* → 401 (17 ms)
+```
+
+The web app’s server log viewer keeps event names and diagnostic fields, including request IDs. Error stacks and causes appear below the console message.
 
 `INFO` and `VERBOSE` go to stdout. Warnings and errors go to stderr. Use your process manager to keep and rotate the logs.
 
@@ -51,5 +58,4 @@ A Companion phone registration writes `companion.registered`. The Companion app 
 
 - `VERBOSE` request summaries use route templates. They do not include query strings or request bodies.
 - The server does not log credentials or packet contents.
-- Exceptions record their type. They do not record provider messages or stack traces, because these can contain credentials.
 - Player IDs identify users. The server does not log names or email addresses.

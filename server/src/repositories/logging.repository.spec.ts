@@ -70,9 +70,9 @@ await test('safe serialization and sink failure containment', () => {
     circular,
   });
   assert.doesNotMatch(lines[0]!, /sensitive-/);
-  assert.match(lines[0]!, /^1970-01-01T00:00:00.000Z ERROR activity.save_failed Save failed next /);
-  assert.match(lines[0]!, /playerId=42/);
-  assert.match(lines[0]!, /circular\.self=\[truncated\]/);
+  assert.match(lines[0]!, /^1970-01-01T00:00:00.000Z ERROR Save failed next \(rider #42\)$/);
+  assert.match(log.recentEntries()[0]!, /playerId=42/);
+  assert.match(log.recentEntries()[0]!, /circular\.self=\[truncated\]/);
   assert.doesNotThrow(() =>
     new LoggingRepository({
       sink: () => {
@@ -94,8 +94,7 @@ await test('errors keep their message, stack and cause', () => {
 
   new LoggingRepository({ sink }).error('web.failed', 'Failed', { error });
   const [line, ...trace] = lines[0]!.split('\n');
-  assert.match(line!, /error\.message='outer failure'/);
-  assert.doesNotMatch(line!, /error\.stack=/);
+  assert.match(line!, /ERROR Failed$/);
   assert.match(trace[0]!, /^Error: outer failure$/);
   assert.match(trace[1]!, /^\s+at /);
   assert.ok(trace.some((frame) => frame.includes('[cause]: TypeError: inner failure')));
@@ -119,7 +118,7 @@ await test('tool diagnostics reach the backend log in full', async () => {
   );
 
   assert.equal(lines.length, 2);
-  assert.match(lines[1]!, /companion\.tool_failed/);
+  assert.match(lines[1]!, /WARN APKEditor failed/);
   assert.ok(lines[1]!.includes(stderr));
   assert.doesNotMatch(log.recentEntries()[0]!, /OutOfMemoryError/);
 });
@@ -138,12 +137,13 @@ await test('children share configuration and retain their own context', () => {
   child.warn('import.warning', 'Hidden');
   child.error('import.failed', 'Failed', { playerId: 42 });
   assert.equal(lines.length, 1);
-  assert.match(lines[0]!, /component=import playerId=42$/);
+  assert.match(lines[0]!, /ERROR Failed \(rider #42\)$/);
+  assert.match(child.recentEntries()[0]!, /component=import playerId=42$/);
   repository.configure({ level: 'INFO' });
   child.info('import.finished', 'Finished');
-  repository.info('server.ready', 'Ready');
+  repository.info('server.ready', 'Ready', { host: '::1', port: 443, dns: false });
   assert.equal(lines.length, 3);
-  assert.match(lines[2]!, /server.ready Ready$/);
+  assert.match(lines[2]!, /INFO Server ready on \[::1\]:443$/);
 });
 
 await test('recent entries are bounded, shared with children, and respect the configured level', () => {

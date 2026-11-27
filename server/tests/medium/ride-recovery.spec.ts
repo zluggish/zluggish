@@ -201,9 +201,7 @@ await test('a connection end neither completes nor uploads a ride, and keeps the
   assert.equal(f.accounts.db.prepare('SELECT count(*) AS n FROM job').get()?.n, 0);
 
   f.world.logout(id, 'activity_finished');
-  await new Promise((resolve) => {
-    setTimeout(resolve, 20);
-  });
+  await f.effects.runSync(RideRecoveryService).recordings.idle();
   assert.equal(existsSync(path), false);
 
   // The next checkpoint does not record the finished ride again.

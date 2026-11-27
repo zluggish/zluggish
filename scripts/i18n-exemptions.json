@@ -533,5 +533,20 @@
     "file": "server/src/services/access-groups.service.ts",
     "value": "{value1}/launcher/link?state={value2}",
     "reason": "URL of the web app's launcher sign-in route, not shown to people."
+  },
+  {
+    "file": "server/src/repositories/logging.repository.ts",
+    "value": "Server ready on {value1}:{value2}",
+    "reason": "Server console log text, which is not translated."
+  },
+  {
+    "file": "server/src/repositories/logging.repository.ts",
+    "value": "distance counter reset",
+    "reason": "Server console log text, which is not translated."
+  },
+  {
+    "file": "server/src/repositories/logging.repository.ts",
+    "value": "{value1} repeats suppressed",
+    "reason": "Server console log text, which is not translated."
   }
 ]

@@ -176,7 +176,7 @@ await test('choosing a rider outside the groups answers like an unknown rider on
   const remembered = await launcher.choose(f.other.player_id);
   assert.equal(remembered.status, 200);
   assert.equal(props(await remembered.text()).message, translate('accounts_user_not_found'));
-  assert.ok(f.lines.some((line) => line.includes('auth.login_outside_group')));
+  assert.ok(f.lines.some((line) => line.includes('Login refused: rider outside the launcher groups')));
 
   // The rider in the group still signs in.
   const allowed = await launcher.choose(f.rider.player_id, { step: 'password', password: 'test-password' });

@@ -73,7 +73,7 @@ try {
   await new Promise((done, fail) => {
     const timer = setTimeout(() => fail(new Error(`Server readiness timeout\n${output}`)), 60_000);
     server.stdout.on('data', () => {
-      if (output.includes('server.ready')) {
+      if (output.includes('INFO Server ready on ')) {
         clearTimeout(timer);
         done();
       }
@@ -81,7 +81,7 @@ try {
     server.once('exit', (code) => fail(new Error(`Server exited: ${code}\n${output}`)));
   });
 
-  assert.match(output, /upload\.paused/);
+  assert.match(output, /Uploads are paused/);
   const health = await gameFetch('https://127.0.0.1:25443/health', { signal: AbortSignal.timeout(10_000) });
   assert.equal(health.status, 200);
   server.kill('SIGTERM');

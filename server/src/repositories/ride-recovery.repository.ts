@@ -60,7 +60,7 @@ export class RideRecoveryRepository {
     }
     const data = writer.finish();
 
-    const write = (this.writes.get(player) ?? Promise.resolve()).then(() =>
+    return this.enqueue(player, () =>
       metrics.timeAsync(Metric.RecoveryAppend, async () => {
         const path = this.path(player);
         const size = await this.repair(player);
@@ -84,16 +84,6 @@ export class RideRecoveryRepository {
         metrics.record(Metric.RecoveryBytes, size + data.length);
       }),
     );
-
-    const settled = write.catch(() => {});
-    this.writes.set(player, settled);
-    void settled.finally(() => {
-      if (this.writes.get(player) === settled) {
-        this.writes.delete(player);
-      }
-    });
-
-    return write;
   }
 
   async read(player: number) {
@@ -149,10 +139,24 @@ export class RideRecoveryRepository {
     return length;
   }
 
-  async remove(player: number) {
-    await this.writes.get(player);
-    await rm(this.path(player), { force: true });
-    this.whole.add(player);
+  remove(player: number) {
+    return this.enqueue(player, async () => {
+      await rm(this.path(player), { force: true });
+      this.whole.add(player);
+    });
+  }
+
+  /** Runs after the player's pending writes and removals, so later reads and removals see their effects. */
+  private enqueue(player: number, task: () => Promise<void>): Promise<void> {
+    const write = (this.writes.get(player) ?? Promise.resolve()).then(task);
+    const settled = write.catch(() => {});
+    this.writes.set(player, settled);
+    void settled.finally(() => {
+      if (this.writes.get(player) === settled) {
+        this.writes.delete(player);
+      }
+    });
+    return write;
   }
 
   async idle() {
