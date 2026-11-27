@@ -18,6 +18,7 @@ export interface Database {
     role: Generated<'rider' | 'administrator'>;
     enabled: Generated<Integer>;
     revision: Generated<Integer>;
+    password_change_required: Generated<Integer>;
   };
   web_setup_state: { id: number; state: 'unclaimed' | 'complete' };
   management_operation: {

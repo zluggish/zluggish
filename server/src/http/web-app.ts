@@ -37,6 +37,15 @@ import { packageRoot, packageVersion, supportedZwiftVersion } from '#src/config/
 
 export type WebEnv = { Variables: { sessionId: string; csrf: string } };
 
+/** The only requests a rider with a one-time password may make until they choose their own. */
+const passwordChangeRoutes = new Set([
+  'GET /api/setup',
+  'GET /api/me',
+  'POST /api/me/password',
+  'POST /api/session',
+  'DELETE /api/session',
+]);
+
 /** Matches the public URL exactly, or else the host only: a TLS proxy forwards https requests over http. */
 function sameOrigin(origin: string | undefined, url: string, publicUrl: string | null) {
   if (publicUrl) {
@@ -176,6 +185,13 @@ export function createWebApp(runtime: HttpRuntime) {
       }
       limit.count++;
       attempts.set(key, limit);
+    }
+
+    // A rider with a one-time password reaches only what choosing their own password needs.
+    const signedIn = session ? accounts.identity(session.identity) : null;
+
+    if (signedIn?.password_change_required && !passwordChangeRoutes.has(`${c.req.method} ${c.req.path}`)) {
+      throw new ApplicationError({ status: 403, message: t('password_change_required') });
     }
 
     await next();

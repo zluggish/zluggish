@@ -119,3 +119,8 @@ CREATE TABLE web_session (
  id_hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, identity TEXT NOT NULL, expires INTEGER NOT NULL
 );
 `;
+
+// Version 12: an administrator can give a new rider a one-time password to change at first sign-in.
+export const passwordChangeSQL = `
+ALTER TABLE user ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0 CHECK(password_change_required IN (0,1));
+`;

@@ -8,6 +8,7 @@ import {
   createSchemaSQL,
   dropManagementAuditSQL,
   indexesSQL,
+  passwordChangeSQL,
   storageSchemaSQL,
   webSessionSQL,
 } from '#src/db/ddl';
@@ -35,6 +36,7 @@ const migrations: Array<{ version: number; up: (db: DatabaseSync, storage: strin
   { version: 9, up: (db) => db.exec(dropManagementAuditSQL) },
   { version: 10, up: (db) => db.exec(webSessionSQL) },
   { version: 11, up: migrateActivityFolders, backup: true },
+  { version: 12, up: (db) => db.exec(passwordChangeSQL) },
 ];
 
 export const SCHEMA_VERSION = STORAGE_VERSION + migrations.length;

@@ -121,6 +121,14 @@
   let newLogin = $state('');
   let newPassword = $state('');
   let newConfirm = $state('');
+  /** A one-time password stays the same until the user is created, so a retried request matches. */
+  let newMethod = $state<'set' | 'one-time'>('one-time');
+  let newCode = $state(oneTimeCode());
+  /** Shown once, on the new user's page, for the administrator to hand over. */
+  let handoff = $state<{ player_id: number; code: string } | null>(null);
+  let copiedCode = $state(false);
+  /** The one-time password from sign-in, so the rider does not type it twice. */
+  let oneTimePassword = $state('');
   let targetPassword = $state('');
   let targetConfirm = $state('');
 
@@ -188,6 +196,8 @@
   );
 
   const administrator = $derived(user?.role === 'administrator');
+  /** Until the rider replaces their one-time password, that is the only page they see. */
+  const choosing = $derived(!!user?.password_change_required);
   const selectedId = $derived(Number(/^\/manage\/users\/(\d+)$/.exec(path)?.[1] ?? 0));
   const selected = $derived(users.find((r) => r.player_id === selectedId) ?? null);
   const connected = $derived(users.filter((r) => r.connected));
@@ -209,7 +219,7 @@
       return;
     }
 
-    if (certificateRequested) {
+    if (certificateRequested || choosing) {
       return;
     }
     certificateRequested = true;
@@ -227,7 +237,7 @@
 
   const pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
 
-  const title = $derived(
+  const pageTitle = $derived(
     loading
       ? t('loading')
       : !user
@@ -266,6 +276,8 @@
                                       ? t('apps')
                                       : (setup ?? t('profile')),
   );
+
+  const title = $derived(choosing ? t('choose_your_password') : pageTitle);
 
   const initials = (r: User) => `${r.first_name.charAt(0)}${r.last_name.charAt(0)}`.toUpperCase();
   const time = (value: number) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -396,7 +408,11 @@
 
   /** Loads what the current route shows. Direct navigation to any route works. */
   async function enter() {
-    if (!user) {
+    if (handoff && handoff.player_id !== selectedId) {
+      handoff = null;
+    }
+
+    if (!user || choosing) {
       return;
     }
 
@@ -655,6 +671,7 @@
 
     const setup = !complete;
     user = body.user;
+    oneTimePassword = complete && body.user.password_change_required ? password : '';
     password = '';
     confirmPassword = '';
     key = '';
@@ -665,6 +682,7 @@
   }
 
   async function signOut() {
+    oneTimePassword = '';
     await api(ignored, '/api/session', 'DELETE', {});
     await api(ignored, '/api/setup');
     user = null;
@@ -763,15 +781,31 @@
     done(messages[action]);
   }
 
+  /** Readable at a glance and over the phone: no 0, 1, I or O. 60 random bits in three groups. */
+  function oneTimeCode() {
+    const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const letters = [...crypto.getRandomValues(new Uint8Array(12))].map((byte) => alphabet[byte & 31]).join('');
+
+    return (letters.match(/.{4}/g) ?? []).join('-');
+  }
+
   async function create() {
-    if (newPassword !== newConfirm) {
+    const oneTime = newMethod === 'one-time';
+
+    if (!oneTime && newPassword !== newConfirm) {
       fieldErrors = { confirm: [t('password_mismatch')] };
       throw new Error(t('form_validation_error'));
     }
 
     const created = await api(userSchema, '/api/manage/users', 'POST', {
       operation,
-      user: { username: newLogin, password: newPassword, first_name: newFirst, last_name: newLast },
+      user: {
+        username: newLogin,
+        password: oneTime ? newCode : newPassword,
+        first_name: newFirst,
+        last_name: newLast,
+        ...(oneTime && { one_time: true }),
+      },
     });
 
     newFirst = '';
@@ -779,9 +813,59 @@
     newLogin = '';
     newPassword = '';
     newConfirm = '';
+    copiedCode = false;
+    handoff = oneTime ? { player_id: created.player_id, code: newCode } : null;
+    newCode = oneTimeCode();
     await loadUsers();
     await openUser(created);
-    done(t('setup_user_enabled', { value1: name(created) }));
+
+    if (!oneTime) {
+      done(t('setup_user_enabled', { value1: name(created) }));
+    }
+  }
+
+  /** Browsers allow the clipboard only on HTTPS or localhost; elsewhere the code is there to select. */
+  const canCopy = typeof navigator !== 'undefined' && !!navigator.clipboard;
+
+  async function copyCode(code: string) {
+    await navigator.clipboard.writeText(code);
+    copiedCode = true;
+  }
+
+  /** Replacing the one-time password ends the session, so sign in again with the new one. */
+  async function choosePassword() {
+    if (!user) {
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      fieldErrors = { confirm: [t('password_mismatch')] };
+      throw new Error(t('form_validation_error'));
+    }
+    const login = user.username;
+
+    try {
+      await api(ignored, '/api/me/password', 'POST', {
+        ...(!administrator && { current_password: oneTimePassword || currentPassword }),
+        password,
+      });
+    } catch (error) {
+      // A wrong remembered password means the administrator set a new one: ask for it.
+      if (error instanceof Error && error.message === t('password_incorrect')) {
+        oneTimePassword = '';
+        fieldErrors = { current_password: [t('password_incorrect')] };
+      }
+      throw error;
+    }
+    await api(ignored, '/api/setup');
+    user = (await api(signedInResponse, '/api/session', 'POST', { username: login, password })).user;
+    oneTimePassword = '';
+    currentPassword = '';
+    password = '';
+    confirmPassword = '';
+    go('/');
+    await enter();
+    done(t('password_chosen_notice'));
   }
 
   function openPassword() {
@@ -988,6 +1072,7 @@
   {#if r.role === 'administrator'}<span class="chip admin">{t('administrator')}</span>{/if}
   {#if !r.enabled}<span class="chip muted">{t('user_disabled_status')}</span>{/if}
   {#if !r.has_password}<span class="chip alarm">{t('no_password')}</span>{/if}
+  {#if r.password_change_required}<span class="chip pending">{t('one_time_password')}</span>{/if}
   {#if r.connected}<span class="chip riding">{t('riding_now')}</span>{/if}
 {/snippet}
 
@@ -1030,7 +1115,7 @@
 <div class="app" class:initializing={loading && !$connection.unavailable}>
   <Layout
     {title}
-    heading={!loading && !user && title !== 'Profile' && title !== 'Activities'}
+    heading={!loading && (!user || choosing) && title !== 'Profile' && title !== 'Activities'}
     page={manage ? 'manage' : 'account'}
     back={loading ? undefined : back}
     crumb={loading ? undefined : crumb}
@@ -1040,7 +1125,7 @@
     }}
     {version}
     {zwiftVersion}
-    menu={user ? menu : undefined}
+    menu={user && !choosing ? menu : undefined}
     onhome={() => {
       void navigate('/');
     }}
@@ -1198,6 +1283,52 @@
           >
         </form>
       {/if}
+    {:else if choosing}
+      <form
+        class="narrow choose"
+        onsubmit={(e) => {
+          e.preventDefault();
+          void run(choosePassword, 'choose');
+        }}
+      >
+        <p class="lead">{t('choose_password_lead', { value1: user.first_name || user.username })}</p>
+        {#if !administrator && !oneTimePassword}
+          <TextField
+            id="choose-current"
+            label={t('one_time_password')}
+            password
+            bind:value={currentPassword}
+            autocomplete="current-password"
+            required
+            maxlength={1024}
+            errors={errors('choose', 'current_password')}
+          />
+        {/if}
+        <TextField
+          id="choose-new"
+          label={t('new_password')}
+          password
+          bind:value={password}
+          autocomplete="new-password"
+          required
+          maxlength={1024}
+          errors={errors('choose', 'password')}
+        />
+        <TextField
+          id="choose-confirm"
+          label={t('confirm_new_password')}
+          password
+          bind:value={confirmPassword}
+          autocomplete="new-password"
+          required
+          maxlength={1024}
+          errors={errors('choose', 'confirm')}
+        />
+        <div class="actions">
+          <button class="primary" disabled={busy}>{t('save_password')}</button>
+          <button type="button" disabled={busy} onclick={() => run(signOut)}>{t('sign_out')}</button>
+        </div>
+      </form>
     {:else if manage && administrator}
       <div>
         {#if path === '/manage/android'}
@@ -1503,26 +1634,44 @@
               maxlength={254}
               errors={errors('create', 'username')}
             />
-            <div class="pair">
-              <TextField
-                id="new-password"
-                label={t('password')}
-                password
-                bind:value={newPassword}
-                autocomplete="new-password"
-                required
-                errors={errors('create', 'password')}
-              />
-              <TextField
-                id="new-confirm"
-                label={t('confirm_password')}
-                password
-                bind:value={newConfirm}
-                autocomplete="new-password"
-                required
-                errors={errors('create', 'confirm')}
-              />
-            </div>
+            <fieldset class="method">
+              <legend>{t('password')}</legend>
+              <div class="choice">
+                <label class:checked={newMethod === 'one-time'}
+                  ><input type="radio" bind:group={newMethod} value="one-time" /> {t('one_time_password')}</label
+                >
+                <label class:checked={newMethod === 'set'}
+                  ><input type="radio" bind:group={newMethod} value="set" /> {t('set_a_password')}</label
+                >
+              </div>
+              {#if newMethod === 'one-time'}
+                <p class="muted">{t('one_time_password_hint')}</p>
+                {#if errors('create', 'password').length}<p class="field-error">
+                    {errors('create', 'password').join(' ')}
+                  </p>{/if}
+              {:else}
+                <div class="pair">
+                  <TextField
+                    id="new-password"
+                    label={t('password')}
+                    password
+                    bind:value={newPassword}
+                    autocomplete="new-password"
+                    required
+                    errors={errors('create', 'password')}
+                  />
+                  <TextField
+                    id="new-confirm"
+                    label={t('confirm_password')}
+                    password
+                    bind:value={newConfirm}
+                    autocomplete="new-password"
+                    required
+                    errors={errors('create', 'confirm')}
+                  />
+                </div>
+              {/if}
+            </fieldset>
             <div class="actions">
               <button class="primary" disabled={busy}>{t('create_user')}</button>
               <button type="button" disabled={busy} onclick={() => navigate('/manage')}>{t('cancel')}</button>
@@ -1553,6 +1702,28 @@
                 {/if}
               </div>
             </section>
+
+            {#if handoff && handoff.player_id === selected.player_id}
+              <section class="panel handoff" aria-labelledby="handoff-title">
+                <h2 id="handoff-title">{t('one_time_password')}</h2>
+                <p class="lead">{t('one_time_password_handoff', { value1: label(selected) })}</p>
+                <p class="code">
+                  {#each handoff.code.split('-') as group, i (i)}{#if i}<span class="dash">-</span>{/if}{group}{/each}
+                </p>
+                <p class="muted">{t('one_time_password_shown_once')}</p>
+                <div class="actions">
+                  {#if canCopy}<button type="button" class="primary" onclick={() => copyCode(handoff!.code)}
+                      >{copiedCode ? t('copied') : t('copy')}</button
+                    >{/if}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      handoff = null;
+                    }}>{t('done')}</button
+                  >
+                </div>
+              </section>
+            {/if}
 
             {#if conflict}
               <div class="conflict" role="alert">
@@ -2142,6 +2313,60 @@
   }
   .password-needed {
     outline: 2px solid var(--orange);
+  }
+  .method {
+    margin: 0.75rem 0 0;
+    padding: 0;
+    border: 0;
+  }
+  .method legend {
+    margin-bottom: 0.4rem;
+    padding: 0;
+    color: var(--muted);
+  }
+  .method .muted {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+  }
+  .field-error {
+    margin: 0.35rem 0 0;
+    color: var(--alarm);
+    font-size: 0.875rem;
+  }
+  /* The handover slip: the one moment an administrator reads a password aloud or copies it out. */
+  .handoff {
+    outline: 2px solid var(--orange);
+  }
+  .handoff .lead {
+    margin-bottom: 0.75rem;
+  }
+  .code {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15em;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 0 0.75rem;
+    padding: 0.7rem 1.1rem;
+    border: 2px dashed rgb(255 255 255 / 0.3);
+    border-radius: 10px;
+    background: var(--well);
+    font-size: clamp(1.4rem, 6vw, 2rem);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.14em;
+    line-height: 1.2;
+    user-select: all;
+  }
+  .code .dash {
+    color: var(--orange);
+  }
+  .choose .lead {
+    margin-top: 0;
+  }
+  .chip.pending {
+    border-color: rgb(226 86 12 / 0.8);
   }
   .narrow {
     max-width: 34rem;

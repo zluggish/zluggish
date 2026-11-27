@@ -1,6 +1,6 @@
 import { readArchivedFile, withBackupDirectory } from '#src/migrations/backup-archive';
 import { Schema } from 'effect';
-import { openDatabase } from '#src/db/open';
+import { openDatabase, SCHEMA_VERSION } from '#src/db/open';
 import { ActivitySchema } from '#src/protocol/generated/activity_pb';
 import { PlayerProfileSchema, StreaksSchema } from '#src/protocol/generated/profile_pb';
 import { PlayerStateSchema } from '#src/protocol/generated/udp-node-msgs_pb';
@@ -152,7 +152,7 @@ await test('the storage merge imports every legacy store once and keeps the lega
   const db = open();
   const documents = new RiderDocuments(db, storage);
 
-  assert.equal(db.prepare('SELECT version FROM version').get()?.version, 11);
+  assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
   assert.equal(db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
   assert.deepEqual(new SettingsStore(db).read(1), { 'ghosts.enabled': true });
   assert.deepEqual(new SettingsStore(db).world('blob:1'), { riders: 4 });
@@ -410,7 +410,7 @@ for (const step of Object.values(MigrationStep)) {
     );
 
     const db = open();
-    assert.equal(db.prepare('SELECT version FROM version').get()?.version, 11);
+    assert.equal(db.prepare('SELECT version FROM version').get()?.version, SCHEMA_VERSION);
     assert.equal(db.prepare('SELECT count(*) AS n FROM rider_document').get()?.n, 6);
     assert.equal(db.prepare("SELECT count(*) AS n FROM job WHERE type='delivery'").get()?.n, 1);
     assert.equal(existsSync(resolve(storage, StorageFile.Temporary)), false);
